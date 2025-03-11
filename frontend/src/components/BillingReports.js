@@ -7,15 +7,22 @@ import {
     TableHead,
     TableRow,
     Paper,
-    TextField,
     Button,
     Pagination,
-    IconButton,
-    Tooltip,
     Box,
     Skeleton,
+    useMediaQuery,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
 } from '@mui/material';
-import { Search, Visibility, GetApp } from '@mui/icons-material';
+import {  GetApp } from '@mui/icons-material';
+import FilterAltIcon from "@mui/icons-material/FilterAlt";
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import ClearIcon from '@mui/icons-material/Clear';
 
 const BillingReports = () => {
     const [reports, setReports] = useState([]);
@@ -23,15 +30,57 @@ const BillingReports = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
-    // const [csvData, setCsvData] = useState([]);
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [appliedStartDate, setAppliedStartDate] = useState('');
+    const [appliedEndDate, setAppliedEndDate] = useState('');
+    const isSmallScreen = useMediaQuery('(max-width:600px)');
+    const [atolls, setAtolls] = useState([]);
+    const [selectedAtoll, setSelectedAtoll] = useState('');
+    const [selectedIsland, setSelectedIsland] = useState('');
+    const [appliedAtoll, setAppliedAtoll] = useState('');
+    const [appliedIsland, setAppliedIsland] = useState('');
+
+    // Fetch atolls and islands data
+    useEffect(() => {
+        const fetchAtolls = async () => {
+            try {
+                const response = await fetch('http://localhost:3000/billing-reports/getAtolls');
+                const data = await response.json();
+                setAtolls(data.data);
+            } catch (err) {
+                console.error('Error fetching atolls:', err);
+            }
+        };
+        fetchAtolls();
+    }, []);
 
     // Fetch reports from the backend
-    const fetchReports = async (page, limit, search = '') => {
+    const fetchReports = async (page, limit, search = '', start = '', end = '') => {
         setLoading(true);
         try {
-            const response = await fetch(`http://localhost:3000/billing-reports/getReports?page=${page}&limit=${limit}&search=${search}`);
+            let url = `http://localhost:3000/billing-reports/getReports?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
+            if (start) url += `&startDate=${encodeURIComponent(start)}`;
+            if (end) url += `&endDate=${encodeURIComponent(end)}`;
+
+            // Pass the names instead of IDs
+            if (appliedAtoll) {
+                const selectedAtollName = atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name;
+                if (selectedAtollName) {
+                    url += `&atoll=${encodeURIComponent(selectedAtollName)}`;
+                }
+            }
+
+            if (appliedIsland) {
+                const selectedAtollData = atolls.find(a => a.atolls_id === appliedAtoll);
+                const selectedIslandName = selectedAtollData?.islands.find(i => i.islands_id === appliedIsland)?.islands_name;
+                if (selectedIslandName) {
+                    url += `&island=${encodeURIComponent(selectedIslandName)}`;
+                }
+            }
+
+            const response = await fetch(url);
             const data = await response.json();
-            console.log(data.data,'data comes along data')
             setReports(data.data);
             setPagination(data.pagination);
         } catch (err) {
@@ -41,24 +90,42 @@ const BillingReports = () => {
         }
     };
 
-        // Fetch all reports for CSV download
-        const fetchAllReports = async (search = '') => {
-            setLoading(true);
-            try {
-                const response = await fetch(`http://localhost:3000/billing-reports/getAllReports?search=${search}`);
-                const data = await response.json();
-                return data;
-            } catch (err) {
-                console.error('Error fetching all reports:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
+    const handleFilter = () => {
+        setAppliedStartDate(startDate);
+        setAppliedEndDate(endDate);
+        setAppliedAtoll(selectedAtoll);
+        setAppliedIsland(selectedIsland);
+        setPagination(prev => ({ ...prev, page: 1 }));
+    };
+
+    const handleClearFilter = () => {
+        setStartDate('');
+        setEndDate('');
+        setAppliedStartDate('');
+        setAppliedEndDate('');
+        setSelectedAtoll('');
+        setSelectedIsland('');
+        setAppliedAtoll('');
+        setAppliedIsland('');
+        setSearchTerm('');
+        setPagination(prev => ({ ...prev, page: 1 }));
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
+
+        window.location.href = '/reports/login';
+    };
+
+    useEffect(() => {
+        setPagination(prev => ({ ...prev, page: 1 }));
+    }, [searchTerm, appliedStartDate, appliedEndDate, appliedAtoll, appliedIsland]);
 
     // Fetch reports on component mount and when pagination/search changes
     useEffect(() => {
-        fetchReports(pagination.page, pagination.limit, searchTerm);
-    }, [pagination.page, pagination.limit, searchTerm]);
+        fetchReports(pagination.page, pagination.limit, searchTerm, appliedStartDate, appliedEndDate);
+    }, [pagination.page, pagination.limit, searchTerm, appliedStartDate, appliedEndDate,appliedAtoll, appliedIsland]);
 
     // Handle page change
     const handlePageChange = (event, value) => {
@@ -71,82 +138,41 @@ const BillingReports = () => {
         setPagination({ ...pagination, page: 1 }); // Reset to first page on search
     };
 
-    // Prepare data for CSV download
-// Prepare data for CSV download with formatted date
-// const csvData = reports.map(report => ({
-//     ID: report.id,
-//     Name: report.Name,
-//     'Active Packages': report['Active Packages'].length,
-//     'First Activation Date': report['Active Packages'].map(pkg =>
-//       new Date(pkg.first_activation_date * 1000).toLocaleDateString('en-GB', {
-//         year: 'numeric',
-//         month: '2-digit',
-//         day: '2-digit',
-//       })
-//     ).join(', '),
-//     'Package Names': report['Active Packages'].map(pkg => pkg.product?.name).join(', '),  // Joining package names
-//     'Package States': report['Active Packages'].map(pkg => pkg.state).join(', ') 
-//   }));
-
-  
-    // Handle CSV download
-    // const handleDownloadCSV = async () => {
-    //     const allReports = await fetchAllReports(searchTerm);
-    //     const formattedData = allReports.map(report => ({
-    //         ID: report.id,
-    //         Name: report.Name,
-    //         'Active Packages': report['Active Packages'].length,
-    //         'First Activation Date': report['Active Packages'].map(pkg =>
-    //           new Date(pkg.first_activation_date * 1000).toLocaleDateString('en-GB', {
-    //             year: 'numeric',
-    //             month: '2-digit',
-    //             day: '2-digit',
-    //           })
-    //         ).join(', '),
-    //         'Package Names': report['Active Packages'].map(pkg => pkg.product?.name).join(', '),
-    //         'Package States': report['Active Packages'].map(pkg => pkg.state).join(', ')
-    //     }));
-    //     setCsvData(formattedData);
-    // };
-
-    // const handleDownloadCSV = async () => {
-    //     try {
-    //         const response = await fetch(`http://localhost:3000/billing-reports/getAllReports?search=${searchTerm}`);
-    //         if (!response.ok) throw new Error('Failed to download CSV');
-    
-    //         // Create a Blob from the streamed data
-    //         const blob = await response.blob();
-    
-    //         // Create a download link and trigger the download
-    //         const url = window.URL.createObjectURL(blob);
-    //         const a = document.createElement('a');
-    //         a.href = url;
-    //         a.download = 'billing_reports.csv';
-    //         a.click();
-    //         window.URL.revokeObjectURL(url);
-    //     } catch (err) {
-    //         console.error('Error downloading CSV:', err);
-    //     }
-    // };
-
     const handleDownloadCSV = async () => {
         try {
             setIsDownloading(true);
-            const url = new URL('http://localhost:3000/billing-reports/getAllReports', window.location.origin);
+            let url = new URL('http://localhost:3000/billing-reports/getAllReports', window.location.origin);
             url.searchParams.append('search', searchTerm);
+            if (appliedStartDate) url.searchParams.append('startDate', appliedStartDate);
+            if (appliedEndDate) url.searchParams.append('endDate', appliedEndDate);
+
+            if (appliedAtoll) {
+                const selectedAtollName = atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name;
+                if (selectedAtollName) {
+                    url += `&atoll=${encodeURIComponent(selectedAtollName)}`;
+                }
+            }
+
+            if (appliedIsland) {
+                const selectedAtollData = atolls.find(a => a.atolls_id === appliedAtoll);
+                const selectedIslandName = selectedAtollData?.islands.find(i => i.islands_id === appliedIsland)?.islands_name;
+                if (selectedIslandName) {
+                    url += `&island=${encodeURIComponent(selectedIslandName)}`;
+                }
+            }
 
             const response = await fetch(url);
             if (!response.ok) throw new Error('Export failed');
 
             const blob = await response.blob();
             const downloadUrl = window.URL.createObjectURL(blob);
-            
+
             const link = document.createElement('a');
             link.href = downloadUrl;
             link.setAttribute('download', 'reports.csv');
             document.body.appendChild(link);
             link.click();
-            
+
             link.remove();
             window.URL.revokeObjectURL(downloadUrl);
         } catch (error) {
@@ -156,214 +182,270 @@ const BillingReports = () => {
             setIsDownloading(false);
         }
     };
-  
-  
+
+
 
     return (
-        <Box sx={{ padding: 3, backgroundColor: '#f5f5f5' }}>
+        <Box sx={{
+            padding: 3,
+            display: 'flex',
+            flexDirection: 'column',
+            height: 'calc(100vh - 37px)',
+            overflow: 'hidden'
+        }}>
+            <LocalizationProvider dateAdapter={AdapterDateFns}>
+                <Box sx={{
+                    display: 'flex',
+                    gap: 2,
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    mb: 2,
+                    '& > *': { minWidth: isSmallScreen ? '100%' : 'auto' }
+                }}>
+                    <DatePicker
+                        label="Start Date"
+                        value={startDate}
+                        onChange={(newValue) => setStartDate(newValue)}
+                        slotProps={{
+                            textField: {
+                                InputLabelProps: { shrink: true },
+                                sx: { width: isSmallScreen ? '100%' : 180 }
+                            }
+                        }}
+                    />
 
-<Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-    {loading ? (
-        <Skeleton variant="rectangular" width={150} height={40} animation="wave" />
-    ) : (
-        <Button
-            variant="contained"
-            startIcon={<GetApp />}
-            onClick={handleDownloadCSV} // Trigger the streaming download
-            disabled={isDownloading}
-            sx={{
-                backgroundColor: '#007bff',
-                '&:hover': { backgroundColor: '#0056b3' },
+                    <DatePicker
+                        label="End Date"
+                        value={endDate}
+                        onChange={(newValue) => setEndDate(newValue)}
+                        slotProps={{
+                            textField: {
+                                InputLabelProps: { shrink: true },
+                                sx: { width: isSmallScreen ? '100%' : 180 }
+                            }
+                        }}
+                    />
+
+                    {/* Atoll Dropdown */}
+                    <FormControl sx={{ width: isSmallScreen ? '100%' : 180 }}>
+                        <InputLabel>Atoll</InputLabel>
+                        <Select
+                            value={selectedAtoll}
+                            label="Atoll"
+                            onChange={(e) => {
+                                console.log(e.target.value,'targeted values')
+                                setSelectedAtoll(e.target.value);
+                                console.log(selectedAtoll,'selected Atolll')
+
+                                setSelectedIsland(''); // Reset island when atoll changes
+                            }}
+                        >
+                            <MenuItem value="">All Atolls</MenuItem>
+                            {atolls.map((atoll) => (
+                                <MenuItem key={atoll.atolls_id} value={atoll.atolls_id}>
+                                    {atoll.atolls_name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+
+                    {/* Island Dropdown */}
+                    <FormControl sx={{ width: isSmallScreen ? '100%' : 180 }}>
+                        <InputLabel>Island</InputLabel>
+                        <Select
+                            value={selectedIsland}
+                            label="Island"
+                            onChange={(e) => setSelectedIsland(e.target.value)}
+                            disabled={!selectedAtoll}
+                        >
+                            <MenuItem value="">All Islands</MenuItem>
+                            {atolls.find(a => a.atolls_id === selectedAtoll)?.islands.map((island) => (
+                                <MenuItem key={island.islands_id} value={island.islands_id}>
+                                    {island.islands_name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+
+                    <Button
+                        variant="contained"
+                        onClick={handleFilter}
+                        startIcon={<FilterAltIcon />}
+                        sx={{
+                            width: isSmallScreen ? '100%' : 'auto',
+                            height: 56
+                        }}
+                    >
+                        Filter
+                    </Button>
+
+                    {/* Add this button right after the Filter button */}
+                    <Button
+                        variant="outlined"
+                        onClick={handleClearFilter}
+                        startIcon={<ClearIcon />}
+                        sx={{
+                            width: isSmallScreen ? '100%' : 'auto',
+                            height: 56
+                        }}
+                    >
+                        Clear Filters
+                    </Button>
+
+                    {/* <TextField
+                        label="Search"
+                        variant="outlined"
+                        value={searchTerm}
+                        onChange={handleSearch}
+                        fullWidth={isSmallScreen}
+                        InputProps={{
+                            startAdornment: <Search sx={{ color: '#666' }} />,
+                        }}
+                        sx={{
+                            flexGrow: 1,
+                            minWidth: 250
+                        }}
+                    /> */}
+
+                    <Button
+                        variant="contained"
+                        startIcon={!isSmallScreen && <GetApp />}
+                        onClick={handleDownloadCSV}
+                        disabled={isDownloading}
+                        sx={{
+                            width: isSmallScreen ? '100%' : 'auto',
+                            height: 56
+                        }}
+                    >
+                        {isDownloading ? 'Exporting...' : (isSmallScreen ? <GetApp /> : 'Download')}
+                    </Button>
+
+                    {/* <Button
+                        variant="contained"
+                        color="error"
+                        onClick={handleLogout} // Define this function
+                        sx={{
+                            width: isSmallScreen ? '100%' : 'auto',
+                            height: 56
+                        }}
+                    >
+                        Logout
+                    </Button> */}
+                </Box>
+            </LocalizationProvider>
+
+            {/* Table Container */}
+            <Box sx={{
+                flex: 1,
+                overflow: 'hidden',
+                position: 'relative',
                 borderRadius: '8px',
-                textTransform: 'none',
-                fontWeight: 'bold',
-            }}
-        >
-            {isDownloading ? 'Exporting...' : 'Download CSV'}
-        </Button>
-    )}
-            </Box>
-
-            {/* Search Bar */}
-            <TextField
-                label="Search by Name or ID"
-                variant="outlined"
-                value={searchTerm}
-                onChange={handleSearch}
-                fullWidth
-                margin="normal"
-                InputProps={{
-                    startAdornment: <Search sx={{ color: '#666' }} />,
-                }}
-                sx={{
-                    backgroundColor: '#fff',
-                    borderRadius: '8px',
-                    '& .MuiOutlinedInput-root': {
-                        '& fieldset': {
-                            borderColor: '#ddd',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+            }}>
+                <TableContainer
+                    component={Paper}
+                    sx={{
+                        height: '100%',
+                        overflow: 'auto',
+                        '&::-webkit-scrollbar': {
+                            height: 8,
+                            width: 8,
                         },
-                        '&:hover fieldset': {
-                            borderColor: '#007bff',
+                        '&::-webkit-scrollbar-thumb': {
+                            backgroundColor: '#bdbdbd',
+                            borderRadius: 4,
                         },
-                        '&.Mui-focused fieldset': {
-                            borderColor: '#007bff',
-                        },
-                    },
-                }}
-            />
-
-            {/* Table */}
-            <Box sx={{ height: '44vh', overflow: 'scroll' }}>
-                <TableContainer component={Paper} sx={{ borderRadius: '8px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)' }}>
-                    <Table sx={{ minWidth: 650 }}>
-                        <TableHead sx={{ backgroundColor: '#007bff' }}>
+                    }}
+                >
+                    <Table stickyHeader sx={{ minWidth: 1600 }}> {/* Increased min-width for better column spacing */}
+                        <TableHead>
                             <TableRow>
-                                <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>ID</TableCell>
-                                <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Name</TableCell>
-                                <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Active Packages</TableCell>
-                                <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Expiry Date</TableCell>
-                                <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Package Names</TableCell>
-                                <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Package States</TableCell>
-                                <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Actions</TableCell>
+                                {[
+                                    'Contact Code', 'Device Code', 'Customer Name', 'Customer Type',
+                                    'Customer Type 2', 'Payment Type', 'Sales Model', 'Submitted By User',
+                                    'Area', 'Dealer', 'Mobile', 'Ward', 'Road', 'Island', 'Atoll',
+                                    'STB', 'State', 'Package', 'Price', 'Start Date', 'End Date'
+                                ].map((header) => (
+                                    <TableCell
+                                        key={header}
+                                        sx={{
+                                            fontWeight: 'bold',
+                                            backgroundColor: '#007bff',
+                                            color: 'white',
+                                            whiteSpace: 'nowrap'
+                                        }}
+                                    >
+                                        {header}
+                                    </TableCell>
+                                ))}
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {loading
-                                ? // Show skeleton loading while data is being fetched
-                                  Array.from({ length: 5 }).map((_, index) => (
-                                      <TableRow key={index}>
-                                          <TableCell>
-                                              <Skeleton variant="text" animation="wave" />
-                                          </TableCell>
-                                          <TableCell>
-                                              <Skeleton variant="text" animation="wave" />
-                                          </TableCell>
-                                          <TableCell>
-                                              <Skeleton variant="text" animation="wave" />
-                                          </TableCell>
-                                          <TableCell>
-                                              <Skeleton variant="circular" width={40} height={40} animation="wave" />
-                                          </TableCell>
-                                      </TableRow>
-                                  ))
-                                : // Show actual data once loaded
-                                  reports.map((report) => (
-                                      <TableRow
-                                          key={report.id}
-                                          sx={{
-                                              '&:hover': { backgroundColor: '#f1f1f1' },
-                                              transition: 'background-color 0.3s ease',
-                                          }}
-                                      >
-                                          <TableCell sx={{ color: '#555' }}>{report.id}</TableCell>
-                                          <TableCell sx={{ color: '#555' }}>{report.Name}</TableCell>
-                                          <TableCell sx={{ color: '#555' }}>{report['Active Packages']}</TableCell>
-                                          <TableCell sx={{ color: '#555' }}>{report['Expiry Date']}</TableCell>
-                                          <TableCell sx={{ color: '#555' }}>{report['Package Names']}</TableCell>
-                                          <TableCell sx={{ color: '#555' }}>{report['Package States']}</TableCell>
-                                          {/* Display Active Packages */}
-                                            {/* <TableCell sx={{ color: '#555' }}>
-                                                {report['Active Packages'].length > 0 ? (
-                                                    <ul style={{paddingInlineStart: '13px'}}>
-                                                        {report['Active Packages'].map((pkg, index) => (
-                                                            <li key={index}>
-                                                                <strong>First Activation Date:</strong> {new Date(pkg.first_activation_date * 1000).toLocaleDateString()}, 
-                                                                <strong>Name:</strong> {pkg.product?.name}, 
-                                                                <strong>State:</strong> {pkg.state}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                ) : (
-                                                    <span>No active packages</span>
-                                                )}
-                                            </TableCell> */}
-                                          <TableCell>
-                                              <Tooltip title="View Details">
-                                                  <IconButton
-                                                      onClick={() => alert(`Viewing details for ${report.id}`)}
-                                                      sx={{ color: '#007bff', '&:hover': { color: '#0056b3' } }}
-                                                  >
-                                                      <Visibility />
-                                                  </IconButton>
-                                              </Tooltip>
-                                          </TableCell>
-                                      </TableRow>
-                                  ))}
+                            {loading ? (
+                                Array.from({ length: 10 }).map((_, index) => (
+                                    <TableRow key={index}>
+                                        {Array.from({ length: 20 }).map((_, cellIndex) => (
+                                            <TableCell key={cellIndex}>
+                                                <Skeleton variant="text" animation="wave" />
+                                            </TableCell>
+                                        ))}
+                                    </TableRow>
+                                ))
+                            ) : (reports.map((report) => (
+                                <TableRow key={report.id} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
+                                    {[
+                                        'Contact Code', 'Device Code', 'Customer Name', 'Customer Type', 'Customer Type 2',
+                                        'Payment Type', 'Sales Model', 'Submitted By User', 'Area', 'Dealer', 'Mobile',
+                                        'Ward', 'Road', 'Island', 'Atoll', 'STB', 'Status', 'Package', 'Price', 'Start Date', 'End Date'
+                                    ].map((key) => (
+                                        <TableCell
+                                            key={key}
+                                            sx={{
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                maxWidth: 200,
+                                                color: report[key]=== 'NOT_EFFECTIVE' ? 'red':
+                                                       report[key]=== 'EFFECTIVE' ? '#11c785': 
+                                                       ['Contact Code', 'Device Code', 'Customer Name'].includes(key) ? 'inherit' : '#555'
+                                            }}
+                                        >
+                                            {report[key]}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            )))
+                            }
                         </TableBody>
                     </Table>
                 </TableContainer>
             </Box>
 
             {/* Pagination */}
-            <Box sx={{ display: 'flex', justifyContent: 'center', marginTop: 3 }}>
+            <Box sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                borderTop: '1px solid #eee',
+                marginTop:'10px'
+            }}>
                 {loading ? (
-                    <Skeleton variant="rectangular" width={200} height={40} animation="wave" />
+                    <Skeleton variant="rectangular" width={200} height={40} />
                 ) : (
                     <Pagination
                         count={pagination.totalPages}
                         page={pagination.page}
                         onChange={handlePageChange}
                         color="primary"
+                        showFirstButton
+                        showLastButton
                         sx={{
                             '& .MuiPaginationItem-root': {
-                                color: '#007bff',
-                                '&.Mui-selected': {
-                                    backgroundColor: '#007bff',
-                                    color: '#fff',
-                                },
-                            },
+                                fontSize: '0.875rem'
+                            }
                         }}
                     />
                 )}
             </Box>
-
-            {/* Download CSV Button */}
-            {/* <Box sx={{ display: 'flex', justifyContent: 'flex-end', marginTop: 3 }}>
-                {loading ? (
-                    <Skeleton variant="rectangular" width={150} height={40} animation="wave" />
-                ) : (
-                    <CSVLink data={csvData} filename="billing_reports.csv" style={{ textDecoration: 'none' }}>
-                        <Button
-                            variant="contained"
-                            startIcon={<GetApp />}
-                            sx={{
-                                backgroundColor: '#007bff',
-                                '&:hover': { backgroundColor: '#0056b3' },
-                                borderRadius: '8px',
-                                textTransform: 'none',
-                                fontWeight: 'bold',
-                            }}
-                        >
-                            Download CSV
-                        </Button>
-                    </CSVLink>
-                )}
-            </Box> */}
-
-
-            {/* Download CSV Button */}
-            {/* <Box sx={{ display: 'flex', justifyContent: 'flex-end', marginTop: 3 }}>
-                {loading ? (
-                    <Skeleton variant="rectangular" width={150} height={40} animation="wave" />
-                ) : (
-                    <CSVLink data={csvData} filename="billing_reports.csv" asyncOnClick onClick={handleDownloadCSV} style={{ textDecoration: 'none' }}>
-                        <Button
-                            variant="contained"
-                            startIcon={<GetApp />}
-                            sx={{
-                                backgroundColor: '#007bff',
-                                '&:hover': { backgroundColor: '#0056b3' },
-                                borderRadius: '8px',
-                                textTransform: 'none',
-                                fontWeight: 'bold',
-                            }}
-                        >
-                            Download CSV
-                        </Button>
-                    </CSVLink>
-                )}
-            </Box> */}
-        
         </Box>
     );
 };

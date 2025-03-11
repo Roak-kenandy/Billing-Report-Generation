@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const billingReportRoutes = require('./routes/billingReportRoutes');
+const compression = require('compression');
 
 const app = express();
 
@@ -13,6 +14,20 @@ app.use(express.json());    //This is a built-in middleware function in Express.
 
 //Connect to MongoDB Atlas
 connectDB();
+
+
+app.use(
+  compression({
+    level: 6,
+    threshold: 100 * 1000,
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) {
+        return false;
+      }
+      return compression.filter(req, res);
+    }
+  })
+)
 
 //Define a routes
 app.use('/billing-reports', billingReportRoutes);

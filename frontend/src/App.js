@@ -1,17 +1,29 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import "./App.css";
 import BillingReports from "./components/BillingReports";
-import {Typography} from '@mui/material';
+import LoginReports from "./components/loginReport/loginReport";
+import ProtectedRoute from './components/loginReport/ProtectedRoute'; 
+import ResetPassword from "./components/loginReport/ResetPassword";
+import ReusableLhs from "./components/loginReport/reusableLhs";
+import Dashboard from "./components/loginReport/dashboard";
+import DealerReport from "./components/loginReport/DealerReport";
 
 function App() {
   return (
-    <Router>
+    <Router basename="/reports">
       <div className="App">
-            <Typography variant="h4" gutterBottom>
-                Medianet Billing Reports
-            </Typography>
         <Routes>
-          <Route path="/billing-reports" element={<BillingReports />} />
+          <Route path="/login" element={<LoginReports />} />
+          <Route path="/reset-password/:resetToken" element={<ResetPassword />} /> 
+
+        {/* Protected routes */}
+        <Route element={<ProtectedRoute />}>
+        <Route path="/" element={<ReusableLhs />}>
+        <Route path="subscription" element={<BillingReports />} />
+        <Route path="dashboard" element={<Dashboard />} />
+        <Route path="dealer" element={<DealerReport />} />
+        </Route>
+        </Route>
         </Routes>
       </div>
     </Router>
