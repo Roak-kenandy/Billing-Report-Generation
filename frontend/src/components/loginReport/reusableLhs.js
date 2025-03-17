@@ -32,7 +32,8 @@ const ReusableLhs = () => {
 
     const reportItems = [
         { name: 'Subscription Reports', path: '/subscription' },
-        { name: 'Dealer Reports',path: '/dealer'}
+        { name: 'Dealer Reports',path: '/dealer'},
+        {name: 'Collection Reports', path: '/collection'},
     ];
 
     // Redirect to /subscription if the current path is the root

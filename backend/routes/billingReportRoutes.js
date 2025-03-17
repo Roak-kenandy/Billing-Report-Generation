@@ -16,6 +16,8 @@ router.get('/getReports', billingReportController.getReports);
 
 router.get('/getAllReports', billingReportController.exportCSV);
 
+router.get('/getCollectionReports', billingReportController.exportCollectionReports);
+
 router.get('/getAtolls', billingReportController.getAtollsData);
 
 router.get('/metrics', billingReportController.getMetrics);

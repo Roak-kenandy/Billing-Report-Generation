@@ -511,6 +511,456 @@ const getReports = async (page, limit, search = '', startDate, endDate, atoll, i
     }
 };
 
+const exportReports = async (search, startDate, endDate, atoll, island) => {
+    try {
+
+        // Calculate timestamps for date filtering
+        let startTimestamp, endTimestamp;
+        if (startDate) {
+            startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+        }
+        if (endDate) {
+            endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+        }
+
+        // Date filter for initial match (subscriptions with at least one matching service)
+        let dateFilter = {};
+        if (startDate || endDate) {
+            const elemMatchConditions = {};
+            if (startDate) {
+                elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
+            }
+            if (endDate) {
+                elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
+            }
+            dateFilter.services = { $elemMatch: elemMatchConditions };
+        }
+
+        // Date filter for individual services after unwind
+        let serviceDateFilter = {};
+        if (startDate) {
+            serviceDateFilter["services.service_terms.start_date"] = { $gte: startTimestamp };
+        }
+        if (endDate) {
+            serviceDateFilter["services.service_terms.end_date"] = { $lte: endTimestamp };
+        }
+
+        // Match stage for search, atoll, and island
+        let matchStage = { ...dateFilter };
+
+        if (search) {
+            matchStage.$text = { $search: search };
+        }
+
+        if (atoll) {
+            matchStage['joinedData2.location.province'] = atoll;
+        }
+
+        if (island) {
+            matchStage['joinedData2.location.city'] = island;
+        }
+        // Prepare your aggregation query
+        const aggregationQuery = [
+            {
+                $lookup: {
+                    from: 'ContactProfiles',
+                    localField: 'contact_id',
+                    foreignField: 'contact_id',
+                    as: 'joinedData2',
+                }
+            },
+            { $match: matchStage },
+            { $unwind: "$services" },
+            { $match: serviceDateFilter },
+            {
+                $lookup: {
+                    from: 'Devices',
+                    localField: 'contact_id',
+                    foreignField: 'ownership.id',
+                    as: 'joinedData3',
+                }
+            },
+            {
+                $lookup: {
+                    from: 'Orders',
+                    localField: 'contact_id',
+                    foreignField: 'contact_id',
+                    as: 'ordersData',
+                }
+            },
+            {
+                $lookup: {
+                    from: 'Journals',
+                    localField: 'contact_id',
+                    foreignField: 'contact_id',
+                    as: 'joinedData4',
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    "Contact Code": {
+                        $concat: ['"', { $toString: { $arrayElemAt: ['$joinedData4.contact_code', 0] } }, '"']
+                    },
+                    "Device Code": {
+                        $cond: {
+                            if: { $eq: [{ $type: '$joinedData3.custom_fields.value' }, 'array'] },
+                            then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData3.custom_fields.value', 0] }, 0] },
+                            else: '$joinedData3.custom_fields.value',
+                        }
+                    },
+                    "Customer Name": { $arrayElemAt: ['$joinedData2.profile.name', 0] },
+                    "Customer Type": { $arrayElemAt: ['$joinedData2.profile.type', 0] },
+                    "Customer Type 2": {
+                        $cond: {
+                            if: {
+                                $or: [
+                                    { $not: { $isArray: '$joinedData2.company_profile.industry_name' } },
+                                    { $eq: [{ $size: { $ifNull: ['$joinedData2.company_profile.industry_name', []] } }, 0] }
+                                ]
+                            },
+                            then: 'N/A',
+                            else: { $arrayElemAt: ['$joinedData2.company_profile.industry_name', 0] }
+                        }
+                    },
+                    "Submitted By User": "$submited_by_user_name",
+                    "Payment Type": {
+                        $cond: {
+                            if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
+                            then: 'QuickPay',
+                            else: { $arrayElemAt: ['$ordersData.payment_method.type', 0] }
+                        }
+                    },
+                    "Sales Model": { $arrayElemAt: ['$joinedData2.sales_model.name', 0] },
+                    Area: {
+                        $cond: {
+                            if: { $eq: [{ $type: '$joinedData2.tags.name' }, 'array'] },
+                            then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData2.tags.name', 0] }, 0] },
+                            else: '$joinedData2.tags.name',
+                        }
+                    },
+                    "Service Provider": {
+                        $cond: {
+                            if: { $eq: [{ $type: '$joinedData2.custom_fields.value_label' }, 'array'] },
+                            then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData2.custom_fields.value_label', 0] }, 0] },
+                            else: '$joinedData2.custom_fields.value_label',
+                        }
+                    },
+                    Mobile: { $arrayElemAt: ['$joinedData2.phone', 0] },
+                    Ward: { $arrayElemAt: ['$joinedData2.location.address_line1', 0] },
+                    Road: { $arrayElemAt: ['$joinedData2.location.address_line2', 0] },
+                    Island: { $arrayElemAt: ['$joinedData2.location.city', 0] },
+                    Atoll: { $arrayElemAt: ['$joinedData2.location.province', 0] },
+                    STB: { $arrayElemAt: ['$joinedData3.product.name', 0] },
+                    Status: "$services.state", // Direct access after unwind
+                    Package: "$services.product.name",
+                    Price: { $round: [{ $toDouble: "$services.price_terms.price" }, 2] },
+                    "Start Date": {
+                        $dateToString: {
+                            format: "%d-%b-%Y",
+                            date: { $toDate: { $multiply: [{ $toLong: "$services.service_terms.start_date" }, 1000] } }
+                        }
+                    },
+                    "End Date": {
+                        $dateToString: {
+                            format: "%d-%b-%Y",
+                            date: { $toDate: { $multiply: [{ $toLong: "$services.service_terms.end_date" }, 1000] } }
+                        }
+                    }
+                }
+            }
+        ];
+
+        // Optionally, filter based on the 'search' query parameter if provided
+        if (search) {
+            aggregationQuery[0].$match = {
+                ...aggregationQuery[0].$match,
+                $text: { $search: search }
+            };
+        }
+
+        // Perform aggregation to fetch the data
+        const results = await mongoose.connection.db.collection('Subscriptions').aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true }).toArray();
+
+        // Convert the data to CSV format
+        const csvData = parse(results);
+
+        return csvData;
+
+    } catch (error) {
+        console.error('Error exporting report:', error);
+        throw new Error('Error exporting report');
+    }
+};
+
+const exportDealerReports = async () => {
+    try {
+        const aggregationQuery = [
+            {
+                $lookup: {
+                    from: 'Journals',
+                    localField: 'merchant_id',
+                    foreignField: 'account_organisation_id',
+                    as: 'joinedData2',
+                    pipeline: [
+                        {
+                            $project: {
+                                AccountType: '$account_type',
+                                Amount: { $toDouble: '$amount' },
+                                PostedDate: '$posted_date',
+                                Account: '$account_organisation_name',
+                                _id: 0
+                            }
+                        },
+                    ]
+                }
+            },
+            { $unwind: { path: '$joinedData2', preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    "joinedData2.Dealer Name": "$merchant_name", // Use merchant_name from medianet_dealers
+                    "joinedData2.Date": {
+                        $dateToString: {
+                            format: "%d-%m-%Y %H:%M:%S",
+                            date: { $toDate: { $multiply: ["$joinedData2.PostedDate", 1000] } }
+                        }
+                    },
+                    "joinedData2.BP Commission": { $divide: ["$joinedData2.Amount", 2.16] },
+                    "joinedData2.GST": { $multiply: [{ $divide: ["$joinedData2.Amount", 2.16] }, 0.16] },
+                    "joinedData2.Total TopUp Amount": "$joinedData2.Amount",
+                    "joinedData2.Original Payment": {
+                        $round: [
+                            {
+                                $add: [
+                                    { $divide: ["$joinedData2.Amount", 2.16] },
+                                    { $multiply: [{ $divide: ["$joinedData2.Amount", 2.16] }, 0.16] }
+                                ]
+                            },
+
+                        ]
+                    },
+
+                    "joinedData2.Account Type": {
+                        $switch: {
+                            branches: [
+                                { case: { $eq: ["$joinedData2.AccountType", "CREDIT"] }, then: "Dealer Credit Card" },
+                                { case: { $eq: ["$joinedData2.AccountType", "DEBIT"] }, then: "INVOICE" }
+                            ],
+                            default: "UNKNOWN"
+                        }
+                    }
+                }
+            },
+            { $replaceRoot: { newRoot: "$joinedData2" } },
+            {
+                $group: {
+                    _id: {
+                        Date: '$Date',
+                        AccountType: '$Account Type',
+                        DealerName: '$Account',
+                        Amount: '$Amount',
+                        BPCommission: '$BP Commission',
+                        GST: '$GST',
+                        OriginalPayment: '$Original Payment',
+                        TotalTopUp: '$Total TopUp Amount'
+                    },
+                    doc: { $first: '$$ROOT' }
+                }
+            },
+            { $replaceRoot: { newRoot: '$doc' } }
+        ];
+
+        const results = await mongoose.connection.db.collection('medianet_dealers')
+            .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+            .toArray();
+
+        // CSV configuration with explicit headers
+        const csvData = parse(results, {
+            fields: [
+                'Date',
+                'Account Type',
+                'Dealer Name',
+                'Original Payment',
+                'Total TopUp Amount',
+                'GST',
+                'BP Commission',
+            ]
+        });
+
+        return csvData;
+    } catch (error) {
+        console.log('Error exporting report:', error);
+        throw new Error("Error exporting report");
+    }
+};
+
+
+const exportCollectionReports = async (search, startDate, endDate, atoll, island) => {
+    try {
+
+        // Calculate timestamps for date filtering
+        let startTimestamp, endTimestamp;
+        if (startDate) {
+            startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+        }
+        if (endDate) {
+            endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+        }
+
+        // Date filter for initial match (subscriptions with at least one matching service)
+        let dateFilter = {};
+        if (startDate || endDate) {
+            const elemMatchConditions = {};
+            if (startDate) {
+                elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
+            }
+            if (endDate) {
+                elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
+            }
+            dateFilter.services = { $elemMatch: elemMatchConditions };
+        }
+
+        // Date filter for individual services after unwind
+        let serviceDateFilter = {};
+        if (startDate) {
+            serviceDateFilter["services.service_terms.start_date"] = { $gte: startTimestamp };
+        }
+        if (endDate) {
+            serviceDateFilter["services.service_terms.end_date"] = { $lte: endTimestamp };
+        }
+
+        // Match stage for search, atoll, and island
+        let matchStage = { ...dateFilter };
+
+        if (search) {
+            matchStage.$text = { $search: search };
+        }
+
+        if (atoll) {
+            matchStage['joinedData2.location.province'] = atoll;
+        }
+
+        if (island) {
+            matchStage['joinedData2.location.city'] = island;
+        }
+        // Prepare your aggregation query
+        const aggregationQuery = [
+            {
+                $lookup: {
+                    from: 'ContactProfiles',
+                    localField: 'contact_id',
+                    foreignField: 'contact_id',
+                    as: 'joinedData2',
+                }
+            },
+            { $match: matchStage },
+            { $unwind: "$services" },
+            { $match: serviceDateFilter },
+            {
+                $lookup: {
+                    from: 'Devices',
+                    localField: 'contact_id',
+                    foreignField: 'ownership.id',
+                    as: 'joinedData3',
+                }
+            },
+            {
+                $lookup: {
+                    from: 'Orders',
+                    localField: 'contact_id',
+                    foreignField: 'contact_id',
+                    as: 'ordersData',
+                }
+            },
+            {
+                $lookup: {
+                    from: 'Journals',
+                    localField: 'contact_id',
+                    foreignField: 'contact_id',
+                    as: 'joinedData4',
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    "Contact Name": { $arrayElemAt: ['$joinedData2.profile.name', 0] },
+                    "Contact Code": {
+                        $concat: ['"', { $toString: { $arrayElemAt: ['$joinedData4.contact_code', 0] } }, '"']
+                    },
+                    "Back Office Code": '$joinedData4.related_entity.backoffice_code',
+                    "Account Number": {
+                        $ifNull: [
+                            { $arrayElemAt: ['$joinedData4.account_number', 0] },
+                            'N/A'
+                        ]
+                    },
+                    "Amount": {
+                        $ifNull: [
+                            {
+                                $reduce: {
+                                    input: {
+                                        $map: {
+                                            input: "$joinedData4.amount",
+                                            as: "amt",
+                                            in: { $toString: "$$amt" }
+                                        }
+                                    },
+                                    initialValue: "",
+                                    in: {
+                                        $cond: [
+                                            { $eq: ["$$value", ""] },
+                                            "$$this",
+                                            { $concat: ["$$value", ", ", "$$this"] }
+                                        ]
+                                    }
+                                }
+                            },
+                            "N/A"
+                        ]
+                    },
+                    "Total Default Currency": {
+                        $toDouble: {
+                            $ifNull: [
+                                { $arrayElemAt: ['$joinedData4.total_default_currency', 0] },
+                                0
+                            ]
+                        }
+                    },
+                    "Payment Type": {
+                        $cond: {
+                            if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
+                            then: 'QuickPay',
+                            else: { $arrayElemAt: ['$ordersData.payment_method.type', 0] }
+                        }
+                    },
+                }
+            }
+        ];
+
+        // Optionally, filter based on the 'search' query parameter if provided
+        if (search) {
+            aggregationQuery[0].$match = {
+                ...aggregationQuery[0].$match,
+                $text: { $search: search }
+            };
+        }
+
+        // Perform aggregation to fetch the data
+        const results = await mongoose.connection.db.collection('Subscriptions').aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true }).toArray();
+
+        // Convert the data to CSV format
+        const csvData = parse(results);
+
+        return csvData;
+
+    } catch (error) {
+        console.error('Error exporting report:', error);
+        throw new Error('Error exporting report');
+    }
+};
+
+
+
 const getMetrics = async () => {
     try {
 
@@ -649,11 +1099,13 @@ const getAreaStats = async () => {
                     area: {
                         $cond: {
                             if: { $eq: [{ $type: "$_id" }, "array"] },
-                            then: { $reduce: {
-                                input: "$_id",
-                                initialValue: "",
-                                in: { $concat: ["$$value", { $cond: [{ $eq: ["$$value", ""] }, "", ", "] }, "$$this"] }
-                            }},
+                            then: {
+                                $reduce: {
+                                    input: "$_id",
+                                    initialValue: "",
+                                    in: { $concat: ["$$value", { $cond: [{ $eq: ["$$value", ""] }, "", ", "] }, "$$this"] }
+                                }
+                            },
                             else: { $ifNull: ["$_id", "N/A"] }
                         }
                     },
@@ -977,290 +1429,6 @@ const getAreaStats = async () => {
 //         throw new Error('Error exporting report');
 //     }
 // };
-
-
-const exportReports = async (search, startDate, endDate, atoll, island) => {
-    try {
-
-        // Calculate timestamps for date filtering
-        let startTimestamp, endTimestamp;
-        if (startDate) {
-            startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
-        }
-        if (endDate) {
-            endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
-        }
-
-        // Date filter for initial match (subscriptions with at least one matching service)
-        let dateFilter = {};
-        if (startDate || endDate) {
-            const elemMatchConditions = {};
-            if (startDate) {
-                elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
-            }
-            if (endDate) {
-                elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
-            }
-            dateFilter.services = { $elemMatch: elemMatchConditions };
-        }
-
-        // Date filter for individual services after unwind
-        let serviceDateFilter = {};
-        if (startDate) {
-            serviceDateFilter["services.service_terms.start_date"] = { $gte: startTimestamp };
-        }
-        if (endDate) {
-            serviceDateFilter["services.service_terms.end_date"] = { $lte: endTimestamp };
-        }
-
-        // Match stage for search, atoll, and island
-        let matchStage = { ...dateFilter };
-
-        if (search) {
-            matchStage.$text = { $search: search };
-        }
-
-        if (atoll) {
-            matchStage['joinedData2.location.province'] = atoll;
-        }
-
-        if (island) {
-            matchStage['joinedData2.location.city'] = island;
-        }
-        // Prepare your aggregation query
-        const aggregationQuery = [
-            {
-                $lookup: {
-                    from: 'ContactProfiles',
-                    localField: 'contact_id',
-                    foreignField: 'contact_id',
-                    as: 'joinedData2',
-                }
-            },
-            { $match: matchStage },
-            { $unwind: "$services" },
-            { $match: serviceDateFilter },
-            {
-                $lookup: {
-                    from: 'Devices',
-                    localField: 'contact_id',
-                    foreignField: 'ownership.id',
-                    as: 'joinedData3',
-                }
-            },
-            {
-                $lookup: {
-                    from: 'Orders',
-                    localField: 'contact_id',
-                    foreignField: 'contact_id',
-                    as: 'ordersData',
-                }
-            },
-            {
-                $lookup: {
-                    from: 'Journals',
-                    localField: 'contact_id',
-                    foreignField: 'contact_id',
-                    as: 'joinedData4',
-                }
-            },
-            {
-                $project: {
-                    _id: 0,
-                    "Contact Code": {
-                        $concat: ['"', { $toString: { $arrayElemAt: ['$joinedData4.contact_code', 0] } }, '"']
-                    },
-                    "Device Code": {
-                        $cond: {
-                            if: { $eq: [{ $type: '$joinedData3.custom_fields.value' }, 'array'] },
-                            then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData3.custom_fields.value', 0] }, 0] },
-                            else: '$joinedData3.custom_fields.value',
-                        }
-                    },
-                    "Customer Name": { $arrayElemAt: ['$joinedData2.profile.name', 0] },
-                    "Customer Type": { $arrayElemAt: ['$joinedData2.profile.type', 0] },
-                    "Customer Type 2": {
-                        $cond: {
-                            if: {
-                                $or: [
-                                    { $not: { $isArray: '$joinedData2.company_profile.industry_name' } },
-                                    { $eq: [{ $size: { $ifNull: ['$joinedData2.company_profile.industry_name', []] } }, 0] }
-                                ]
-                            },
-                            then: 'N/A',
-                            else: { $arrayElemAt: ['$joinedData2.company_profile.industry_name', 0] }
-                        }
-                    },
-                    "Submitted By User": "$submited_by_user_name",
-                    "Payment Type": {
-                        $cond: {
-                            if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
-                            then: 'QuickPay',
-                            else: { $arrayElemAt: ['$ordersData.payment_method.type', 0] }
-                        }
-                    },
-                    "Sales Model": { $arrayElemAt: ['$joinedData2.sales_model.name', 0] },
-                    Area: {
-                        $cond: {
-                            if: { $eq: [{ $type: '$joinedData2.tags.name' }, 'array'] },
-                            then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData2.tags.name', 0] }, 0] },
-                            else: '$joinedData2.tags.name',
-                        }
-                    },
-                    "Service Provider": {
-                        $cond: {
-                            if: { $eq: [{ $type: '$joinedData2.custom_fields.value_label' }, 'array'] },
-                            then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData2.custom_fields.value_label', 0] }, 0] },
-                            else: '$joinedData2.custom_fields.value_label',
-                        }
-                    },
-                    Mobile: { $arrayElemAt: ['$joinedData2.phone', 0] },
-                    Ward: { $arrayElemAt: ['$joinedData2.location.address_line1', 0] },
-                    Road: { $arrayElemAt: ['$joinedData2.location.address_line2', 0] },
-                    Island: { $arrayElemAt: ['$joinedData2.location.city', 0] },
-                    Atoll: { $arrayElemAt: ['$joinedData2.location.province', 0] },
-                    STB: { $arrayElemAt: ['$joinedData3.product.name', 0] },
-                    Status: "$services.state", // Direct access after unwind
-                    Package: "$services.product.name",
-                    Price: { $round: [{ $toDouble: "$services.price_terms.price" }, 2] },
-                    "Start Date": {
-                        $dateToString: {
-                            format: "%d-%b-%Y",
-                            date: { $toDate: { $multiply: [{ $toLong: "$services.service_terms.start_date" }, 1000] } }
-                        }
-                    },
-                    "End Date": {
-                        $dateToString: {
-                            format: "%d-%b-%Y",
-                            date: { $toDate: { $multiply: [{ $toLong: "$services.service_terms.end_date" }, 1000] } }
-                        }
-                    }
-                }
-            }
-        ];
-
-        // Optionally, filter based on the 'search' query parameter if provided
-        if (search) {
-            aggregationQuery[0].$match = {
-                ...aggregationQuery[0].$match,
-                $text: { $search: search }
-            };
-        }
-
-        // Perform aggregation to fetch the data
-        const results = await mongoose.connection.db.collection('Subscriptions').aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true }).toArray();
-
-        // Convert the data to CSV format
-        const csvData = parse(results);
-
-        return csvData;
-
-    } catch (error) {
-        console.error('Error exporting report:', error);
-        throw new Error('Error exporting report');
-    }
-};
-
-const exportDealerReports = async () => {
-    try {
-        const aggregationQuery = [
-            {
-                $lookup: {
-                    from: 'Journals',
-                    localField: 'merchant_id',
-                    foreignField: 'account_organisation_id',
-                    as: 'joinedData2',
-                    pipeline: [
-                        {
-                            $project: {
-                                AccountType: '$account_type',
-                                Amount: { $toDouble: '$amount' },
-                                PostedDate: '$posted_date',
-                                Account: '$account_organisation_name',
-                                _id: 0
-                            }
-                        },
-                    ]
-                }
-            },
-            { $unwind: { path: '$joinedData2', preserveNullAndEmptyArrays: true } },
-            {
-                $addFields: {
-                    "joinedData2.Dealer Name": "$merchant_name", // Use merchant_name from medianet_dealers
-                    "joinedData2.Date": {
-                        $dateToString: {
-                            format: "%d-%m-%Y %H:%M:%S",
-                            date: { $toDate: { $multiply: ["$joinedData2.PostedDate", 1000] } }
-                        }
-                    },
-                    "joinedData2.BP Commission": { $divide: ["$joinedData2.Amount", 2.16] },
-                    "joinedData2.GST": { $multiply: [{ $divide: ["$joinedData2.Amount", 2.16] }, 0.16] },
-                    "joinedData2.Total TopUp Amount": "$joinedData2.Amount",
-                    "joinedData2.Original Payment": {
-                        $round: [
-                            {
-                                $add: [
-                                    { $divide: ["$joinedData2.Amount", 2.16] },
-                                    { $multiply: [{ $divide: ["$joinedData2.Amount", 2.16] }, 0.16] }
-                                ]
-                            },
-                            
-                        ]
-                    },
-
-                    "joinedData2.Account Type": {
-                        $switch: {
-                            branches: [
-                                { case: { $eq: ["$joinedData2.AccountType", "CREDIT"] }, then: "Dealer Credit Card" },
-                                { case: { $eq: ["$joinedData2.AccountType", "DEBIT"] }, then: "INVOICE" }
-                            ],
-                            default: "UNKNOWN"
-                        }
-                    }
-                }
-            },
-            { $replaceRoot: { newRoot: "$joinedData2" } },
-            {
-                $group: {
-                    _id: {
-                        Date: '$Date',
-                        AccountType: '$Account Type',
-                        DealerName: '$Account',
-                        Amount: '$Amount',
-                        BPCommission: '$BP Commission',
-                        GST: '$GST',
-                        OriginalPayment: '$Original Payment',
-                        TotalTopUp: '$Total TopUp Amount'
-                    },
-                    doc: { $first: '$$ROOT' }
-                }
-            },
-            { $replaceRoot: { newRoot: '$doc' } }
-        ];
-
-        const results = await mongoose.connection.db.collection('medianet_dealers')
-            .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
-            .toArray();
-
-        // CSV configuration with explicit headers
-        const csvData = parse(results, {
-            fields: [
-                'Date',
-                'Account Type',
-                'Dealer Name',
-                'Original Payment',
-                'Total TopUp Amount',
-                'GST',
-                'BP Commission',
-            ]
-        });
-
-        return csvData;
-    } catch (error) {
-        console.log('Error exporting report:', error);
-        throw new Error("Error exporting report");
-    }
-};
 
 
 
@@ -1593,5 +1761,6 @@ module.exports = {
     getPackageDistribution,
     exportDealerReports,
     getAreaStats,
+    exportCollectionReports
     // fetchFutureReports
 }

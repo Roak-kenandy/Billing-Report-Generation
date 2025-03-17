@@ -24,6 +24,24 @@ const exportCSV = async (req, res) => {
     }
 };
 
+const exportCollectionReports = async (req, res) => {
+    try {
+        const { search, startDate,endDate, atoll, island } = req.query;
+        
+        const csvData = await billingReportService.exportCollectionReports(search,startDate,endDate,atoll,island);
+        
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=reports.csv');
+        res.send(csvData);
+
+    } catch (error) {
+        res.status(500).json({ 
+            message: 'Error exporting CSV', 
+            error: error.message 
+        });
+    }
+};
+
 const getAtollsData = async (req, res) => {
     try {
         const data = await billingReportService.getAtollsData();
@@ -141,5 +159,6 @@ module.exports = {
     getPackageDistribution,
     exportDealerReports,
     getAreaStats,
+    exportCollectionReports
     // fetchFutureReports
 }

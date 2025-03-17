@@ -6,7 +6,7 @@ const DealerReport = () => {
 
     const handleDownloadCSV = async () => {
         try {
-            let url = new URL('http://localhost:3000/billing-reports/getAllDealerReports');
+            let url = new URL('http://localhost:3003/billing-reports/getAllDealerReports');
 
             const response = await fetch(url);
             if (!response.ok) throw new Error('Export failed');

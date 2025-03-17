@@ -28,7 +28,7 @@ const RegisterUser = () => {
   const handleSubmit = async (event) => {
     event.preventDefault();
     try {
-      const response = await fetch('http://localhost:3000/billing-reports/registerUser', {
+      const response = await fetch('http://localhost:3003/billing-reports/registerUser', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

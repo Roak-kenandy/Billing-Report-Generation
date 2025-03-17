@@ -24,7 +24,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import ClearIcon from '@mui/icons-material/Clear';
 
-const BillingReports = () => {
+const Collection = () => {
     const [reports, setReports] = useState([]);
     const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
     const [searchTerm, setSearchTerm] = useState('');
@@ -141,7 +141,7 @@ const BillingReports = () => {
     const handleDownloadCSV = async () => {
         try {
             setIsDownloading(true);
-            let url = new URL('http://localhost:3003/billing-reports/getAllReports', window.location.origin);
+            let url = new URL('http://localhost:3003/billing-reports/getCollectionReports', window.location.origin);
             url.searchParams.append('search', searchTerm);
             if (appliedStartDate) url.searchParams.append('startDate', appliedStartDate);
             if (appliedEndDate) url.searchParams.append('endDate', appliedEndDate);
@@ -334,122 +334,10 @@ const BillingReports = () => {
                 </Box>
             </LocalizationProvider>
 
-            {/* Table Container */}
-            <Box sx={{
-                flex: 1,
-                overflow: 'hidden',
-                position: 'relative',
-                borderRadius: '8px',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
-            }}>
-                <TableContainer
-                    component={Paper}
-                    sx={{
-                        height: '100%',
-                        overflow: 'auto',
-                        '&::-webkit-scrollbar': {
-                            height: 8,
-                            width: 8,
-                        },
-                        '&::-webkit-scrollbar-thumb': {
-                            backgroundColor: '#bdbdbd',
-                            borderRadius: 4,
-                        },
-                    }}
-                >
-                    <Table stickyHeader sx={{ minWidth: 1600 }}> {/* Increased min-width for better column spacing */}
-                        <TableHead>
-                            <TableRow>
-                                {[
-                                    'Contact Code', 'Device Code', 'Customer Name', 'Customer Type',
-                                    'Customer Type 2', 'Payment Type', 'Sales Model', 'Submitted By User',
-                                    'Area', 'Dealer', 'Mobile', 'Ward', 'Road', 'Island', 'Atoll',
-                                    'STB', 'State', 'Package', 'Price', 'Start Date', 'End Date'
-                                ].map((header) => (
-                                    <TableCell
-                                        key={header}
-                                        sx={{
-                                            fontWeight: 'bold',
-                                            backgroundColor: '#007bff',
-                                            color: 'white',
-                                            whiteSpace: 'nowrap'
-                                        }}
-                                    >
-                                        {header}
-                                    </TableCell>
-                                ))}
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {loading ? (
-                                Array.from({ length: 10 }).map((_, index) => (
-                                    <TableRow key={index}>
-                                        {Array.from({ length: 20 }).map((_, cellIndex) => (
-                                            <TableCell key={cellIndex}>
-                                                <Skeleton variant="text" animation="wave" />
-                                            </TableCell>
-                                        ))}
-                                    </TableRow>
-                                ))
-                            ) : (reports.map((report) => (
-                                <TableRow key={report.id} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
-                                    {[
-                                        'Contact Code', 'Device Code', 'Customer Name', 'Customer Type', 'Customer Type 2',
-                                        'Payment Type', 'Sales Model', 'Submitted By User', 'Area', 'Dealer', 'Mobile',
-                                        'Ward', 'Road', 'Island', 'Atoll', 'STB', 'Status', 'Package', 'Price', 'Start Date', 'End Date'
-                                    ].map((key) => (
-                                        <TableCell
-                                            key={key}
-                                            sx={{
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                                maxWidth: 200,
-                                                color: report[key]=== 'NOT_EFFECTIVE' ? 'red':
-                                                       report[key]=== 'EFFECTIVE' ? '#11c785': 
-                                                       ['Contact Code', 'Device Code', 'Customer Name'].includes(key) ? 'inherit' : '#555'
-                                            }}
-                                        >
-                                            {report[key]}
-                                        </TableCell>
-                                    ))}
-                                </TableRow>
-                            )))
-                            }
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            </Box>
-
-            {/* Pagination */}
-            <Box sx={{
-                display: 'flex',
-                justifyContent: 'center',
-                borderTop: '1px solid #eee',
-                marginTop:'10px'
-            }}>
-                {loading ? (
-                    <Skeleton variant="rectangular" width={200} height={40} />
-                ) : (
-                    <Pagination
-                        count={pagination.totalPages}
-                        page={pagination.page}
-                        onChange={handlePageChange}
-                        color="primary"
-                        showFirstButton
-                        showLastButton
-                        sx={{
-                            '& .MuiPaginationItem-root': {
-                                fontSize: '0.875rem'
-                            }
-                        }}
-                    />
-                )}
-            </Box>
         </Box>
     );
 };
 
-export default BillingReports;
+export default Collection;
 
 

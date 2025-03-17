@@ -7,6 +7,7 @@ import ResetPassword from "./components/loginReport/ResetPassword";
 import ReusableLhs from "./components/loginReport/reusableLhs";
 import Dashboard from "./components/loginReport/dashboard";
 import DealerReport from "./components/loginReport/DealerReport";
+import CollectionReport from "./components/loginReport/Collection";
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
         <Route path="subscription" element={<BillingReports />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="dealer" element={<DealerReport />} />
+        <Route path="collection" element={<CollectionReport />} />
         </Route>
         </Route>
         </Routes>

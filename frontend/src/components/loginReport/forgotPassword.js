@@ -6,7 +6,7 @@ const ForgotPasswordDialog = ({ open, onClose }) => {
 
   const handleSubmit = async () => {
     try {
-      const response = await fetch('http://localhost:3000/billing-reports/forgot-password', {
+      const response = await fetch('http://localhost:3003/billing-reports/forgot-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
