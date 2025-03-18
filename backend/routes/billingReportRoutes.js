@@ -28,6 +28,8 @@ router.get('/areas', billingReportController.getAreaStats);
 
 router.get('/getAllDealerReports', billingReportController.exportDealerReports);
 
+router.get('/getDealerReports', billingReportController.getDealerReports);
+
 // router.get('/fetchFutureReports', billingReportController.fetchFutureReports);
 
 module.exports = router;

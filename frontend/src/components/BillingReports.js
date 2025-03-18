@@ -40,12 +40,13 @@ const BillingReports = () => {
     const [selectedIsland, setSelectedIsland] = useState('');
     const [appliedAtoll, setAppliedAtoll] = useState('');
     const [appliedIsland, setAppliedIsland] = useState('');
+    const API_URL = 'http://localhost:3003/billing-reports';
 
     // Fetch atolls and islands data
     useEffect(() => {
         const fetchAtolls = async () => {
             try {
-                const response = await fetch('http://localhost:3003/billing-reports/getAtolls');
+                const response = await fetch(`${API_URL}/getAtolls`);
                 const data = await response.json();
                 setAtolls(data.data);
             } catch (err) {
@@ -59,7 +60,7 @@ const BillingReports = () => {
     const fetchReports = async (page, limit, search = '', start = '', end = '') => {
         setLoading(true);
         try {
-            let url = `http://localhost:3003/billing-reports/getReports?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
+            let url = `${API_URL}/getReports?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
             if (start) url += `&startDate=${encodeURIComponent(start)}`;
             if (end) url += `&endDate=${encodeURIComponent(end)}`;
 
@@ -141,7 +142,7 @@ const BillingReports = () => {
     const handleDownloadCSV = async () => {
         try {
             setIsDownloading(true);
-            let url = new URL('http://localhost:3003/billing-reports/getAllReports', window.location.origin);
+            let url = new URL(`${API_URL}/getAllReports`, window.location.origin);
             url.searchParams.append('search', searchTerm);
             if (appliedStartDate) url.searchParams.append('startDate', appliedStartDate);
             if (appliedEndDate) url.searchParams.append('endDate', appliedEndDate);

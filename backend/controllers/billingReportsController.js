@@ -66,8 +66,6 @@ const getMetrics = async (req, res) => {
     try {
         const data = await billingReportService.getMetrics();
 
-        console.log(data,'datas valuess')
-
         res.status(200).json({
             success: true,
             message: 'Metrics data fetched successfully',
@@ -88,8 +86,6 @@ const getPackageDistribution = async (req, res) => {
     try {
         const data = await billingReportService.getPackageDistribution();
 
-        console.log(data,'datas valuess')
-
         res.status(200).json({
             success: true,
             message: 'Package Distribution data fetched successfully',
@@ -109,8 +105,6 @@ const getPackageDistribution = async (req, res) => {
 const getAreaStats = async (req, res) => {
     try {
         const data = await billingReportService.getAreaStats();
-
-        console.log(data,'datas valuess')
 
         res.status(200).json({
             success: true,
@@ -150,6 +144,32 @@ const exportDealerReports = async (req, res) => {
 //     const data = await billingReportService.fetchFutureReports();
 //     res.send(data);
 // };
+const getDealerReports = async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        
+        const result = await billingReportService.getAllDealerReports(page, limit);
+        
+        res.json({
+            success: true,
+            data: result.data,
+            pagination: {
+                total: result.total,
+                page: result.page,
+                limit: result.limit,
+                totalPages: result.totalPages
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({ 
+            success: false,
+            message: 'Error fetching reports', 
+            error: error.message 
+        });
+    }
+};
 
 module.exports = {
     getReports,
@@ -159,6 +179,7 @@ module.exports = {
     getPackageDistribution,
     exportDealerReports,
     getAreaStats,
-    exportCollectionReports
+    exportCollectionReports,
+    getDealerReports
     // fetchFutureReports
 }

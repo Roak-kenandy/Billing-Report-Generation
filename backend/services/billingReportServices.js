@@ -1480,6 +1480,107 @@ const getAtollsData = async () => {
     return results;
 };
 
+const getAllDealerReports = async (page = 1, limit = 10) => {
+    try {
+        const aggregationQuery = [
+            {
+                $lookup: {
+                    from: 'Journals',
+                    localField: 'merchant_id',
+                    foreignField: 'account_organisation_id',
+                    as: 'joinedData2',
+                    pipeline: [
+                        {
+                            $project: {
+                                AccountType: '$account_type',
+                                Amount: { $toDouble: '$amount' },
+                                PostedDate: '$posted_date',
+                                Account: '$account_organisation_name',
+                                _id: 0
+                            }
+                        },
+                    ]
+                }
+            },
+            { $unwind: { path: '$joinedData2', preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    "joinedData2.Dealer Name": "$merchant_name",
+                    "joinedData2.Date": {
+                        $dateToString: {
+                            format: "%d-%m-%Y %H:%M:%S",
+                            date: { $toDate: { $multiply: ["$joinedData2.PostedDate", 1000] } }
+                        }
+                    },
+                    "joinedData2.BP Commission": { $divide: ["$joinedData2.Amount", 2.16] },
+                    "joinedData2.GST": { $multiply: [{ $divide: ["$joinedData2.Amount", 2.16] }, 0.16] },
+                    "joinedData2.Total TopUp Amount": "$joinedData2.Amount",
+                    "joinedData2.Original Payment": {
+                        $round: [
+                            {
+                                $add: [
+                                    { $divide: ["$joinedData2.Amount", 2.16] },
+                                    { $multiply: [{ $divide: ["$joinedData2.Amount", 2.16] }, 0.16] }
+                                ]
+                            },
+                        ]
+                    },
+                    "joinedData2.Account Type": {
+                        $switch: {
+                            branches: [
+                                { case: { $eq: ["$joinedData2.AccountType", "CREDIT"] }, then: "Dealer Credit Card" },
+                                { case: { $eq: ["$joinedData2.AccountType", "DEBIT"] }, then: "INVOICE" }
+                            ],
+                            default: "UNKNOWN"
+                        }
+                    }
+                }
+            },
+            { $replaceRoot: { newRoot: "$joinedData2" } },
+            {
+                $group: {
+                    _id: {
+                        Date: '$Date',
+                        AccountType: '$Account Type',
+                        DealerName: '$Account',
+                        Amount: '$Amount',
+                        BPCommission: '$BP Commission',
+                        GST: '$GST',
+                        OriginalPayment: '$Original Payment',
+                        TotalTopUp: '$Total TopUp Amount'
+                    },
+                    doc: { $first: '$$ROOT' }
+                }
+            },
+            { $replaceRoot: { newRoot: '$doc' } },
+            {
+                $facet: {
+                    metadata: [ { $count: "total" } ],
+                    data: [ 
+                        { $skip: (page - 1) * limit },
+                        { $limit: limit } 
+                    ]
+                }
+            }
+        ];
+
+        const results = await mongoose.connection.db.collection('medianet_dealers')
+            .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+            .toArray();
+
+        return {
+            data: results[0].data,
+            total: results[0].metadata[0]?.total || 0,
+            page,
+            limit,
+            totalPages: Math.ceil((results[0].metadata[0]?.total || 0) / limit)
+        };
+    } catch (error) {
+        console.log('Error fetching reports:', error);
+        throw new Error("Error fetching report data");
+    }
+};
+
 
 // const fetchFutureReports = async (
 //     // search = '', startDate, endDate, atoll, island
@@ -1761,6 +1862,7 @@ module.exports = {
     getPackageDistribution,
     exportDealerReports,
     getAreaStats,
-    exportCollectionReports
+    exportCollectionReports,
+    getAllDealerReports
     // fetchFutureReports
 }

@@ -18,18 +18,19 @@ const Dashboard = () => {
     });
     const [packageData, setPackageData] = useState([]);
     const isSmallScreen = useMediaQuery('(max-width:600px)');
+    const API_URL = 'http://localhost:3003/billing-reports';
 
     // Fetch initial data
     useEffect(() => {
         const fetchInitialData = async () => {
             try {
                 // Fetch metrics
-                const metricsResponse = await fetch('http://localhost:3003/billing-reports/metrics');
+                const metricsResponse = await fetch(`${API_URL}/metrics`);
                 const metricsData = await metricsResponse.json();
                 setMetrics(metricsData.data);
 
                 // Fetch package distribution
-                const packageResponse = await fetch('http://localhost:3003/billing-reports/package-distribution');
+                const packageResponse = await fetch(`${API_URL}/package-distribution`);
                 const packageDistribution = await packageResponse.json();
                 setPackageData(packageDistribution.data);
             } catch (err) {
