@@ -30,6 +30,8 @@ router.get('/getAllDealerReports', billingReportController.exportDealerReports);
 
 router.get('/getDealerReports', billingReportController.getDealerReports);
 
+router.get('/getServicerequestReports', billingReportController.serviceRequestReports);
+
 // router.get('/fetchFutureReports', billingReportController.fetchFutureReports);
 
 module.exports = router;

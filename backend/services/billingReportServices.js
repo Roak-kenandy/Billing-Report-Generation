@@ -959,6 +959,101 @@ const exportCollectionReports = async (search, startDate, endDate, atoll, island
     }
 };
 
+const serviceRequestReports = async (team, queue) => {
+    try {
+        
+        const aggregationQuery = [
+            {
+                $match: {
+                    // 'owner_team.id': team,
+                    // 'queue.id': queue,
+                    'status.name': { $in: ['New', 'In Progress'] }
+                }
+            },
+            {
+                $project: {
+                    team: '$owner_team.name',
+                    queue: '$queue.name',
+                    status: '$status.name',
+                    ageInSeconds: {
+                        $subtract: [1742144704, '$created_date']
+                    },
+                    created_date: 1
+                }
+            },
+            {
+                $project: {
+                    ageInDays: { $divide: ['$ageInSeconds', 86400] },
+                    team: 1,
+                    queue: 1,
+                    status: 1
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalTickets: { $sum: 1 },
+                    '0-1Days': {
+                        $sum: {
+                            $cond: [{ $lte: ['$ageInDays', 1] }, 1, 0] 
+                        }
+                    },
+                    '1-3Days': {
+                        $sum: {
+                            $cond: [{ $lte: ['$ageInDays', 3] }, 1, 0] 
+                        }
+                    },
+                    '3-7Days': {
+                        $sum: {
+                            $cond: [{ $lte: ['$ageInDays', 7] }, 1, 0] 
+                        }
+                    },
+                    '7+Days': {
+                        $sum: {
+                            $cond: [{ $gt: ['$ageInDays', 7] }, 1, 0] 
+                        }
+                    }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    totalTickets: 1,
+                    '0-1Days': 1,
+                    '1-3Days': 1,
+                    '3-7Days': 1,
+                    '7+Days': 1,
+                    '0-1DaysPercentage': {
+                        $multiply: [{ $divide: ['$0-1Days', '$totalTickets'] }, 100] 
+                    },
+                    '1-3DaysPercentage': {
+                        $multiply: [{ $divide: ['$1-3Days', '$totalTickets'] }, 100] 
+                    },
+                    '3-7DaysPercentage': {
+                        $multiply: [{ $divide: ['$3-7Days', '$totalTickets'] }, 100] 
+                    },
+                    '7+DaysPercentage': {
+                        $multiply: [{ $divide: ['$7+Days', '$totalTickets'] }, 100] 
+                    }
+                }
+            }
+        ];
+
+        const results = await mongoose.connection.db.collection('ServiceRequests')
+            .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+            .toArray();
+
+        // Convert the data to CSV format
+        const csvData = parse(results);
+
+        return csvData;
+
+    } catch (error) {
+        console.error('Error exporting report:', error);
+        throw new Error('Error exporting report');
+    }
+};
+
 
 
 const getMetrics = async () => {
@@ -1863,6 +1958,7 @@ module.exports = {
     exportDealerReports,
     getAreaStats,
     exportCollectionReports,
-    getAllDealerReports
+    getAllDealerReports,
+    serviceRequestReports
     // fetchFutureReports
 }

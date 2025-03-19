@@ -8,6 +8,7 @@ import ReusableLhs from "./components/loginReport/reusableLhs";
 import Dashboard from "./components/loginReport/dashboard";
 import DealerReport from "./components/loginReport/DealerReport";
 import CollectionReport from "./components/loginReport/Collection";
+import ServiceRequestReport from "./components/loginReport/ServiceRequestReport";
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="dealer" element={<DealerReport />} />
         <Route path="collection" element={<CollectionReport />} />
+        <Route path="serviceRequest" element={<ServiceRequestReport />} />
         </Route>
         </Route>
         </Routes>
