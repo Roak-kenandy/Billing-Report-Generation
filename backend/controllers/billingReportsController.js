@@ -46,7 +46,7 @@ const serviceRequestReports = async (req, res) => {
     try {
         const { team, queue} = req.query;
         
-        const csvData = await billingReportService.serviceRequestReports(team, queue);
+        const csvData = await billingReportService.serviceRequestReports(req);
         
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename=service-request-reports.csv');
@@ -56,6 +56,46 @@ const serviceRequestReports = async (req, res) => {
         res.status(500).json({ 
             message: 'Error exporting CSV', 
             error: error.message 
+        });
+    }
+};
+
+const getGraphData = async (req, res) => {
+    try {
+        const data = await billingReportService.getGraphData();
+
+        res.status(200).json({
+            success: true,
+            message: 'Metrics data fetched successfully',
+            data: data,
+        });
+    } catch (error) {
+        console.error('Error fetching metrics data:', error);
+
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching metrics data',
+            error: error.message,
+        });
+    }
+};
+
+const getQueueData = async (req, res) => {
+    try {
+        const data = await billingReportService.getQueueData(req,res);
+
+        res.status(200).json({
+            success: true,
+            message: 'Metrics data fetched successfully',
+            data: data,
+        });
+    } catch (error) {
+        console.error('Error fetching metrics data:', error);
+
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching metrics data',
+            error: error.message,
         });
     }
 };
@@ -199,6 +239,8 @@ module.exports = {
     getAreaStats,
     exportCollectionReports,
     getDealerReports,
-    serviceRequestReports
+    serviceRequestReports,
+    getGraphData,
+    getQueueData
     // fetchFutureReports
 }

@@ -959,100 +959,598 @@ const exportCollectionReports = async (search, startDate, endDate, atoll, island
     }
 };
 
-const serviceRequestReports = async (team, queue) => {
+const serviceRequestReports = async (req) => {
     try {
-        
-        const aggregationQuery = [
-            {
-                $match: {
-                    // 'owner_team.id': team,
-                    // 'queue.id': queue,
-                    'status.name': { $in: ['New', 'In Progress'] }
-                }
+      const { startDate, endDate } = req.query;
+  
+      // Validate and parse the date range
+      let dateFilter = {};
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999); // Include the entire end day
+  
+        // Convert dates to Unix timestamps (in seconds) for comparison with created_date
+        const startTimestamp = Math.floor(start.getTime() / 1000);
+        const endTimestamp = Math.floor(end.getTime() / 1000);
+  
+        dateFilter = {
+          created_date: {
+            $gte: startTimestamp,
+            $lte: endTimestamp,
+          },
+        };
+      } else {
+        throw new Error('Start date and end date are required');
+      }
+  
+      const aggregationQuery = [
+        // Match stage to filter by date range
+        {
+          $match: dateFilter,
+        },
+        // Join with ContactProfiles
+        {
+          $lookup: {
+            from: "ContactProfiles",
+            localField: "contact_id",
+            foreignField: "contact_id",
+            as: "contact",
+          },
+        },
+        { $unwind: "$contact" },
+  
+        // Add formatted fields
+        {
+          $addFields: {
+            Name: {
+              $trim: {
+                input: {
+                  $concat: [
+                    { $ifNull: ["$contact.demographics.first_name", ""] },
+                    " ",
+                    { $ifNull: ["$contact.demographics.last_name", ""] },
+                  ],
+                },
+                chars: " ",
+              },
             },
-            {
-                $project: {
-                    team: '$owner_team.name',
-                    queue: '$queue.name',
-                    status: '$status.name',
-                    ageInSeconds: {
-                        $subtract: [1742144704, '$created_date']
-                    },
-                    created_date: 1
-                }
+            UserID: {
+              $let: {
+                vars: {
+                  customerCodeField: {
+                    $arrayElemAt: [
+                      {
+                        $filter: {
+                          input: "$contact.custom_fields",
+                          cond: { $eq: ["$$this.key", "customer_code"] },
+                        },
+                      },
+                      0,
+                    ],
+                  },
+                },
+                in: { $ifNull: ["$$customerCodeField.value", "N/A"] },
+              },
             },
-            {
-                $project: {
-                    ageInDays: { $divide: ['$ageInSeconds', 86400] },
-                    team: 1,
-                    queue: 1,
-                    status: 1
-                }
+            Address: {
+              $concat: [
+                { $ifNull: ["$contact.location.address_line1", ""] },
+                ", ",
+                { $ifNull: ["$contact.location.address_line2", ""] },
+                ", ",
+                { $ifNull: ["$contact.location.city", ""] },
+                ", ",
+                { $ifNull: ["$contact.location.province", ""] },
+                ", ",
+                {
+                  $switch: {
+                    branches: [
+                      {
+                        case: { $eq: ["$contact.location.country", "MDV"] },
+                        then: "Maldives",
+                      },
+                    ],
+                    default: { $ifNull: ["$contact.location.country", ""] },
+                  },
+                },
+              ],
             },
-            {
-                $group: {
-                    _id: null,
-                    totalTickets: { $sum: 1 },
-                    '0-1Days': {
-                        $sum: {
-                            $cond: [{ $lte: ['$ageInDays', 1] }, 1, 0] 
-                        }
-                    },
-                    '1-3Days': {
-                        $sum: {
-                            $cond: [{ $lte: ['$ageInDays', 3] }, 1, 0] 
-                        }
-                    },
-                    '3-7Days': {
-                        $sum: {
-                            $cond: [{ $lte: ['$ageInDays', 7] }, 1, 0] 
-                        }
-                    },
-                    '7+Days': {
-                        $sum: {
-                            $cond: [{ $gt: ['$ageInDays', 7] }, 1, 0] 
-                        }
-                    }
-                }
+            Email: { $ifNull: ["$contact.email", ""] },
+            Mobile: { $ifNull: ["$contact.phone", ""] },
+          },
+        },
+  
+        {
+          $lookup: {
+            from: "Devices",
+            localField: "contact_id",
+            foreignField: "ownership.id",
+            as: "device",
+          },
+        },
+        { $unwind: { path: "$device", preserveNullAndEmptyArrays: true } },
+  
+        {
+          $addFields: {
+            "STB Type/ App": { $ifNull: ["$device.product.name", "N/A"] },
+          },
+        },
+  
+        // Project fields in new order + Description
+        {
+          $project: {
+            _id: 0,
+            "Open Aging": {
+              $dateToString: {
+                format: "%Y-%m-%d %H:%M:%S",
+                date: { $toDate: { $multiply: ["$created_date", 1000] } },
+              },
             },
-            {
-                $project: {
-                    _id: 0,
-                    totalTickets: 1,
-                    '0-1Days': 1,
-                    '1-3Days': 1,
-                    '3-7Days': 1,
-                    '7+Days': 1,
-                    '0-1DaysPercentage': {
-                        $multiply: [{ $divide: ['$0-1Days', '$totalTickets'] }, 100] 
-                    },
-                    '1-3DaysPercentage': {
-                        $multiply: [{ $divide: ['$1-3Days', '$totalTickets'] }, 100] 
-                    },
-                    '3-7DaysPercentage': {
-                        $multiply: [{ $divide: ['$3-7Days', '$totalTickets'] }, 100] 
-                    },
-                    '7+DaysPercentage': {
-                        $multiply: [{ $divide: ['$7+Days', '$totalTickets'] }, 100] 
-                    }
-                }
-            }
-        ];
-
-        const results = await mongoose.connection.db.collection('ServiceRequests')
-            .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
-            .toArray();
-
-        // Convert the data to CSV format
-        const csvData = parse(results);
-
-        return csvData;
-
+            "Closed Aging": {
+              $round: [
+                {
+                  $divide: [
+                    { $abs: { $subtract: ["$actual_close_date", "$created_date"] } },
+                    86400,
+                  ],
+                },
+                0,
+              ],
+            },
+            "Service Request Status": {
+              $ifNull: ["$status.name", ""],
+            },
+            Priority: "$priority",
+            Team: {
+              $ifNull: ["$owner_team.name", ""],
+            },
+            "Service Request Categories": {
+              $ifNull: ["$queue.name", ""],
+            },
+            "Current Assigned Users": {
+              $ifNull: ["$owner.name", ""],
+            },
+            UserID: 1,
+            "Service Request": "$number",
+            Name: 1,
+            Description: "$description",
+            Address: 1,
+            Atoll: { $ifNull: ["$contact.location.province", ""] },
+            Island: { $ifNull: ["$contact.location.city", ""] },
+            Email: 1,
+            Mobile: 1,
+            "STB Type/ App": 1,
+            "Closure Date": {
+              $ifNull: ["$actual_close_date", ""],
+            },
+            "Closing Comment": {
+              $ifNull: ["$response", ""],
+            },
+          },
+        },
+      ];
+  
+      const results = await mongoose.connection.db
+        .collection('ServiceRequests')
+        .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+  
+      if (results.length === 0) {
+        throw new Error('No data found for the report');
+      }
+  
+      // CSV with new column order
+      const csvData = parse(results, {
+        fields: [
+          "Open Aging",
+          "Closed Aging",
+          "UserID",
+          "Service Request",
+          "Name",
+          "Description",
+          "Address",
+          "Atoll",
+          "Island",
+          "Email",
+          "Mobile",
+          "Service Request Status",
+          "Priority",
+          "Team",
+          "Service Request Categories",
+          "Current Assigned Users",
+          "STB Type/ App",
+          "Closure Date",
+          "Closing Comment",
+        ],
+      });
+  
+      return csvData;
     } catch (error) {
-        console.error('Error exporting report:', error);
-        throw new Error('Error exporting report');
+      console.error('Error exporting report:', error);
+      throw new Error('Error exporting report');
     }
+  };
+
+
+const getGraphData = async (req, res) => {
+  try {
+    // Current timestamp in seconds (to calculate aging for open tickets)
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const currentYear = new Date().getFullYear(); // Get the current year (e.g., 2025)
+
+    // Aggregation pipeline to calculate aging and bucket tickets
+    const aggregationQuery = [
+      // Step 1: Filter for the current year based on created_date
+      {
+        $match: {
+          $expr: {
+            $eq: [
+              { $year: { $toDate: { $multiply: ["$created_date", 1000] } } }, // Convert created_date to date and extract year
+              currentYear,
+            ],
+          },
+        },
+      },
+
+      // Step 2: Add a field for aging in days
+      {
+        $addFields: {
+          agingInSeconds: {
+            $cond: {
+              if: "$resolved",
+              then: { $subtract: ["$actual_close_date", "$created_date"] },
+              else: { $subtract: [currentTimestamp, "$created_date"] },
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          agingInDays: { $divide: ["$agingInSeconds", 86400] }, // Convert seconds to days
+        },
+      },
+
+      // Step 3: Add a field for the bucket based on aging
+      {
+        $addFields: {
+          agingBucket: {
+            $switch: {
+              branches: [
+                { case: { $lt: ["$agingInDays", 1] }, then: "<24hr" },
+                { case: { $and: [{ $gte: ["$agingInDays", 1] }, { $lt: ["$agingInDays", 2] }] }, then: "24hr" },
+                { case: { $and: [{ $gte: ["$agingInDays", 2] }, { $lt: ["$agingInDays", 5] }] }, then: "48hr" },
+                { case: { $and: [{ $gte: ["$agingInDays", 5] }, { $lt: ["$agingInDays", 11] }] }, then: "5-10 days" },
+                { case: { $and: [{ $gte: ["$agingInDays", 11] }, { $lt: ["$agingInDays", 21] }] }, then: "11-20 days" },
+                { case: { $and: [{ $gte: ["$agingInDays", 21] }, { $lt: ["$agingInDays", 31] }] }, then: "21-30 days" },
+              ],
+              default: ">30 days",
+            },
+          },
+        },
+      },
+
+      // Step 4: Facet to split the pipeline into installation and fault tickets
+      {
+        $facet: {
+          installationTickets: [
+            { $match: { "queue.name": "New Connections" } }, // Only closed tickets
+            // Group by aging bucket for histogram
+            {
+              $group: {
+                _id: "$agingBucket",
+                Closed: { $sum: 1 },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                bucket: "$_id",
+                Closed: 1,
+              },
+            },
+          ],
+          faultTickets: [
+            { $match: { "queue.name": "Fault", resolved: true } }, // Only closed tickets
+            // Group by aging bucket for histogram
+            {
+              $group: {
+                _id: "$agingBucket",
+                Closed: { $sum: 1 },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                bucket: "$_id",
+                Closed: 1,
+              },
+            },
+          ],
+          installationPie: [
+            { $match: { "queue.name": "New Connections" } },
+            {
+              $group: {
+                _id: "$resolved",
+                count: { $sum: 1 },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                resolved: "$_id",
+                count: 1,
+              },
+            },
+          ],
+          faultPie: [
+            { $match: { "queue.name": "Fault" } },
+            {
+              $group: {
+                _id: "$resolved",
+                count: { $sum: 1 },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                resolved: "$_id",
+                count: 1,
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const results = await mongoose.connection.db
+      .collection('ServiceRequests')
+      .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+      .toArray();
+
+    if (!results || results.length === 0) {
+      throw new Error('No data found for the graphs');
+    }
+
+    const result = results[0];
+
+    // Ensure all buckets are present in the histograms
+    const buckets = ["<24hr", "24hr", "48hr", "5-10 days", "11-20 days", "21-30 days", ">30 days"];
+    const completeHistogram = (data) => {
+      const existingBuckets = data.map((item) => item.bucket);
+      const missingBuckets = buckets.filter((bucket) => !existingBuckets.includes(bucket));
+      const missingData = missingBuckets.map((bucket) => ({
+        bucket,
+        Closed: 0,
+      }));
+      return [...data, ...missingData].sort((a, b) => buckets.indexOf(a.bucket) - buckets.indexOf(b.bucket));
+    };
+
+    // Format the pie chart data
+    const formatPieData = (data) => {
+      const closed = data.find((item) => item.resolved === true)?.count || 0;
+      const open = data.find((item) => item.resolved === false)?.count || 0;
+      return { Closed: closed, Open: open };
+    };
+
+    const responseData = {
+      year: currentYear, // Include the current year in the response
+      installationHistogram: completeHistogram(result.installationTickets),
+      faultHistogram: completeHistogram(result.faultTickets),
+      installationPie: formatPieData(result.installationPie),
+      faultPie: formatPieData(result.faultPie),
+    };
+
+    return responseData;
+  } catch (error) {
+    console.error('Error fetching graph data:', error);
+    throw new Error('Error fetching graph data');
+  }
 };
+
+const getQueueData = async (req, res) => {
+  try {
+    // Current timestamp in seconds
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const currentYear = new Date().getFullYear();
+
+    // Get the owner_team filter from query params (e.g., "Male", "Hulhumale", or "All")
+    const ownerTeamFilter = req.query.owner_team || 'All';
+
+    // Base match stage for filtering by year and owner_team
+    const matchStage = {
+      $match: {
+        $expr: {
+          $eq: [
+            { $year: { $toDate: { $multiply: ["$created_date", 1000] } } },
+            currentYear,
+          ],
+        },
+      },
+    };
+
+    // Add owner_team filter if not "All"
+    if (ownerTeamFilter !== 'All') {
+      matchStage.$match['owner_team.name'] = ownerTeamFilter;
+    }
+
+    // Aggregation pipeline
+    const aggregationQuery = [
+      // Step 1: Filter by year (and owner_team if specified)
+      matchStage,
+
+      // Step 2: Add aging in days
+      {
+        $addFields: {
+          agingInSeconds: {
+            $cond: {
+              if: "$resolved",
+              then: { $subtract: ["$actual_close_date", "$created_date"] },
+              else: { $subtract: [currentTimestamp, "$created_date"] },
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          agingInDays: { $divide: ["$agingInSeconds", 86400] }, // Convert seconds to days
+        },
+      },
+
+      // Step 3: Add aging bucket
+      {
+        $addFields: {
+          agingBucket: {
+            $switch: {
+              branches: [
+                { case: { $lt: ["$agingInDays", 1] }, then: "Less 24 Hrs" },
+                { case: { $and: [{ $gte: ["$agingInDays", 1] }, { $lt: ["$agingInDays", 2] }] }, then: "24 Hrs" },
+                { case: { $and: [{ $gte: ["$agingInDays", 2] }, { $lt: ["$agingInDays", 5] }] }, then: "48 Hrs" },
+                { case: { $and: [{ $gte: ["$agingInDays", 5] }, { $lt: ["$agingInDays", 11] }] }, then: "5-10 Days" },
+                { case: { $and: [{ $gte: ["$agingInDays", 11] }, { $lt: ["$agingInDays", 21] }] }, then: "11-20 Days" },
+                { case: { $and: [{ $gte: ["$agingInDays", 21] }, { $lt: ["$agingInDays", 31] }] }, then: "21-30 Days" },
+              ],
+              default: ">30 days",
+            },
+          },
+        },
+      },
+
+      // Step 4: Facet to split into main table and aging summaries
+      {
+        $facet: {
+          // Main table: Group by queue.name and owner_team.name
+          queueTable: [
+            {
+              $group: {
+                _id: {
+                  queueName: "$queue.name",
+                  ownerTeam: "$owner_team.name",
+                },
+                totalTickets: { $sum: 1 },
+                openTickets: { $sum: { $cond: [{ $eq: ["$resolved", false] }, 1, 0] } },
+                closedTickets: { $sum: { $cond: [{ $eq: ["$resolved", true] }, 1, 0] } },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                queueName: "$_id.queueName",
+                ownerTeam: "$_id.ownerTeam",
+                totalTickets: 1,
+                openTickets: 1,
+                closedTickets: 1,
+              },
+            },
+          ],
+
+          // Open tickets aging summary
+          openTicketsAging: [
+            { $match: { resolved: false } },
+            {
+              $group: {
+                _id: "$agingBucket",
+                count: { $sum: 1 },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                agingBucket: "$_id",
+                count: 1,
+              },
+            },
+          ],
+
+          // Closed tickets aging summary
+          closedTicketsAging: [
+            { $match: { resolved: true } },
+            {
+              $group: {
+                _id: "$agingBucket",
+                count: { $sum: 1 },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                agingBucket: "$_id",
+                count: 1,
+              },
+            },
+          ],
+
+          // Total tickets count (for display)
+          totalTickets: [
+            {
+              $group: {
+                _id: null,
+                count: { $sum: 1 },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                count: 1,
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const results = await mongoose.connection.db
+      .collection('ServiceRequests')
+      .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+      .toArray();
+
+    if (!results || results.length === 0) {
+      throw new Error('No data found for the queue');
+    }
+
+    const result = results[0];
+
+    // Ensure all aging buckets are present
+    const agingBuckets = ["Less 24 Hrs", "24 Hrs", "48 Hrs", "5-10 Days", "11-20 Days", "21-30 Days", ">30 days"];
+    const completeAgingSummary = (data) => {
+      const existingBuckets = data.map((item) => item.agingBucket);
+      const missingBuckets = agingBuckets.filter((bucket) => !existingBuckets.includes(bucket));
+      const missingData = missingBuckets.map((bucket) => ({
+        agingBucket: bucket,
+        count: 0,
+      }));
+      return [...data, ...missingData].sort(
+        (a, b) => agingBuckets.indexOf(a.agingBucket) - agingBuckets.indexOf(b.agingBucket)
+      );
+    };
+
+    // Calculate percentages for aging summaries
+    const totalOpenTickets = result.openTicketsAging.reduce((sum, item) => sum + item.count, 0);
+    const totalClosedTickets = result.closedTicketsAging.reduce((sum, item) => sum + item.count, 0);
+
+    const openTicketsAgingWithPercentage = completeAgingSummary(result.openTicketsAging).map((item) => ({
+      ...item,
+      percentage: totalOpenTickets > 0 ? ((item.count / totalOpenTickets) * 100).toFixed(2) : "0.00",
+    }));
+
+    const closedTicketsAgingWithPercentage = completeAgingSummary(result.closedTicketsAging).map((item) => ({
+      ...item,
+      percentage: totalClosedTickets > 0 ? ((item.count / totalClosedTickets) * 100).toFixed(2) : "0.00",
+    }));
+
+    const responseData = {
+      queueTable: result.queueTable,
+      openTicketsAging: openTicketsAgingWithPercentage,
+      closedTicketsAging: closedTicketsAgingWithPercentage,
+      totalTickets: result.totalTickets[0]?.count || 0,
+    };
+
+    return responseData
+  } catch (error) {
+    console.error('Error fetching queue data:', error);
+  }
+};
+
 
 
 
@@ -1650,10 +2148,10 @@ const getAllDealerReports = async (page = 1, limit = 10) => {
             { $replaceRoot: { newRoot: '$doc' } },
             {
                 $facet: {
-                    metadata: [ { $count: "total" } ],
-                    data: [ 
+                    metadata: [{ $count: "total" }],
+                    data: [
                         { $skip: (page - 1) * limit },
-                        { $limit: limit } 
+                        { $limit: limit }
                     ]
                 }
             }
@@ -1959,6 +2457,8 @@ module.exports = {
     getAreaStats,
     exportCollectionReports,
     getAllDealerReports,
-    serviceRequestReports
+    serviceRequestReports,
+    getGraphData,
+    getQueueData
     // fetchFutureReports
 }

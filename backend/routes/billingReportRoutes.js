@@ -30,6 +30,10 @@ router.get('/getAllDealerReports', billingReportController.exportDealerReports);
 
 router.get('/getDealerReports', billingReportController.getDealerReports);
 
+router.get('/getGraphData', billingReportController.getGraphData);
+
+router.get('/getQueueData', billingReportController.getQueueData);
+
 router.get('/getServicerequestReports', billingReportController.serviceRequestReports);
 
 // router.get('/fetchFutureReports', billingReportController.fetchFutureReports);

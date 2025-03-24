@@ -25,13 +25,10 @@ const DealerReport = () => {
     const isSmallScreen = useMediaQuery('(max-width:600px)');
     const API_URL = 'http://localhost:3003/billing-reports';
 
-
-    // Fetch reports from the backend
     const fetchReports = async (page, limit) => {
         setLoading(true);
         try {
-            let url = `${API_URL}/getDealerReports?page=${page}&limit=${limit}}`;
-
+            let url = `${API_URL}/getDealerReports?page=${page}&limit=${limit}`;
             const response = await fetch(url);
             const data = await response.json();
             console.log(data, 'data comes along');
@@ -48,21 +45,18 @@ const DealerReport = () => {
         setPagination(prev => ({ ...prev, page: 1 }));
     }, []);
 
-    // Fetch reports on component mount and when pagination/search changes
     useEffect(() => {
         fetchReports(pagination.page, pagination.limit);
     }, [pagination.page, pagination.limit]);
 
-    // Handle page change
     const handlePageChange = (event, value) => {
         setPagination({ ...pagination, page: value });
     };
 
     const handleDownloadCSV = async () => {
         try {
-            setIsDownloading(true)
+            setIsDownloading(true);
             let url = new URL(`${API_URL}/getAllDealerReports`);
-
             const response = await fetch(url);
             if (!response.ok) throw new Error('Export failed');
 
@@ -71,40 +65,44 @@ const DealerReport = () => {
 
             const link = document.createElement('a');
             link.href = downloadUrl;
-            link.setAttribute('download', 'reports.csv');
+            link.setAttribute('download', 'dealer_reports.csv');
             document.body.appendChild(link);
             link.click();
-
             link.remove();
             window.URL.revokeObjectURL(downloadUrl);
         } catch (error) {
             console.error('Export error:', error);
-            // Show error notification
         } finally {
             setIsDownloading(false);
         }
     };
 
-
-
     return (
-        <Box sx={{
-            padding: 3,
-            display: 'flex',
-            flexDirection: 'column',
-            height: 'calc(100vh - 37px)',
-            overflow: 'hidden'
-        }}>
+        <Box
+            sx={{
+                p: 3,
+                display: 'flex',
+                flexDirection: 'column',
+                height: 'calc(100vh - 37px)',
+                overflow: 'hidden',
+                background: '#f9fafb', // Light modern background
+            }}
+        >
             <LocalizationProvider dateAdapter={AdapterDateFns}>
-                <Box sx={{
-                    display: 'flex',
-                    gap: 2,
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    mb: 2,
-                    '& > *': { minWidth: isSmallScreen ? '100%' : 'auto' }
-                }}>
-
+                <Box
+                    sx={{
+                        display: 'flex',
+                        gap: 2,
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        mb: 3,
+                        p: 2,
+                        backgroundColor: '#ffffff',
+                        borderRadius: 2,
+                        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
+                        '& > *': { minWidth: isSmallScreen ? '100%' : 'auto' },
+                    }}
+                >
                     <Button
                         variant="contained"
                         startIcon={!isSmallScreen && <GetApp />}
@@ -112,38 +110,49 @@ const DealerReport = () => {
                         disabled={isDownloading}
                         sx={{
                             width: isSmallScreen ? '100%' : 'auto',
-                            height: 56
+                            height: 48,
+                            borderRadius: 2,
+                            backgroundColor: '#22c55e',
+                            textTransform: 'none',
+                            fontWeight: 500,
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                                backgroundColor: '#16a34a',
+                                transform: 'translateY(-2px)',
+                            },
                         }}
                     >
-                        {isDownloading ? 'Exporting...' : (isSmallScreen ? <GetApp /> : 'Download')}
+                        {isDownloading ? 'Exporting...' : isSmallScreen ? <GetApp /> : 'Download'}
                     </Button>
                 </Box>
             </LocalizationProvider>
 
-            {/* Table Container */}
-            <Box sx={{
-                flex: 1,
-                overflow: 'hidden',
-                position: 'relative',
-                borderRadius: '8px',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
-            }}>
+            <Box
+                sx={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    borderRadius: 2,
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
+                    backgroundColor: '#ffffff',
+                }}
+            >
                 <TableContainer
                     component={Paper}
                     sx={{
                         height: '100%',
                         overflow: 'auto',
+                        borderRadius: 2,
                         '&::-webkit-scrollbar': {
-                            height: 8,
-                            width: 8,
+                            height: 6,
+                            width: 6,
                         },
                         '&::-webkit-scrollbar-thumb': {
-                            backgroundColor: '#bdbdbd',
-                            borderRadius: 4,
+                            backgroundColor: '#94a3b8',
+                            borderRadius: 3,
                         },
                     }}
                 >
-                    <Table stickyHeader sx={{ minWidth: 1600 }}> {/* Increased min-width for better column spacing */}
+                    <Table stickyHeader sx={{ minWidth: 1200 }}>
                         <TableHead>
                             <TableRow>
                                 {[
@@ -152,10 +161,13 @@ const DealerReport = () => {
                                     <TableCell
                                         key={header}
                                         sx={{
-                                            fontWeight: 'bold',
-                                            backgroundColor: '#007bff',
-                                            color: 'white',
-                                            whiteSpace: 'nowrap'
+                                            fontWeight: 600,
+                                            background: 'linear-gradient(90deg, #1e3a8a, #1e40af)',
+                                            color: '#ffffff',
+                                            whiteSpace: 'nowrap',
+                                            py: 1.5,
+                                            px: 2,
+                                            borderBottom: 'none',
                                         }}
                                     >
                                         {header}
@@ -167,50 +179,61 @@ const DealerReport = () => {
                             {loading ? (
                                 Array.from({ length: 10 }).map((_, index) => (
                                     <TableRow key={index}>
-                                        {Array.from({ length: 20 }).map((_, cellIndex) => (
-                                            <TableCell key={cellIndex}>
+                                        {Array.from({ length: 8 }).map((_, cellIndex) => (
+                                            <TableCell key={cellIndex} sx={{ py: 2 }}>
                                                 <Skeleton variant="text" animation="wave" />
                                             </TableCell>
                                         ))}
                                     </TableRow>
                                 ))
-                            ) : (reports.map((report) => (
-                                <TableRow key={report.id} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
-                                    {[
-                                        'Date', 'Dealer Name', 'Account Type', 'Amount', 'BP Commission', 'GST', 'Original Payment', 'Total TopUp Amount'
-                                    ].map((key) => (
-                                        <TableCell
-                                            key={key}
-                                            sx={{
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                                maxWidth: 200,
-                                                color: report[key] === 'NOT_EFFECTIVE' ? 'red' :
-                                                    report[key] === 'EFFECTIVE' ? '#11c785' :
-                                                        ['Contact Code', 'Device Code', 'Customer Name'].includes(key) ? 'inherit' : '#555'
-                                            }}
-                                        >
-                                            {report[key]}
-                                        </TableCell>
-                                    ))}
-                                </TableRow>
-                            )))
-                            }
+                            ) : (
+                                reports.map((report) => (
+                                    <TableRow
+                                        key={report.id}
+                                        hover
+                                        sx={{
+                                            '&:last-child td': { borderBottom: 0 },
+                                            transition: 'background-color 0.2s ease',
+                                            '&:hover': { backgroundColor: '#f1f5f9' },
+                                        }}
+                                    >
+                                        {[
+                                            'Date', 'Dealer Name', 'Account Type', 'Amount', 'BP Commission', 'GST', 'Original Payment', 'Total TopUp Amount'
+                                        ].map((key) => (
+                                            <TableCell
+                                                key={key}
+                                                sx={{
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    maxWidth: 200,
+                                                    py: 2,
+                                                    px: 2,
+                                                    color: '#475569',
+                                                    fontWeight: ['Dealer Name'].includes(key) ? 500 : 400,
+                                                }}
+                                            >
+                                                {report[key]}
+                                            </TableCell>
+                                        ))}
+                                    </TableRow>
+                                ))
+                            )}
                         </TableBody>
                     </Table>
                 </TableContainer>
             </Box>
 
-            {/* Pagination */}
-            <Box sx={{
-                display: 'flex',
-                justifyContent: 'center',
-                borderTop: '1px solid #eee',
-                marginTop: '10px'
-            }}>
+            <Box
+                sx={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    mt: 3,
+                    pb: 2,
+                }}
+            >
                 {loading ? (
-                    <Skeleton variant="rectangular" width={200} height={40} />
+                    <Skeleton variant="rectangular" width={200} height={40} sx={{ borderRadius: 2 }} />
                 ) : (
                     <Pagination
                         count={pagination.totalPages}
@@ -221,8 +244,15 @@ const DealerReport = () => {
                         showLastButton
                         sx={{
                             '& .MuiPaginationItem-root': {
-                                fontSize: '0.875rem'
-                            }
+                                fontSize: '0.875rem',
+                                borderRadius: 1,
+                                transition: 'all 0.3s ease',
+                                '&:hover': { backgroundColor: '#e2e8f0' },
+                            },
+                            '& .Mui-selected': {
+                                backgroundColor: '#3b82f6 !important',
+                                color: '#ffffff',
+                            },
                         }}
                     />
                 )}
