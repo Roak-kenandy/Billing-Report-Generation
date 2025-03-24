@@ -9,6 +9,7 @@ import Dashboard from "./components/loginReport/dashboard";
 import DealerReport from "./components/loginReport/DealerReport";
 import CollectionReport from "./components/loginReport/Collection";
 import ServiceRequestReport from "./components/loginReport/ServiceRequestReport";
+import ManualJournalReport from "./components/loginReport/ManualJournalReport";
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
         <Route path="dealer" element={<DealerReport />} />
         <Route path="collection" element={<CollectionReport />} />
         <Route path="serviceRequest" element={<ServiceRequestReport />} />
+        <Route path="manualJournal" element={<ManualJournalReport />} />
         </Route>
         </Route>
         </Routes>

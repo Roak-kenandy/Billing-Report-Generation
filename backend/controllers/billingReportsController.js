@@ -100,6 +100,44 @@ const getQueueData = async (req, res) => {
     }
 };
 
+const exportManualJournalReports = async (req, res) => {
+    try {
+      let page, limit;
+      const isCSVExport = req.query.export === 'csv'; // Check if it's a CSV export
+  
+      if (!isCSVExport) {
+        // Parse page and limit for JSON requests (default to 1 and 10 if not provided)
+        page = parseInt(req.query.page, 10) || 1;
+        limit = parseInt(req.query.limit, 10) || 10;
+      } else {
+        // For CSV export, ignore pagination
+        page = undefined;
+        limit = undefined;
+      }
+  
+      const result = await billingReportService.exportManualJournalReports(page, limit);
+  
+      if (isCSVExport) {
+        // Send CSV response
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=manual-reports.csv');
+        res.send(result.csvData);
+      } else {
+        // Send JSON response with paginated data
+        res.json({
+          message: result.message,
+          data: result.data,
+          pagination: result.pagination
+        });
+      }
+    } catch (error) {
+      res.status(500).json({ 
+        message: 'Error processing request', 
+        error: error.message 
+      });
+    }
+  };
+
 const getAtollsData = async (req, res) => {
     try {
         const data = await billingReportService.getAtollsData();
@@ -241,6 +279,7 @@ module.exports = {
     getDealerReports,
     serviceRequestReports,
     getGraphData,
-    getQueueData
+    getQueueData,
+    exportManualJournalReports
     // fetchFutureReports
 }

@@ -24,6 +24,7 @@ import {
     SupportAgent as SupportAgentIcon,
     ExitToApp as ExitToAppIcon,
     Store as StoreIcon, // New icon for Sales Department
+    Book as BookIcon,
 } from '@mui/icons-material';
 
 const ReusableLhs = () => {
@@ -53,6 +54,7 @@ const ReusableLhs = () => {
         { name: 'Subscription Reports', path: '/subscription', icon: <DescriptionIcon /> },
         { name: 'Dealer Reports', path: '/dealer', icon: <PeopleIcon /> },
         { name: 'Collection Reports', path: '/collection', icon: <MonetizationOnIcon /> },
+        { name: 'Manual Journal Reports', path: '/manualJournal', icon: <BookIcon /> },
     ];
 
     const salesReportItems = [
