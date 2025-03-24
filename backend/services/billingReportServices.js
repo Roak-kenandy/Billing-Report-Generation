@@ -1555,6 +1555,65 @@ const getQueueData = async (req, res) => {
 };
 
 
+const exportManualJournalReports = async (page, limit) => {
+  try {
+    const matchConditions = { "related_entity.transaction_type": "MANUAL_JOURNAL" };
+    const aggregationPipeline = [
+      { $match: matchConditions },
+      { $sort: { posted_date: -1 } }
+    ];
+
+    // Apply pagination only if page and limit are provided
+    if (page !== undefined && limit !== undefined) {
+      const skip = (page - 1) * limit;
+      aggregationPipeline.push({ $skip: skip }, { $limit: limit });
+    }
+
+    aggregationPipeline.push({
+      $project: {
+        _id: 0,
+        "Account Number": "$account_number",
+        "Posted Date": {
+          $dateToString: {
+            format: "%Y-%m-%d %H:%M:%S",
+            date: { $toDate: { $multiply: ["$posted_date", 1000] } }
+          }
+        },
+        "Action Type": "$account_type",
+        "Amount": { $toDouble: "$amount" },
+        "Remarks": { $ifNull: ["$notes", "N/A"] },
+        "Submitted By": { $ifNull: ["$submited_by_user_name", "N/A"]},
+        "Contact Name": 1,
+        "Business Name": 1
+      }
+    });
+
+    const results = await mongoose.connection.db.collection('Journals')
+      .aggregate(aggregationPipeline, { maxTimeMS: 60000, allowDiskUse: true })
+      .toArray();
+
+    const total = await mongoose.connection.db.collection('Journals')
+      .countDocuments(matchConditions);
+
+    const csvData = parse(results); // Assuming 'parse' converts JSON to CSV string
+
+    return {
+      message: 'Billing Reports Data',
+      data: results,
+      pagination: (page !== undefined && limit !== undefined) ? {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      } : undefined,
+      csvData
+    };
+
+  } catch (error) {
+    console.error('Error exporting manual journal report:', error);
+    throw error;
+  }
+};
 
 
 const getMetrics = async () => {
@@ -2462,6 +2521,7 @@ module.exports = {
     getAllDealerReports,
     serviceRequestReports,
     getGraphData,
-    getQueueData
+    getQueueData,
+    exportManualJournalReports
     // fetchFutureReports
 }

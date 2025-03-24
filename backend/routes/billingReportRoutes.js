@@ -36,6 +36,8 @@ router.get('/getQueueData', billingReportController.getQueueData);
 
 router.get('/getServicerequestReports', billingReportController.serviceRequestReports);
 
+router.get('/getManualJournalReports', billingReportController.exportManualJournalReports);
+
 // router.get('/fetchFutureReports', billingReportController.fetchFutureReports);
 
 module.exports = router;
