@@ -1122,7 +1122,10 @@ const serviceRequestReports = async (req) => {
             Mobile: 1,
             "STB Type/ App": 1,
             "Closure Date": {
-              $ifNull: ["$actual_close_date", ""],
+              $dateToString: {
+                format: "%Y-%m-%d %H:%M:%S",
+                date: { $toDate: { $multiply: ["$actual_close_date", 1000] } },
+              },
             },
             "Closing Comment": {
               $ifNull: ["$response", ""],
