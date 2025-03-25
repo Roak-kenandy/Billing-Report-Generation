@@ -6,6 +6,9 @@ const userLoginReportsSchema = new mongoose.Schema({
   name: { type: String, required: false },
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },
+  roles: [{ type: String }],
+  permissions: [{ type: String }],
+  createdAt: { type: Date, default: Date.now },
 });
 
 module.exports = mongoose.model("UserLoginReport", userLoginReportsSchema, "UserLoginReports");

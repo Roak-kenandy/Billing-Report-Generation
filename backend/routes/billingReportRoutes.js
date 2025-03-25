@@ -1,6 +1,7 @@
 const express = require('express');
 const billingReportController = require('../controllers/billingReportsController');
 const loginReportController = require('../controllers/loginReportController');
+const rbacController = require('../controllers/rbacController');
 
 const router = express.Router();
 
@@ -37,6 +38,15 @@ router.get('/getQueueData', billingReportController.getQueueData);
 router.get('/getServicerequestReports', billingReportController.serviceRequestReports);
 
 router.get('/getManualJournalReports', billingReportController.exportManualJournalReports);
+
+
+//Rbac Routes
+router.get('/users', rbacController.getUsers);
+router.get('/users/:id', rbacController.getUser);
+router.post('/users', rbacController.createUser);
+router.put('/users/:id/roles', rbacController.updateRoles);
+router.put('/users/:id/permissions', rbacController.updatePermissions);
+router.delete('/users/:id', rbacController.deleteUser);
 
 // router.get('/fetchFutureReports', billingReportController.fetchFutureReports);
 

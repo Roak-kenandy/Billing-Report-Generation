@@ -23,17 +23,40 @@ import {
     People as PeopleIcon,
     SupportAgent as SupportAgentIcon,
     ExitToApp as ExitToAppIcon,
-    Store as StoreIcon, // New icon for Sales Department
+    Store as StoreIcon,
     Book as BookIcon,
+    Lock as LockIcon,
 } from '@mui/icons-material';
 
 const ReusableLhs = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [selectedIndex, setSelectedIndex] = useState(0);
-    const [openFinancialSubmenu, setOpenFinancialSubmenu] = useState(true); // Renamed for clarity
-    const [openSalesSubmenu, setOpenSalesSubmenu] = useState(true); // New state for Sales submenu
+    const [openFinancialSubmenu, setOpenFinancialSubmenu] = useState(false);
+    const [openSalesSubmenu, setOpenSalesSubmenu] = useState(false);
+    const [openRbacSubmenu, setOpenRbacSubmenu] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [userRoles, setUserRoles] = useState([]); // State to store user roles as an array
+
+    // Fetch user roles on component mount
+    useEffect(() => {
+        // Check if user is logged in
+        const token = localStorage.getItem('token');
+        if (!token) {
+            navigate('/reports/login');
+            return;
+        }
+
+        // Fetch user roles from localStorage (set during login)
+        const roles = JSON.parse(localStorage.getItem('userRoles')) || [];
+        setUserRoles(roles);
+    }, [navigate]);
+
+    useEffect(() => {
+        if (location.pathname === '/') {
+            navigate('/dashboard');
+        }
+    }, [location.pathname, navigate]);
 
     const handleListItemClick = (index, path) => {
         setSelectedIndex(index);
@@ -43,11 +66,28 @@ const ReusableLhs = () => {
     const handleLogout = () => {
         localStorage.removeItem('token');
         sessionStorage.removeItem('token');
+        localStorage.removeItem('userRoles'); // Clear roles on logout
         window.location.href = '/reports/login';
     };
 
     const toggleSidebar = () => {
         setIsSidebarOpen(!isSidebarOpen);
+    };
+
+    const handleSubmenuToggle = (menu) => {
+        if (menu === 'financial') {
+            setOpenFinancialSubmenu(!openFinancialSubmenu);
+            setOpenSalesSubmenu(false);
+            setOpenRbacSubmenu(false);
+        } else if (menu === 'sales') {
+            setOpenSalesSubmenu(!openSalesSubmenu);
+            setOpenFinancialSubmenu(false);
+            setOpenRbacSubmenu(false);
+        } else if (menu === 'rbac') {
+            setOpenRbacSubmenu(!openRbacSubmenu);
+            setOpenFinancialSubmenu(false);
+            setOpenSalesSubmenu(false);
+        }
     };
 
     const financialReportItems = [
@@ -61,11 +101,15 @@ const ReusableLhs = () => {
         { name: 'Service Request Reports', path: '/serviceRequest', icon: <SupportAgentIcon /> },
     ];
 
-    useEffect(() => {
-        if (location.pathname === '/') {
-            navigate('/dashboard');
-        }
-    }, [location.pathname, navigate]);
+    const rbacReportItems = [
+        { name: 'User Roles', path: '/rbac/roles', icon: <PeopleIcon /> },
+        { name: 'Permissions', path: '/rbac/permissions', icon: <LockIcon /> },
+    ];
+
+    // Role-based visibility logic for multiple roles
+    const canViewFinancialReports = userRoles.includes('Finance') || userRoles.includes('Admin');
+    const canViewSalesDepartment = userRoles.includes('Sales') || userRoles.includes('Admin');
+    const canViewRbacManagement = userRoles.includes('Admin');
 
     return (
         <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -84,6 +128,7 @@ const ReusableLhs = () => {
                     transition: 'all 0.3s ease-in-out',
                 }}
             >
+                {/* Header Section */}
                 <Box
                     sx={{
                         p: isSidebarOpen ? 3 : 1,
@@ -92,7 +137,7 @@ const ReusableLhs = () => {
                         backgroundColor: 'rgba(255, 255, 255, 0.05)',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: isSidebarOpen ? 'center' : 'space-between',
+                        justifyContent: 'space-between',
                     }}
                 >
                     {isSidebarOpen && (
@@ -104,7 +149,7 @@ const ReusableLhs = () => {
                                 color: '#e0e7ff',
                             }}
                         >
-                            Reports Dashboard
+                            Reports
                         </Typography>
                     )}
                     <IconButton onClick={toggleSidebar} sx={{ color: '#e0e7ff' }}>
@@ -112,188 +157,287 @@ const ReusableLhs = () => {
                     </IconButton>
                 </Box>
 
-                <List component="nav" sx={{ flexGrow: 1, py: 1 }}>
-                    <ListItemButton
-                        component={Link}
-                        to="/dashboard"
-                        selected={location?.pathname === '/dashboard'}
-                        sx={{
-                            py: 1.5,
-                            mx: 1,
-                            borderRadius: 2,
-                            transition: 'all 0.3s ease',
-                            '&:hover': {
-                                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                                transform: isSidebarOpen ? 'translateX(5px)' : 'none',
-                            },
-                            '&.Mui-selected': {
-                                backgroundColor: '#3b82f6',
-                                color: '#ffffff',
-                                '&:hover': { backgroundColor: '#2563eb' },
-                            },
-                        }}
-                    >
-                        <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
-                            <DashboardIcon />
-                        </ListItemIcon>
-                        {isSidebarOpen && (
-                            <ListItemText
-                                primary="Dashboard"
-                                primaryTypographyProps={{ fontWeight: 500 }}
-                            />
-                        )}
-                    </ListItemButton>
-
-                    {/* Financial Reports Section */}
-                    <ListItemButton
-                        onClick={() => setOpenFinancialSubmenu(!openFinancialSubmenu)}
-                        sx={{
-                            py: 1.5,
-                            mx: 1,
-                            borderRadius: 2,
-                            transition: 'all 0.3s ease',
-                            '&:hover': {
-                                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                            },
-                            backgroundColor: openFinancialSubmenu ? 'rgba(255, 255, 255, 0.05)' : 'inherit',
-                        }}
-                    >
-                        <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
-                            <MonetizationOnIcon />
-                        </ListItemIcon>
-                        {isSidebarOpen && (
-                            <>
+                {/* Scrollable Menu Section */}
+                <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
+                    <List component="nav" sx={{ py: 1 }}>
+                        {/* Dashboard (visible to all roles) */}
+                        <ListItemButton
+                            component={Link}
+                            to="/dashboard"
+                            selected={location?.pathname === '/dashboard'}
+                            sx={{
+                                py: 1.5,
+                                mx: 1,
+                                borderRadius: 2,
+                                transition: 'all 0.3s ease',
+                                '&:hover': {
+                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                    transform: isSidebarOpen ? 'translateX(5px)' : 'none',
+                                },
+                                '&.Mui-selected': {
+                                    backgroundColor: '#3b82f6',
+                                    color: '#ffffff',
+                                    '&:hover': { backgroundColor: '#2563eb' },
+                                },
+                            }}
+                        >
+                            <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                <DashboardIcon />
+                            </ListItemIcon>
+                            {isSidebarOpen && (
                                 <ListItemText
-                                    primary="Financial Reports"
+                                    primary="Dashboard"
                                     primaryTypographyProps={{ fontWeight: 500 }}
                                 />
-                                {openFinancialSubmenu ? (
-                                    <ExpandLess sx={{ color: '#93c5fd' }} />
-                                ) : (
-                                    <ExpandMore sx={{ color: '#93c5fd' }} />
-                                )}
-                            </>
-                        )}
-                    </ListItemButton>
+                            )}
+                        </ListItemButton>
 
-                    <Collapse in={openFinancialSubmenu && isSidebarOpen} timeout="auto" unmountOnExit>
-                        {financialReportItems.map((item, index) => (
-                            <ListItemButton
-                                key={item.name}
-                                selected={location?.pathname === item.path}
-                                onClick={() => handleListItemClick(index, item.path)}
-                                component={Link}
-                                to={item.path}
-                                sx={{
-                                    pl: isSidebarOpen ? 5 : 1,
-                                    py: 1.2,
-                                    mx: 1,
-                                    borderRadius: 2,
-                                    transition: 'all 0.3s ease',
-                                    '&:hover': {
-                                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                                        transform: isSidebarOpen ? 'translateX(5px)' : 'none',
-                                    },
-                                    '&.Mui-selected': {
-                                        backgroundColor: '#3b82f6',
-                                        color: '#ffffff',
-                                        '&:hover': { backgroundColor: '#2563eb' },
-                                    },
-                                }}
-                            >
-                                <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
-                                    {item.icon}
-                                </ListItemIcon>
-                                {isSidebarOpen && (
-                                    <ListItemText
-                                        primary={item.name}
-                                        primaryTypographyProps={{
-                                            fontSize: 14,
-                                            fontWeight: 400,
-                                        }}
-                                    />
-                                )}
-                            </ListItemButton>
-                        ))}
-                    </Collapse>
-
-                    {/* Sales Department Section */}
-                    <ListItemButton
-                        onClick={() => setOpenSalesSubmenu(!openSalesSubmenu)}
-                        sx={{
-                            py: 1.5,
-                            mx: 1,
-                            borderRadius: 2,
-                            transition: 'all 0.3s ease',
-                            '&:hover': {
-                                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                            },
-                            backgroundColor: openSalesSubmenu ? 'rgba(255, 255, 255, 0.05)' : 'inherit',
-                        }}
-                    >
-                        <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
-                            <StoreIcon />
-                        </ListItemIcon>
-                        {isSidebarOpen && (
+                        {/* Financial Reports Section (visible to Finance and Admin) */}
+                        {canViewFinancialReports && (
                             <>
-                                <ListItemText
-                                    primary="Sales Department"
-                                    primaryTypographyProps={{ fontWeight: 500 }}
-                                />
-                                {openSalesSubmenu ? (
-                                    <ExpandLess sx={{ color: '#93c5fd' }} />
-                                ) : (
-                                    <ExpandMore sx={{ color: '#93c5fd' }} />
-                                )}
+                                <ListItemButton
+                                    onClick={() => handleSubmenuToggle('financial')}
+                                    sx={{
+                                        py: 1.5,
+                                        mx: 1,
+                                        borderRadius: 2,
+                                        transition: 'all 0.3s ease',
+                                        '&:hover': {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                        },
+                                        backgroundColor: openFinancialSubmenu ? 'rgba(255, 255, 255, 0.05)' : 'inherit',
+                                    }}
+                                >
+                                    <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                        <MonetizationOnIcon />
+                                    </ListItemIcon>
+                                    {isSidebarOpen && (
+                                        <>
+                                            <ListItemText
+                                                primary="Financial Reports"
+                                                primaryTypographyProps={{ fontWeight: 500 }}
+                                            />
+                                            {openFinancialSubmenu ? (
+                                                <ExpandLess sx={{ color: '#93c5fd' }} />
+                                            ) : (
+                                                <ExpandMore sx={{ color: '#93c5fd' }} />
+                                            )}
+                                        </>
+                                    )}
+                                </ListItemButton>
+
+                                <Collapse in={openFinancialSubmenu && isSidebarOpen} timeout="auto" unmountOnExit>
+                                    {financialReportItems.map((item, index) => (
+                                        <ListItemButton
+                                            key={item.name}
+                                            selected={location?.pathname === item.path}
+                                            onClick={() => handleListItemClick(index, item.path)}
+                                            component={Link}
+                                            to={item.path}
+                                            sx={{
+                                                pl: isSidebarOpen ? 5 : 1,
+                                                py: 1.2,
+                                                mx: 1,
+                                                borderRadius: 2,
+                                                transition: 'all 0.3s ease',
+                                                '&:hover': {
+                                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                                    transform: isSidebarOpen ? 'translateX(5px)' : 'none',
+                                                },
+                                                '&.Mui-selected': {
+                                                    backgroundColor: '#3b82f6',
+                                                    color: '#ffffff',
+                                                    '&:hover': { backgroundColor: '#2563eb' },
+                                                },
+                                            }}
+                                        >
+                                            <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                                {item.icon}
+                                            </ListItemIcon>
+                                            {isSidebarOpen && (
+                                                <ListItemText
+                                                    primary={item.name}
+                                                    primaryTypographyProps={{
+                                                        fontSize: 14,
+                                                        fontWeight: 400,
+                                                    }}
+                                                />
+                                            )}
+                                        </ListItemButton>
+                                    ))}
+                                </Collapse>
                             </>
                         )}
-                    </ListItemButton>
 
-                    <Collapse in={openSalesSubmenu && isSidebarOpen} timeout="auto" unmountOnExit>
-                        {salesReportItems.map((item, index) => (
-                            <ListItemButton
-                                key={item.name}
-                                selected={location?.pathname === item.path}
-                                onClick={() => handleListItemClick(index + financialReportItems.length, item.path)} // Offset index
-                                component={Link}
-                                to={item.path}
-                                sx={{
-                                    pl: isSidebarOpen ? 5 : 1,
-                                    py: 1.2,
-                                    mx: 1,
-                                    borderRadius: 2,
-                                    transition: 'all 0.3s ease',
-                                    '&:hover': {
-                                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                                        transform: isSidebarOpen ? 'translateX(5px)' : 'none',
-                                    },
-                                    '&.Mui-selected': {
-                                        backgroundColor: '#3b82f6',
-                                        color: '#ffffff',
-                                        '&:hover': { backgroundColor: '#2563eb' },
-                                    },
-                                }}
-                            >
-                                <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
-                                    {item.icon}
-                                </ListItemIcon>
-                                {isSidebarOpen && (
-                                    <ListItemText
-                                        primary={item.name}
-                                        primaryTypographyProps={{
-                                            fontSize: 14,
-                                            fontWeight: 400,
-                                        }}
-                                    />
-                                )}
-                            </ListItemButton>
-                        ))}
-                    </Collapse>
+                        {/* Sales Department Section (visible to Sales and Admin) */}
+                        {canViewSalesDepartment && (
+                            <>
+                                <ListItemButton
+                                    onClick={() => handleSubmenuToggle('sales')}
+                                    sx={{
+                                        py: 1.5,
+                                        mx: 1,
+                                        borderRadius: 2,
+                                        transition: 'all 0.3s ease',
+                                        '&:hover': {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                        },
+                                        backgroundColor: openSalesSubmenu ? 'rgba(255, 255, 255, 0.05)' : 'inherit',
+                                    }}
+                                >
+                                    <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                        <StoreIcon />
+                                    </ListItemIcon>
+                                    {isSidebarOpen && (
+                                        <>
+                                            <ListItemText
+                                                primary="Sales Department"
+                                                primaryTypographyProps={{ fontWeight: 500 }}
+                                            />
+                                            {openSalesSubmenu ? (
+                                                <ExpandLess sx={{ color: '#93c5fd' }} />
+                                            ) : (
+                                                <ExpandMore sx={{ color: '#93c5fd' }} />
+                                            )}
+                                        </>
+                                    )}
+                                </ListItemButton>
 
-                    <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.1)', my: 2 }} />
-                </List>
+                                <Collapse in={openSalesSubmenu && isSidebarOpen} timeout="auto" unmountOnExit>
+                                    {salesReportItems.map((item, index) => (
+                                        <ListItemButton
+                                            key={item.name}
+                                            selected={location?.pathname === item.path}
+                                            onClick={() => handleListItemClick(index + financialReportItems.length, item.path)}
+                                            component={Link}
+                                            to={item.path}
+                                            sx={{
+                                                pl: isSidebarOpen ? 5 : 1,
+                                                py: 1.2,
+                                                mx: 1,
+                                                borderRadius: 2,
+                                                transition: 'all 0.3s ease',
+                                                '&:hover': {
+                                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                                    transform: isSidebarOpen ? 'translateX(5px)' : 'none',
+                                                },
+                                                '&.Mui-selected': {
+                                                    backgroundColor: '#3b82f6',
+                                                    color: '#ffffff',
+                                                    '&:hover': { backgroundColor: '#2563eb' },
+                                                },
+                                            }}
+                                        >
+                                            <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                                {item.icon}
+                                            </ListItemIcon>
+                                            {isSidebarOpen && (
+                                                <ListItemText
+                                                    primary={item.name}
+                                                    primaryTypographyProps={{
+                                                        fontSize: 14,
+                                                        fontWeight: 400,
+                                                    }}
+                                                />
+                                            )}
+                                        </ListItemButton>
+                                    ))}
+                                </Collapse>
+                            </>
+                        )}
 
-                <Box sx={{ p: isSidebarOpen ? 3 : 1, borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                        {/* RBAC Section (visible to Admin only) */}
+                        {canViewRbacManagement && (
+                            <>
+                                <ListItemButton
+                                    onClick={() => handleSubmenuToggle('rbac')}
+                                    sx={{
+                                        py: 1.5,
+                                        mx: 1,
+                                        borderRadius: 2,
+                                        transition: 'all 0.3s ease',
+                                        '&:hover': {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                        },
+                                        backgroundColor: openRbacSubmenu ? 'rgba(255, 255, 255, 0.05)' : 'inherit',
+                                    }}
+                                >
+                                    <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                        <LockIcon />
+                                    </ListItemIcon>
+                                    {isSidebarOpen && (
+                                        <>
+                                            <ListItemText
+                                                primary="RBAC Management"
+                                                primaryTypographyProps={{ fontWeight: 500 }}
+                                            />
+                                            {openRbacSubmenu ? (
+                                                <ExpandLess sx={{ color: '#93c5fd' }} />
+                                            ) : (
+                                                <ExpandMore sx={{ color: '#93c5fd' }} />
+                                            )}
+                                        </>
+                                    )}
+                                </ListItemButton>
+
+                                <Collapse in={openRbacSubmenu && isSidebarOpen} timeout="auto" unmountOnExit>
+                                    {rbacReportItems.map((item, index) => (
+                                        <ListItemButton
+                                            key={item.name}
+                                            selected={location?.pathname === item.path}
+                                            onClick={() => handleListItemClick(
+                                                index + financialReportItems.length + salesReportItems.length,
+                                                item.path
+                                            )}
+                                            component={Link}
+                                            to={item.path}
+                                            sx={{
+                                                pl: isSidebarOpen ? 5 : 1,
+                                                py: 1.2,
+                                                mx: 1,
+                                                borderRadius: 2,
+                                                transition: 'all 0.3s ease',
+                                                '&:hover': {
+                                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                                    transform: isSidebarOpen ? 'translateX(5px)' : 'none',
+                                                },
+                                                '&.Mui-selected': {
+                                                    backgroundColor: '#3b82f6',
+                                                    color: '#ffffff',
+                                                    '&:hover': { backgroundColor: '#2563eb' },
+                                                },
+                                            }}
+                                        >
+                                            <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                                {item.icon}
+                                            </ListItemIcon>
+                                            {isSidebarOpen && (
+                                                <ListItemText
+                                                    primary={item.name}
+                                                    primaryTypographyProps={{
+                                                        fontSize: 14,
+                                                        fontWeight: 400,
+                                                    }}
+                                                />
+                                            )}
+                                        </ListItemButton>
+                                    ))}
+                                </Collapse>
+                            </>
+                        )}
+
+                        <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.1)', my: 2 }} />
+                    </List>
+                </Box>
+
+                {/* Fixed Logout Button Section */}
+                <Box
+                    sx={{
+                        p: isSidebarOpen ? 3 : 1,
+                        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    }}
+                >
                     <Button
                         fullWidth
                         variant="contained"

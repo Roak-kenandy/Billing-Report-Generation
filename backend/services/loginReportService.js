@@ -46,8 +46,9 @@ const loginUser = async (email, password) => {
 
         //Return the user data
         return {
-            userName: user.userName,
-            email: user.email
+            userName: user.name,
+            email: user.email,
+            roles: user.roles
         };
     } catch (error) {
         throw new Error(error.message);
