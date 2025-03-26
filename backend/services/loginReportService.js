@@ -79,7 +79,7 @@ const forgotPassword = async (email) => {
         await user.save();
 
         // Send the reset token via email
-        const resetUrl = `http://localhost:3001/reports/reset-password/${resetToken}`;
+        const resetUrl = `https://mdnrpt.medianet.mv/reports/reset-password/${resetToken}`;
 
         console.log(process.env.EMAIL_USER,process.env.EMAIL_PASS,'email user and pass')
 
