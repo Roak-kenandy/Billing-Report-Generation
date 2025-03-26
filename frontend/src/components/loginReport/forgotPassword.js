@@ -38,7 +38,7 @@ const ForgotPasswordDialog = ({ open, onClose }) => {
         setLoading(true);
 
         try {
-            const response = await fetch('http://localhost:3003/billing-reports/forgot-password', {
+            const response = await fetch('https://mdnrpt.medianet.mv/billing-reports/forgot-password', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

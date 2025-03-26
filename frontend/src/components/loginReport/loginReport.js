@@ -177,7 +177,7 @@ const LoginReports = () => {
         setError('');
 
         try {
-            const response = await fetch('http://localhost:3003/billing-reports/login', {
+            const response = await fetch('https://mdnrpt.medianet.mv/billing-reports/login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

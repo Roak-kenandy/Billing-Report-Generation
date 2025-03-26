@@ -28,7 +28,7 @@ const RegisterUser = () => {
   const handleSubmit = async (event) => {
     event.preventDefault();
     try {
-      const response = await fetch('http://localhost:3003/billing-reports/registerUser', {
+      const response = await fetch('https://mdnrpt.medianet.mv/billing-reports/registerUser', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

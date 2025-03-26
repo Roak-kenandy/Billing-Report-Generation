@@ -33,7 +33,7 @@
 //         setLoading(true);
 //         setError(null);
 //         try {
-//             const response = await fetch('http://localhost:3003/billing-reports/users');
+//             const response = await fetch('https://mdnrpt.medianet.mv/billing-reports/users');
 //             if (!response.ok) throw new Error('Failed to fetch users');
 //             const data = await response.json();
 //             setUsers(data);
@@ -48,7 +48,7 @@
 //         if (!newPermission) return;
 //         setLoading(true);
 //         try {
-//             const response = await fetch(`http://localhost:3003/billing-reports/users/${userId}/permissions`, {
+//             const response = await fetch(`https://mdnrpt.medianet.mv/billing-reports/users/${userId}/permissions`, {
 //                 method: 'PUT',
 //                 headers: { 'Content-Type': 'application/json' },
 //                 body: JSON.stringify({ permissions: newPermission }), // Send single permission
@@ -67,7 +67,7 @@
 //     const handleDeleteUser = async (id) => {
 //         setLoading(true);
 //         try {
-//             const response = await fetch(`http://localhost:3003/billing-reports/users/${id}`, {
+//             const response = await fetch(`https://mdnrpt.medianet.mv/billing-reports/users/${id}`, {
 //                 method: 'DELETE',
 //             });
 //             if (!response.ok) throw new Error('Failed to delete user');

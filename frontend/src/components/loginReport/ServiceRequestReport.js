@@ -56,7 +56,7 @@ ChartJS.register(
   ArcElement
 );
 
-const API_URL = 'http://localhost:3003/billing-reports';
+const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
 
 const handleDownloadCSV = async (team, queue, startDate, endDate, setIsDownloading) => {
   try {

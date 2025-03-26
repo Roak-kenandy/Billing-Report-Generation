@@ -34,7 +34,7 @@ const RbacRoles = () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch('http://localhost:3003/billing-reports/users');
+            const response = await fetch('https://mdnrpt.medianet.mv/billing-reports/users');
             if (!response.ok) throw new Error('Failed to fetch users');
             const data = await response.json();
             setUsers(data);
@@ -51,7 +51,7 @@ const RbacRoles = () => {
         try {
             const user = users.find(u => u._id === userId);
             const updatedRoles = [...new Set([...user.roles, newRole])]; // Avoid duplicates
-            const response = await fetch(`http://localhost:3003/billing-reports/users/${userId}/roles`, {
+            const response = await fetch(`https://mdnrpt.medianet.mv/billing-reports/users/${userId}/roles`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ roles: updatedRoles }),
@@ -73,7 +73,7 @@ const RbacRoles = () => {
         try {
             const user = users.find(u => u._id === userId);
             const updatedRoles = user.roles.filter(role => role !== roleToRemove); // Remove the selected role
-            const response = await fetch(`http://localhost:3003/billing-reports/users/${userId}/roles`, {
+            const response = await fetch(`https://mdnrpt.medianet.mv/billing-reports/users/${userId}/roles`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ roles: updatedRoles }),
@@ -92,7 +92,7 @@ const RbacRoles = () => {
     const handleDeleteUser = async (id) => {
         setLoading(true);
         try {
-            const response = await fetch(`http://localhost:3003/billing-reports/users/${id}`, {
+            const response = await fetch(`https://mdnrpt.medianet.mv/billing-reports/users/${id}`, {
                 method: 'DELETE',
             });
             if (!response.ok) throw new Error('Failed to delete user');

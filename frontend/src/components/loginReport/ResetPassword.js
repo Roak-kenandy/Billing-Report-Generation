@@ -66,7 +66,7 @@ const ResetPassword = () => {
         setSuccessMessage('');
 
         try {
-            const response = await fetch('http://localhost:3003/billing-reports/reset-password', {
+            const response = await fetch('https://mdnrpt.medianet.mv/billing-reports/reset-password', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

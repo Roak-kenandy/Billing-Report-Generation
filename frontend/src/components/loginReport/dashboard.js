@@ -18,7 +18,7 @@ const Dashboard = () => {
     });
     const [packageData, setPackageData] = useState([]);
     const isSmallScreen = useMediaQuery('(max-width:600px)');
-    const API_URL = 'http://localhost:3003/billing-reports';
+    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
 
     useEffect(() => {
         const fetchInitialData = async () => {

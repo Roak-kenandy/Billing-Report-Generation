@@ -23,7 +23,7 @@ const ManualJournalReport = () => {
     const [loading, setLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
     const isSmallScreen = useMediaQuery('(max-width:600px)');
-    const API_URL = 'http://localhost:3003/billing-reports';
+    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
 
     const fetchReports = async (page, limit) => {
         setLoading(true);
