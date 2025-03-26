@@ -258,7 +258,7 @@ const Dashboard = () => {
                 p: isSmallScreen ? 2 : 4,
                 backgroundColor: '#f9fafb',
                 minHeight: 'calc(100vh - 37px)',
-                // overflow: 'auto',
+                overflow: 'auto',
             }}
         >
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>

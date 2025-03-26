@@ -524,6 +524,7 @@ const ReusableLhs = () => {
                     flexDirection: 'column',
                     gap: 3,
                     transition: 'all 0.3s ease',
+                    overflow:'hidden'
                 }}
             >
                 <Outlet />
