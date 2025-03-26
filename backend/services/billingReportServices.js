@@ -1617,99 +1617,69 @@ const exportManualJournalReports = async (page, limit) => {
 
 
 const getMetrics = async () => {
-    try {
+  try {
+      const aggregationPipeline = [
+          { $unwind: "$services" }, // Unwind first to reduce document size early
+          {
+              $group: {
+                  _id: null,
+                  totalSubscriptions: { $sum: 1 },
+                  activeSubscriptions: {
+                      $sum: { $cond: [{ $eq: ["$services.state", "EFFECTIVE"] }, 1, 0] }
+                  },
+                  totalRevenue: {
+                      $sum: {
+                          $toDouble: { 
+                              $ifNull: ["$services.price_terms.price", "0"]
+                          }
+                      }
+                  }
+              }
+          },
+          {
+              $project: {
+                  _id: 0,
+                  totalSubscriptions: 1,
+                  activeSubscriptions: 1,
+                  totalRevenue: { $round: ["$totalRevenue", 2] }
+              }
+          }
+      ];
 
-        const aggregationPipeline = [
-            {
-                $lookup: {
-                    from: 'ContactProfiles',
-                    localField: 'contact_id',
-                    foreignField: 'contact_id',
-                    as: 'joinedData2',
-                }
-            },
-            { $unwind: "$services" },
-            {
-                $group: {
-                    _id: null,
-                    totalSubscriptions: { $sum: 1 },
-                    activeSubscriptions: {
-                        $sum: { $cond: [{ $eq: ["$services.state", "EFFECTIVE"] }, 1, 0] }
-                    },
-                    totalRevenue: {
-                        $sum: {
-                            $cond: [
-                                { $in: ["$services.state", ["EFFECTIVE", "NOT_EFFECTIVE"]] },
-                                { $toDouble: "$services.price_terms.price" },
-                                0
-                            ]
-                        }
-                    }
-                    // totalRevenue: {
-                    //     $sum: {
-                    //         $cond: [
-                    //             { $eq: ["$services.state", "EFFECTIVE"] },
-                    //             { $toDouble: "$services.price_terms.price" },
-                    //             0
-                    //         ]
-                    //     }
-                    // }
-                }
-            },
-            {
-                $project: {
-                    _id: 0,
-                    totalSubscriptions: 1,
-                    activeSubscriptions: 1,
-                    totalRevenue: { $round: ["$totalRevenue", 2] }
-                }
-            }
-        ];
+      const result = await mongoose.connection.db.collection('Subscriptions')
+          .aggregate(aggregationPipeline)
+          .next();
 
-        const result = await mongoose.connection.db.collection('Subscriptions')
-            .aggregate(aggregationPipeline)
-            .next();
-
-        return result || {
-            totalSubscriptions: 0,
-            activeSubscriptions: 0,
-            totalRevenue: 0
-        }
-
-
-    }
-    catch (err) {
-        console.log('Error occurred in metrics', err)
-    }
-}
+      return result || {
+          totalSubscriptions: 0,
+          activeSubscriptions: 0,
+          totalRevenue: 0
+      };
+  } catch (err) {
+      console.error('Error occurred in metrics:', err);
+      throw err;
+  }
+};
 
 const getPackageDistribution = async () => {
     try {
-
         const aggregationPipeline = [
-            {
-                $lookup: {
-                    from: 'ContactProfiles',
-                    localField: 'contact_id',
-                    foreignField: 'contact_id',
-                    as: 'joinedData2',
-                }
-            },
             { $unwind: "$services" },
             {
                 $group: {
                     _id: "$services.product.name",
-                    count: { $sum: 1 }
+                    value: { $sum: 1 }
                 }
             },
             {
                 $project: {
                     _id: 0,
                     name: "$_id",
-                    value: "$count"
+                    value: 1
                 }
             },
-            { $sort: { value: -1 } }
+            { $sort: { value: -1 } },
+            { $limit: 50 }
         ];
 
         const results = await mongoose.connection.db.collection('Subscriptions')
@@ -1718,9 +1688,10 @@ const getPackageDistribution = async () => {
 
         return results;
     } catch (err) {
-        console.log("Error occured in package distribution", err)
+        console.error("Error occurred in package distribution:", err);
+        throw err;
     }
-}
+};
 
 const getAreaStats = async () => {
     try {

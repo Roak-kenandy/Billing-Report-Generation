@@ -29,6 +29,7 @@ const ResetPassword = () => {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const navigate = useNavigate();
+    const API_URL = `https://mdnrpt.medianet.mv/billing-reports`;
 
     const validateForm = () => {
         let isValid = true;
@@ -66,7 +67,7 @@ const ResetPassword = () => {
         setSuccessMessage('');
 
         try {
-            const response = await fetch('https://mdnrpt.medianet.mv/billing-reports/reset-password', {
+            const response = await fetch(`${API_URL}/reset-password`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

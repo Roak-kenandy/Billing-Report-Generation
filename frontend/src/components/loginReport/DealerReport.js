@@ -16,6 +16,7 @@ import {
 import { GetApp } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
 const DealerReport = () => {
     const [reports, setReports] = useState([]);
@@ -23,6 +24,9 @@ const DealerReport = () => {
     const [loading, setLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
     const isSmallScreen = useMediaQuery('(max-width:600px)');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    // const API_URL = 'http://localhost:3003/billing-reports';
     const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
 
     const fetchReports = async (page, limit) => {
@@ -103,6 +107,42 @@ const DealerReport = () => {
                         '& > *': { minWidth: isSmallScreen ? '100%' : 'auto' },
                     }}
                 >
+
+                    {/* <DatePicker
+                        label="Start Date"
+                        value={startDate}
+                        onChange={(newValue) => setStartDate(newValue)}
+                        slotProps={{
+                            textField: {
+                                InputLabelProps: { shrink: true },
+                                sx: {
+                                    width: isSmallScreen ? '100%' : 180,
+                                    '& .MuiOutlinedInput-root': {
+                                        borderRadius: 2,
+                                        backgroundColor: '#f1f5f9',
+                                    },
+                                },
+                            },
+                        }}
+                    />
+
+                    <DatePicker
+                        label="End Date"
+                        value={endDate}
+                        onChange={(newValue) => setEndDate(newValue)}
+                        slotProps={{
+                            textField: {
+                                InputLabelProps: { shrink: true },
+                                sx: {
+                                    width: isSmallScreen ? '100%' : 180,
+                                    '& .MuiOutlinedInput-root': {
+                                        borderRadius: 2,
+                                        backgroundColor: '#f1f5f9',
+                                    },
+                                },
+                            },
+                        }}
+                    /> */}
                     <Button
                         variant="contained"
                         startIcon={!isSmallScreen && <GetApp />}
