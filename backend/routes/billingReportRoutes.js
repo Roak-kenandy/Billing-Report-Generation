@@ -1,9 +1,13 @@
 const express = require('express');
+const multer = require('multer');
 const billingReportController = require('../controllers/billingReportsController');
 const loginReportController = require('../controllers/loginReportController');
 const rbacController = require('../controllers/rbacController');
+const bulkUploadController = require('../controllers/bulkUploadController');
 
 const router = express.Router();
+
+const upload = multer({ dest: 'uploads/' });
 
 router.post('/registerUser', loginReportController.registerUser);
 
@@ -47,6 +51,13 @@ router.post('/users', rbacController.createUser);
 router.put('/users/:id/roles', rbacController.updateRoles);
 router.put('/users/:id/permissions', rbacController.updatePermissions);
 router.delete('/users/:id', rbacController.deleteUser);
+
+//Bulk Upload Routes
+router.post('/upload-contacts', upload.single('file'), bulkUploadController.uploadContacts);
+
+router.post('/create-bulk', bulkUploadController.createBulkOperation);
+
+router.get('/get-bulk', bulkUploadController.getAllBulkOperations);
 
 // router.get('/fetchFutureReports', billingReportController.fetchFutureReports);
 

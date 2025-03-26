@@ -40,12 +40,13 @@ const Collection = () => {
     const [selectedIsland, setSelectedIsland] = useState('');
     const [appliedAtoll, setAppliedAtoll] = useState('');
     const [appliedIsland, setAppliedIsland] = useState('');
+    const API_URL = `http://localhost:3003/billing-reports`;
 
     // Fetch atolls and islands data
     useEffect(() => {
         const fetchAtolls = async () => {
             try {
-                const response = await fetch('http://localhost:3003/billing-reports/getAtolls');
+                const response = await fetch(`${API_URL}/getAtolls`);
                 const data = await response.json();
                 setAtolls(data.data);
             } catch (err) {
@@ -59,7 +60,7 @@ const Collection = () => {
     const fetchReports = async (page, limit, search = '', start = '', end = '') => {
         setLoading(true);
         try {
-            let url = `http://localhost:3003/billing-reports/getReports?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
+            let url = `${API_URL}/getReports?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
             if (start) url += `&startDate=${encodeURIComponent(start)}`;
             if (end) url += `&endDate=${encodeURIComponent(end)}`;
 
@@ -141,7 +142,7 @@ const Collection = () => {
     const handleDownloadCSV = async () => {
         try {
             setIsDownloading(true);
-            let url = new URL('http://localhost:3003/billing-reports/getCollectionReports', window.location.origin);
+            let url = new URL(`${API_URL}/getCollectionReports`, window.location.origin);
             url.searchParams.append('search', searchTerm);
             if (appliedStartDate) url.searchParams.append('startDate', appliedStartDate);
             if (appliedEndDate) url.searchParams.append('endDate', appliedEndDate);
@@ -194,14 +195,20 @@ const Collection = () => {
             overflow: 'hidden'
         }}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
-                <Box sx={{
-                    display: 'flex',
-                    gap: 2,
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    mb: 2,
-                    '& > *': { minWidth: isSmallScreen ? '100%' : 'auto' }
-                }}>
+                <Box
+                    sx={{
+                        display: 'flex',
+                        gap: 2,
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        mb: 3,
+                        p: 2,
+                        backgroundColor: '#ffffff',
+                        borderRadius: 2,
+                        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
+                        '& > *': { minWidth: isSmallScreen ? '100%' : 'auto' },
+                    }}
+                >
                     <DatePicker
                         label="Start Date"
                         value={startDate}
@@ -209,8 +216,14 @@ const Collection = () => {
                         slotProps={{
                             textField: {
                                 InputLabelProps: { shrink: true },
-                                sx: { width: isSmallScreen ? '100%' : 180 }
-                            }
+                                sx: {
+                                    width: isSmallScreen ? '100%' : 180,
+                                    '& .MuiOutlinedInput-root': {
+                                        borderRadius: 2,
+                                        backgroundColor: '#f1f5f9',
+                                    },
+                                },
+                            },
                         }}
                     />
 
@@ -221,23 +234,32 @@ const Collection = () => {
                         slotProps={{
                             textField: {
                                 InputLabelProps: { shrink: true },
-                                sx: { width: isSmallScreen ? '100%' : 180 }
-                            }
+                                sx: {
+                                    width: isSmallScreen ? '100%' : 180,
+                                    '& .MuiOutlinedInput-root': {
+                                        borderRadius: 2,
+                                        backgroundColor: '#f1f5f9',
+                                    },
+                                },
+                            },
                         }}
                     />
 
-                    {/* Atoll Dropdown */}
                     <FormControl sx={{ width: isSmallScreen ? '100%' : 180 }}>
-                        <InputLabel>Atoll</InputLabel>
+                        <InputLabel sx={{ color: '#64748b' }}>Atoll</InputLabel>
                         <Select
                             value={selectedAtoll}
                             label="Atoll"
                             onChange={(e) => {
-                                console.log(e.target.value,'targeted values')
                                 setSelectedAtoll(e.target.value);
-                                console.log(selectedAtoll,'selected Atolll')
-
-                                setSelectedIsland(''); // Reset island when atoll changes
+                                setSelectedIsland('');
+                            }}
+                            sx={{
+                                borderRadius: 2,
+                                backgroundColor: '#f1f5f9',
+                                '& .MuiOutlinedInput-notchedOutline': {
+                                    borderColor: '#e2e8f0',
+                                },
                             }}
                         >
                             <MenuItem value="">All Atolls</MenuItem>
@@ -249,21 +271,29 @@ const Collection = () => {
                         </Select>
                     </FormControl>
 
-                    {/* Island Dropdown */}
                     <FormControl sx={{ width: isSmallScreen ? '100%' : 180 }}>
-                        <InputLabel>Island</InputLabel>
+                        <InputLabel sx={{ color: '#64748b' }}>Island</InputLabel>
                         <Select
                             value={selectedIsland}
                             label="Island"
                             onChange={(e) => setSelectedIsland(e.target.value)}
                             disabled={!selectedAtoll}
+                            sx={{
+                                borderRadius: 2,
+                                backgroundColor: '#f1f5f9',
+                                '& .MuiOutlinedInput-notchedOutline': {
+                                    borderColor: '#e2e8f0',
+                                },
+                            }}
                         >
                             <MenuItem value="">All Islands</MenuItem>
-                            {atolls.find(a => a.atolls_id === selectedAtoll)?.islands.map((island) => (
-                                <MenuItem key={island.islands_id} value={island.islands_id}>
-                                    {island.islands_name}
-                                </MenuItem>
-                            ))}
+                            {atolls
+                                .find((a) => a.atolls_id === selectedAtoll)
+                                ?.islands.map((island) => (
+                                    <MenuItem key={island.islands_id} value={island.islands_id}>
+                                        {island.islands_name}
+                                    </MenuItem>
+                                ))}
                         </Select>
                     </FormControl>
 
@@ -273,39 +303,43 @@ const Collection = () => {
                         startIcon={<FilterAltIcon />}
                         sx={{
                             width: isSmallScreen ? '100%' : 'auto',
-                            height: 56
+                            height: 48,
+                            borderRadius: 2,
+                            backgroundColor: '#3b82f6',
+                            textTransform: 'none',
+                            fontWeight: 500,
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                                backgroundColor: '#2563eb',
+                                transform: 'translateY(-2px)',
+                            },
                         }}
                     >
                         Filter
                     </Button>
 
-                    {/* Add this button right after the Filter button */}
                     <Button
                         variant="outlined"
                         onClick={handleClearFilter}
                         startIcon={<ClearIcon />}
                         sx={{
                             width: isSmallScreen ? '100%' : 'auto',
-                            height: 56
+                            height: 48,
+                            borderRadius: 2,
+                            borderColor: '#e2e8f0',
+                            color: '#64748b',
+                            textTransform: 'none',
+                            fontWeight: 500,
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                                borderColor: '#3b82f6',
+                                color: '#3b82f6',
+                                transform: 'translateY(-2px)',
+                            },
                         }}
                     >
                         Clear Filters
                     </Button>
-
-                    {/* <TextField
-                        label="Search"
-                        variant="outlined"
-                        value={searchTerm}
-                        onChange={handleSearch}
-                        fullWidth={isSmallScreen}
-                        InputProps={{
-                            startAdornment: <Search sx={{ color: '#666' }} />,
-                        }}
-                        sx={{
-                            flexGrow: 1,
-                            minWidth: 250
-                        }}
-                    /> */}
 
                     <Button
                         variant="contained"
@@ -314,23 +348,20 @@ const Collection = () => {
                         disabled={isDownloading}
                         sx={{
                             width: isSmallScreen ? '100%' : 'auto',
-                            height: 56
+                            height: 48,
+                            borderRadius: 2,
+                            backgroundColor: '#22c55e',
+                            textTransform: 'none',
+                            fontWeight: 500,
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                                backgroundColor: '#16a34a',
+                                transform: 'translateY(-2px)',
+                            },
                         }}
                     >
-                        {isDownloading ? 'Exporting...' : (isSmallScreen ? <GetApp /> : 'Download')}
+                        {isDownloading ? 'Exporting...' : isSmallScreen ? <GetApp /> : 'Download'}
                     </Button>
-
-                    {/* <Button
-                        variant="contained"
-                        color="error"
-                        onClick={handleLogout} // Define this function
-                        sx={{
-                            width: isSmallScreen ? '100%' : 'auto',
-                            height: 56
-                        }}
-                    >
-                        Logout
-                    </Button> */}
                 </Box>
             </LocalizationProvider>
 

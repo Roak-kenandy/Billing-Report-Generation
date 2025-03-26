@@ -11,7 +11,8 @@ import CollectionReport from "./components/loginReport/Collection";
 import ServiceRequestReport from "./components/loginReport/ServiceRequestReport";
 import ManualJournalReport from "./components/loginReport/ManualJournalReport";
 import RbacRoles from "./components/loginReport/RbacRoles";
-import RbacPermissions from "./components/loginReport/RbacPermissions";
+import BulkUploads from "./components/loginReport/BulkUploads";
+// import RbacPermissions from "./components/loginReport/RbacPermissions";
 
 function App() {
   return (
@@ -27,11 +28,12 @@ function App() {
         <Route path="subscription" element={<BillingReports />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="dealer" element={<DealerReport />} />
+        <Route path="bulkUploads" element={<BulkUploads />} />
         <Route path="collection" element={<CollectionReport />} />
         <Route path="serviceRequest" element={<ServiceRequestReport />} />
         <Route path="manualJournal" element={<ManualJournalReport />} />
         <Route path="rbac/roles" element={<RbacRoles />} />
-        <Route path="rbac/permissions" element={<RbacPermissions />} />
+        {/* <Route path="rbac/permissions" element={<RbacPermissions />} /> */}
         </Route>
         </Route>
         </Routes>

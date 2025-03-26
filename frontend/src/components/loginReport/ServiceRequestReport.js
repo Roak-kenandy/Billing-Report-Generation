@@ -385,9 +385,9 @@ const ServiceRequestReport = () => {
   <Typography variant="h4" sx={{ fontWeight: 600, color: '#1e3a8a', mb: 2, borderBottom: '2px solid #eff6ff', pb: 1 }}>
     Queue Management
   </Typography>
-  <Typography sx={{ color: '#475569', mb: 3, fontStyle: 'italic', fontSize: '0.9rem' }}>
+  {/* <Typography sx={{ color: '#475569', mb: 3, fontStyle: 'italic', fontSize: '0.9rem' }}>
     Dashboard updates every 2 minutes. Closed tickets reflect daily counts.
-  </Typography>
+  </Typography> */}
 
   <Box sx={{ position: 'sticky', top: 0, zIndex: 100, backgroundColor: '#ffffff', pt: 2, pb: 2, borderBottom: '1px solid #E2E8F0', borderRadius: 1, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>

@@ -76,7 +76,7 @@ const Dashboard = () => {
                 },
                 {
                     title: 'Total Revenue',
-                    value: `$${metrics.totalRevenue.toLocaleString()}`,
+                    value: `Rf ${metrics.totalRevenue.toLocaleString()}`,
                     color: '#f59e0b',
                 },
             ].map((metric, index) => (

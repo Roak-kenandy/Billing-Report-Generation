@@ -26,6 +26,7 @@ import {
     Store as StoreIcon,
     Book as BookIcon,
     Lock as LockIcon,
+    CloudUpload as CloudUploadIcon,
 } from '@mui/icons-material';
 
 const ReusableLhs = () => {
@@ -36,22 +37,66 @@ const ReusableLhs = () => {
     const [openSalesSubmenu, setOpenSalesSubmenu] = useState(false);
     const [openRbacSubmenu, setOpenRbacSubmenu] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-    const [userRoles, setUserRoles] = useState([]); // State to store user roles as an array
+    const [userRoles, setUserRoles] = useState([]);
 
-    // Fetch user roles on component mount
+    const financialReportItems = [
+        { name: 'Subscription Reports', path: '/subscription', icon: <DescriptionIcon /> },
+        { name: 'Dealer Reports', path: '/dealer', icon: <PeopleIcon /> },
+        { name: 'Collection Reports', path: '/collection', icon: <MonetizationOnIcon /> },
+        { name: 'Bulk Uploads', path: '/bulkUploads', icon: <CloudUploadIcon /> },
+        { name: 'Manual Journal Reports', path: '/manualJournal', icon: <BookIcon /> },
+    ];
+
+    const salesReportItems = [
+        { name: 'Service Request Reports', path: '/serviceRequest', icon: <SupportAgentIcon /> },
+    ];
+
+    const rbacReportItems = [
+        { name: 'User Roles', path: '/rbac/roles', icon: <PeopleIcon /> },
+    ];
+
+    // Initialize component state based on current location and stored preferences
     useEffect(() => {
-        // Check if user is logged in
+        // Check authentication
         const token = localStorage.getItem('token');
         if (!token) {
             navigate('/reports/login');
             return;
         }
 
-        // Fetch user roles from localStorage (set during login)
+        // Fetch user roles
         const roles = JSON.parse(localStorage.getItem('userRoles')) || [];
         setUserRoles(roles);
-    }, [navigate]);
 
+        // Restore submenu states from localStorage
+        setOpenFinancialSubmenu(JSON.parse(localStorage.getItem('financialSubmenuOpen')) || false);
+        setOpenSalesSubmenu(JSON.parse(localStorage.getItem('salesSubmenuOpen')) || false);
+        setOpenRbacSubmenu(JSON.parse(localStorage.getItem('rbacSubmenuOpen')) || false);
+
+        // Set selected index based on current path
+        const allMenuItems = [
+            { path: '/dashboard' },
+            ...financialReportItems,
+            ...salesReportItems,
+            ...rbacReportItems
+        ];
+        const currentIndex = allMenuItems.findIndex(item => item.path === location.pathname);
+        setSelectedIndex(currentIndex >= 0 ? currentIndex : 0);
+
+        // Auto-expand the relevant submenu based on current path
+        if (financialReportItems.some(item => item.path === location.pathname)) {
+            setOpenFinancialSubmenu(true);
+            localStorage.setItem('financialSubmenuOpen', JSON.stringify(true));
+        } else if (salesReportItems.some(item => item.path === location.pathname)) {
+            setOpenSalesSubmenu(true);
+            localStorage.setItem('salesSubmenuOpen', JSON.stringify(true));
+        } else if (rbacReportItems.some(item => item.path === location.pathname)) {
+            setOpenRbacSubmenu(true);
+            localStorage.setItem('rbacSubmenuOpen', JSON.stringify(true));
+        }
+    }, [location.pathname, navigate]);
+
+    // Redirect to dashboard if root path
     useEffect(() => {
         if (location.pathname === '/') {
             navigate('/dashboard');
@@ -64,9 +109,8 @@ const ReusableLhs = () => {
     };
 
     const handleLogout = () => {
-        localStorage.removeItem('token');
-        sessionStorage.removeItem('token');
-        localStorage.removeItem('userRoles'); // Clear roles on logout
+        localStorage.clear();
+        sessionStorage.clear();
         window.location.href = '/reports/login';
     };
 
@@ -76,41 +120,38 @@ const ReusableLhs = () => {
 
     const handleSubmenuToggle = (menu) => {
         if (menu === 'financial') {
-            setOpenFinancialSubmenu(!openFinancialSubmenu);
+            const newState = !openFinancialSubmenu;
+            setOpenFinancialSubmenu(newState);
             setOpenSalesSubmenu(false);
             setOpenRbacSubmenu(false);
+            localStorage.setItem('financialSubmenuOpen', JSON.stringify(newState));
+            localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
         } else if (menu === 'sales') {
-            setOpenSalesSubmenu(!openSalesSubmenu);
+            const newState = !openSalesSubmenu;
+            setOpenSalesSubmenu(newState);
             setOpenFinancialSubmenu(false);
             setOpenRbacSubmenu(false);
+            localStorage.setItem('salesSubmenuOpen', JSON.stringify(newState));
+            localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
         } else if (menu === 'rbac') {
-            setOpenRbacSubmenu(!openRbacSubmenu);
+            const newState = !openRbacSubmenu;
+            setOpenRbacSubmenu(newState);
             setOpenFinancialSubmenu(false);
             setOpenSalesSubmenu(false);
+            localStorage.setItem('rbacSubmenuOpen', JSON.stringify(newState));
+            localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
         }
     };
 
-    const financialReportItems = [
-        { name: 'Subscription Reports', path: '/subscription', icon: <DescriptionIcon /> },
-        { name: 'Dealer Reports', path: '/dealer', icon: <PeopleIcon /> },
-        { name: 'Collection Reports', path: '/collection', icon: <MonetizationOnIcon /> },
-        { name: 'Manual Journal Reports', path: '/manualJournal', icon: <BookIcon /> },
-    ];
-
-    const salesReportItems = [
-        { name: 'Service Request Reports', path: '/serviceRequest', icon: <SupportAgentIcon /> },
-    ];
-
-    const rbacReportItems = [
-        { name: 'User Roles', path: '/rbac/roles', icon: <PeopleIcon /> },
-        { name: 'Permissions', path: '/rbac/permissions', icon: <LockIcon /> },
-    ];
-
-    // Role-based visibility logic for multiple roles
     const canViewFinancialReports = userRoles.includes('Finance') || userRoles.includes('Admin');
     const canViewSalesDepartment = userRoles.includes('Sales') || userRoles.includes('Admin');
     const canViewRbacManagement = userRoles.includes('Admin');
 
+    // Rest of your JSX remains the same...
+    // Return statement with Box, List, etc. stays unchanged
     return (
         <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
             {/* LHS Navigation Panel */}
@@ -180,6 +221,7 @@ const ReusableLhs = () => {
                                     '&:hover': { backgroundColor: '#2563eb' },
                                 },
                             }}
+                            onClick={() => handleListItemClick(0, '/dashboard')}
                         >
                             <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
                                 <DashboardIcon />
@@ -192,7 +234,7 @@ const ReusableLhs = () => {
                             )}
                         </ListItemButton>
 
-                        {/* Financial Reports Section (visible to Finance and Admin) */}
+                        {/* Financial Reports Section */}
                         {canViewFinancialReports && (
                             <>
                                 <ListItemButton
@@ -231,7 +273,7 @@ const ReusableLhs = () => {
                                         <ListItemButton
                                             key={item.name}
                                             selected={location?.pathname === item.path}
-                                            onClick={() => handleListItemClick(index, item.path)}
+                                            onClick={() => handleListItemClick(index + 1, item.path)}
                                             component={Link}
                                             to={item.path}
                                             sx={{
@@ -269,7 +311,7 @@ const ReusableLhs = () => {
                             </>
                         )}
 
-                        {/* Sales Department Section (visible to Sales and Admin) */}
+                        {/* Sales Department Section */}
                         {canViewSalesDepartment && (
                             <>
                                 <ListItemButton
@@ -308,7 +350,7 @@ const ReusableLhs = () => {
                                         <ListItemButton
                                             key={item.name}
                                             selected={location?.pathname === item.path}
-                                            onClick={() => handleListItemClick(index + financialReportItems.length, item.path)}
+                                            onClick={() => handleListItemClick(index + financialReportItems.length + 1, item.path)}
                                             component={Link}
                                             to={item.path}
                                             sx={{
@@ -346,7 +388,7 @@ const ReusableLhs = () => {
                             </>
                         )}
 
-                        {/* RBAC Section (visible to Admin only) */}
+                        {/* RBAC Section */}
                         {canViewRbacManagement && (
                             <>
                                 <ListItemButton
@@ -386,7 +428,7 @@ const ReusableLhs = () => {
                                             key={item.name}
                                             selected={location?.pathname === item.path}
                                             onClick={() => handleListItemClick(
-                                                index + financialReportItems.length + salesReportItems.length,
+                                                index + financialReportItems.length + salesReportItems.length + 1,
                                                 item.path
                                             )}
                                             component={Link}
