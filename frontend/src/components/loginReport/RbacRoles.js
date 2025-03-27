@@ -143,16 +143,16 @@ const RbacRoles = () => {
                 <Table stickyHeader> {/* stickyHeader keeps the header fixed */}
                     <TableHead>
                         <TableRow sx={{ backgroundColor: '#2563eb' }}>
-                            <TableCell sx={{ color: '#fff', fontWeight: '600', backgroundColor: '#2563eb' }}>
+                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)', }}>
                                 Name
                             </TableCell>
-                            <TableCell sx={{ color: '#fff', fontWeight: '600', backgroundColor: '#2563eb' }}>
+                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)', }}>
                                 Email
                             </TableCell>
-                            <TableCell sx={{ color: '#fff', fontWeight: '600', backgroundColor: '#2563eb' }}>
+                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)',}}>
                                 Roles
                             </TableCell>
-                            <TableCell sx={{ color: '#fff', fontWeight: '600', backgroundColor: '#2563eb' }}>
+                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)', }}>
                                 Actions
                             </TableCell>
                         </TableRow>
