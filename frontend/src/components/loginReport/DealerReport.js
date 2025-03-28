@@ -12,11 +12,18 @@ import {
     Box,
     Skeleton,
     useMediaQuery,
+    InputLabel,
+    FormControl,
+    Select,
+    MenuItem,
+    Tooltip
 } from '@mui/material';
 import { GetApp } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import ClearIcon from '@mui/icons-material/Clear';
 
 const DealerReport = () => {
     const [reports, setReports] = useState([]);
@@ -26,16 +33,41 @@ const DealerReport = () => {
     const isSmallScreen = useMediaQuery('(max-width:600px)');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-    // const API_URL = 'http://localhost:3003/billing-reports';
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    const [dealers, setDealers] = useState([]);
+    const [selectedDealer, setSelectedDealer] = useState('');
+    const [appliedDealer, setAppliedDealer] = useState('');
+    const [appliedStartDate, setAppliedStartDate] = useState('');
+    const [appliedEndDate, setAppliedEndDate] = useState('');
+    const API_URL = 'http://localhost:3003/billing-reports';
+    // const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
 
-    const fetchReports = async (page, limit) => {
+    useEffect(() => {
+        const fetchDealers = async () => {
+            try {
+                const response = await fetch(`${API_URL}/getDealerNames`);
+                const data = await response.json();
+                setDealers(data.data.data);
+            } catch (err) {
+                console.error('Error fetching dealers:', err);
+            }
+        };
+        fetchDealers();
+    }, []);
+
+    const fetchReports = async (page, limit, start = '', end = '') => {
         setLoading(true);
         try {
             let url = `${API_URL}/getDealerReports?page=${page}&limit=${limit}`;
+            if (start) url += `&startDate=${encodeURIComponent(start)}`;
+            if (end) url += `&endDate=${encodeURIComponent(end)}`;
+            if (appliedDealer) {
+                const selectedDealerName = dealers.find((dealer) => dealer.dealerName === appliedDealer);
+                if (selectedDealerName) url += `&dealerName=${selectedDealerName.dealerName}`;
+            }
             const response = await fetch(url);
             const data = await response.json();
             console.log(data, 'data comes along');
+            console.log(appliedDealer, 'selectedDealerselectedDealer');
             setReports(data.data);
             setPagination(data.pagination);
         } catch (err) {
@@ -50,17 +82,40 @@ const DealerReport = () => {
     }, []);
 
     useEffect(() => {
-        fetchReports(pagination.page, pagination.limit);
-    }, [pagination.page, pagination.limit]);
+        fetchReports(pagination.page, pagination.limit, appliedStartDate, appliedEndDate);
+    }, [pagination.page, pagination.limit, appliedDealer, appliedStartDate, appliedEndDate]);
 
     const handlePageChange = (event, value) => {
         setPagination({ ...pagination, page: value });
+    };
+
+    const handleFilter = () => {
+        setAppliedStartDate(startDate);
+        setAppliedEndDate(endDate);
+        setAppliedDealer(selectedDealer);
+        setPagination(prev => ({ ...prev, page: 1 }));
+    };
+
+    const handleClearFilter = () => {
+        setStartDate('');
+        setEndDate('');
+        setAppliedStartDate('');
+        setAppliedEndDate('');
+        setSelectedDealer('');
+        setAppliedDealer('');
+        setPagination(prev => ({ ...prev, page: 1 }));
     };
 
     const handleDownloadCSV = async () => {
         try {
             setIsDownloading(true);
             let url = new URL(`${API_URL}/getAllDealerReports`);
+            if (appliedStartDate) url.searchParams.append('startDate', appliedStartDate);
+            if (appliedEndDate) url.searchParams.append('endDate', appliedEndDate);
+            if (appliedDealer) {
+                const selectedDealerName = dealers.find((dealer) => dealer.dealerName === appliedDealer);
+                if (selectedDealerName) url += `&dealerName=${selectedDealerName.dealerName}`;
+            }
             const response = await fetch(url);
             if (!response.ok) throw new Error('Export failed');
 
@@ -89,7 +144,7 @@ const DealerReport = () => {
                 flexDirection: 'column',
                 height: 'calc(100vh - 37px)',
                 overflow: 'hidden',
-                background: '#f9fafb', // Light modern background
+                background: '#f9fafb',
             }}
         >
             <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -107,8 +162,7 @@ const DealerReport = () => {
                         '& > *': { minWidth: isSmallScreen ? '100%' : 'auto' },
                     }}
                 >
-
-                    {/* <DatePicker
+                    <DatePicker
                         label="Start Date"
                         value={startDate}
                         onChange={(newValue) => setStartDate(newValue)}
@@ -142,7 +196,76 @@ const DealerReport = () => {
                                 },
                             },
                         }}
-                    /> */}
+                    />
+
+                    <FormControl sx={{ width: isSmallScreen ? '100%' : 180 }}>
+                        <InputLabel sx={{ color: '#64748b' }}>Dealers</InputLabel>
+                        <Select
+                            value={selectedDealer}
+                            label="Dealer"
+                            onChange={(e) => {
+                                setSelectedDealer(e.target.value);
+                            }}
+                            sx={{
+                                borderRadius: 2,
+                                backgroundColor: '#f1f5f9',
+                                '& .MuiOutlinedInput-notchedOutline': {
+                                    borderColor: '#e2e8f0',
+                                },
+                            }}
+                        >
+                            <MenuItem value="">All Dealers</MenuItem>
+                            {dealers.map((dealer) => (
+                                <MenuItem key={dealer.dealerName} value={dealer.dealerName}>
+                                    {dealer.dealerName}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+
+                    <Button
+                        variant="contained"
+                        onClick={handleFilter}
+                        startIcon={<FilterAltIcon />}
+                        sx={{
+                            width: isSmallScreen ? '100%' : 'auto',
+                            height: 48,
+                            borderRadius: 2,
+                            backgroundColor: '#3b82f6',
+                            textTransform: 'none',
+                            fontWeight: 500,
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                                backgroundColor: '#2563eb',
+                                transform: 'translateY(-2px)',
+                            },
+                        }}
+                    >
+                        Filter
+                    </Button>
+
+                    <Button
+                        variant="outlined"
+                        onClick={handleClearFilter}
+                        startIcon={<ClearIcon />}
+                        sx={{
+                            width: isSmallScreen ? '100%' : 'auto',
+                            height: 48,
+                            borderRadius: 2,
+                            borderColor: '#e2e8f0',
+                            color: '#64748b',
+                            textTransform: 'none',
+                            fontWeight: 500,
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                                borderColor: '#3b82f6',
+                                color: '#3b82f6',
+                                transform: 'translateY(-2px)',
+                            },
+                        }}
+                    >
+                        Clear Filters
+                    </Button>
                     <Button
                         variant="contained"
                         startIcon={!isSmallScreen && <GetApp />}
@@ -253,7 +376,13 @@ const DealerReport = () => {
                                                     fontWeight: ['Dealer Name'].includes(key) ? 500 : 400,
                                                 }}
                                             >
-                                                {report[key]}
+                                                {key === 'Dealer Name' && report[key] ? (
+                                                    <Tooltip title={report[key]} arrow>
+                                                        <span>{report[key]}</span>
+                                                    </Tooltip>
+                                                ) : (
+                                                    report[key]
+                                                )}
                                             </TableCell>
                                         ))}
                                     </TableRow>

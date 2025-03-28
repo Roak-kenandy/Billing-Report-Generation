@@ -43,6 +43,8 @@ router.get('/getServicerequestReports', billingReportController.serviceRequestRe
 
 router.get('/getManualJournalReports', billingReportController.exportManualJournalReports);
 
+router.get('/getDealerNames', billingReportController.getDealerNames);
+
 
 //Rbac Routes
 router.get('/users', rbacController.getUsers);

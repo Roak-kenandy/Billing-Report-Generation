@@ -221,8 +221,9 @@ const getAreaStats = async (req, res) => {
 const exportDealerReports = async (req, res) => {
     try {
         // const { search, startDate,endDate, atoll, island } = req.query;
+        const { startDate, endDate,dealerName} = req.query;
         
-        const csvData = await billingReportService.exportDealerReports();
+        const csvData = await billingReportService.exportDealerReports(startDate, endDate,dealerName);
         
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename=reports.csv');
@@ -242,10 +243,11 @@ const exportDealerReports = async (req, res) => {
 // };
 const getDealerReports = async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
+        // const page = parseInt(req.query.page) || 1;
+        // const limit = parseInt(req.query.limit) || 10;
+        const {page = 1, limit = 10, startDate, endDate,dealerName} = req.query;
         
-        const result = await billingReportService.getAllDealerReports(page, limit);
+        const result = await billingReportService.getAllDealerReports(parseInt(page), parseInt(limit), startDate, endDate,dealerName);
         
         res.json({
             success: true,
@@ -267,6 +269,26 @@ const getDealerReports = async (req, res) => {
     }
 };
 
+const getDealerNames = async (req, res) => {
+    try {
+        const data = await billingReportService.getDealerNames();
+
+        res.status(200).json({
+            success: true,
+            message: 'Dealer names fetched successfully',
+            data: data,
+        });
+    } catch (error) {
+        console.error('Error fetching dealer names:', error);
+
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching dealer names',
+            error: error.message,
+        });
+    }
+};
+
 module.exports = {
     getReports,
     exportCSV,
@@ -280,6 +302,7 @@ module.exports = {
     serviceRequestReports,
     getGraphData,
     getQueueData,
-    exportManualJournalReports
+    exportManualJournalReports,
+    getDealerNames
     // fetchFutureReports
 }

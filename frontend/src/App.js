@@ -12,12 +12,26 @@ import ServiceRequestReport from "./components/loginReport/ServiceRequestReport"
 import ManualJournalReport from "./components/loginReport/ManualJournalReport";
 import RbacRoles from "./components/loginReport/RbacRoles";
 import BulkUploads from "./components/loginReport/BulkUploads";
+import { ToastContainer, Flip } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 // import RbacPermissions from "./components/loginReport/RbacPermissions";
 
 function App() {
   return (
     <Router basename="/reports">
       <div className="App">
+      <ToastContainer
+          position="bottom-right"
+          autoClose={5000}
+          hideProgressBar={false}
+          newestOnTop={false}
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          transition={Flip}
+        />
         <Routes>
           <Route path="/login" element={<LoginReports />} />
           <Route path="/reset-password/:resetToken" element={<ResetPassword />} /> 

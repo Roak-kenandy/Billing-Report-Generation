@@ -100,7 +100,7 @@ const BulkUploads = () => {
   const handlePostingUpload = async () => {
     const file = postingFileInputRef.current?.files?.[0];
     if (!file) return;
-
+  
     try {
       const reader = new FileReader();
       reader.onload = async (e) => {
@@ -108,33 +108,33 @@ const BulkUploads = () => {
         const workbook = xlsx.read(data, { type: 'array' });
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = xlsx.utils.sheet_to_json(worksheet);
-
+  
         if (jsonData.length > 100) {
           toast.error('Excel file cannot contain more than 100 entries');
           postingFileInputRef.current.value = '';
           return;
         }
-
+  
         const newRecord = {
           batch: `BATCH${Date.now().toString().slice(-4)}`,
           file_name: file.name,
           date: Math.floor(Date.now() / 1000),
           status: 'running'
         };
-
+  
         setUploads(prev => [...prev, newRecord]);
-
+  
         try {
           const promises = jsonData.map(async (row) => {
             const payload = {
               id: row['Contact Code'],
-              action: row.Action || 'DEBIT',
+              action: row.Action || '',
               entity: row.Entity || 'ACCOUNT',
               amount: parseFloat(row.Amount) || 0,
               currency_code: row['Currency Code'] || 'MVR',
               notes: row['Notes'] || '',
             };
-
+  
             const response = await fetch(
               `https://app.crm.com/backoffice/v2/contacts/${payload.id}/journals`,
               {
@@ -146,17 +146,21 @@ const BulkUploads = () => {
                 body: JSON.stringify(payload),
               }
             );
-
+  
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return response.json();
           });
-
+  
           await Promise.all(promises);
           await createOperationRecord(newRecord);
-
+  
           setUploads(prev => prev.map(rec =>
             rec.batch === newRecord.batch ? { ...rec, status: 'completed' } : rec
           ));
+          
+          // Add success toast message
+          toast.success('File uploaded and processed successfully!');
+  
         } catch (error) {
           console.error('Error processing rows:', error);
           toast.error('Some entries failed to process');
@@ -168,10 +172,11 @@ const BulkUploads = () => {
           postingFileInputRef.current.value = '';
         }
       };
-
+  
       reader.readAsArrayBuffer(file);
     } catch (error) {
       console.error('File processing error:', error);
+      toast.error('An error occurred while processing the file');
       postingFileInputRef.current.value = '';
     }
   };
