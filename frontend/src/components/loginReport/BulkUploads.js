@@ -130,7 +130,7 @@ const BulkUploads = () => {
               id: row['Contact Code'],
               action: row.Action || '',
               entity: row.Entity || 'ACCOUNT',
-              amount: parseFloat(row.Amount) || 0,
+              amount: parseFloat(row.Amount),
               currency_code: row['Currency Code'] || 'MVR',
               notes: row['Notes'] || '',
             };
