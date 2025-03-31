@@ -38,8 +38,8 @@ const DealerReport = () => {
     const [appliedDealer, setAppliedDealer] = useState('');
     const [appliedStartDate, setAppliedStartDate] = useState('');
     const [appliedEndDate, setAppliedEndDate] = useState('');
-    const API_URL = 'http://localhost:3003/billing-reports';
-    // const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    // const API_URL = 'http://localhost:3003/billing-reports';
+    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
 
     useEffect(() => {
         const fetchDealers = async () => {
