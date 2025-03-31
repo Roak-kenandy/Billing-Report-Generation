@@ -59,11 +59,11 @@ const BulkUploads = () => {
           const worksheet = workbook.Sheets[workbook.SheetNames[0]];
           const jsonData = xlsx.utils.sheet_to_json(worksheet);
 
-          if (jsonData.length > 100) {
-            toast.error('Excel file cannot contain more than 100 entries');
-            formatFileInputRef.current.value = '';
-            return;
-          }
+          // if (jsonData.length > 100) {
+          //   toast.error('Excel file cannot contain more than 100 entries');
+          //   formatFileInputRef.current.value = '';
+          //   return;
+          // }
 
           const updatedData = jsonData.map((row, index) => ({
             ...row,
@@ -109,11 +109,11 @@ const BulkUploads = () => {
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = xlsx.utils.sheet_to_json(worksheet);
   
-        if (jsonData.length > 100) {
-          toast.error('Excel file cannot contain more than 100 entries');
-          postingFileInputRef.current.value = '';
-          return;
-        }
+        // if (jsonData.length > 100) {
+        //   toast.error('Excel file cannot contain more than 100 entries');
+        //   postingFileInputRef.current.value = '';
+        //   return;
+        // }
   
         const newRecord = {
           batch: `BATCH${Date.now().toString().slice(-4)}`,
