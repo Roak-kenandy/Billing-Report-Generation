@@ -1,7 +1,6 @@
 import axios from 'axios';
 
-// const baseUrl = 'https://mdnrpt.medianet.mv/billing-reports';
-const baseUrl = 'http://localhost:3003/billing-reports';
+const baseUrl = 'https://mdnrpt.medianet.mv/billing-reports';
 
 const uploadFile = async (file) => {
     const formData = new FormData();
