@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const baseUrl = 'https://mdnrpt.medianet.mv/billing-reports';
+// const baseUrl = 'https://mdnrpt.medianet.mv/billing-reports';
+const baseUrl = 'http://localhost:3003/billing-reports';
 
 const uploadFile = async (file) => {
     const formData = new FormData();
@@ -11,6 +12,32 @@ const uploadFile = async (file) => {
 
         const response = await axios.post(
             `${baseUrl}/upload-contacts`,
+            formData,
+            {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            }
+        );
+
+        console.log('Upload successful:', response.data);
+        return response.data;
+
+    } catch (error) {
+        console.error('Upload failed:', error.response?.data || error.message);
+        throw error;
+    }
+};
+
+const uploadDealerFile = async (file) => {
+    const formData = new FormData();
+
+    try {
+        // Append the file to FormData with the correct field name
+        formData.append('file', file);
+
+        const response = await axios.post(
+            `${baseUrl}/upload-dealer-contacts`,
             formData,
             {
                 headers: {
@@ -46,13 +73,13 @@ const createOperationRecord = async (file) => {
     }
 };
 
-const getAllBulkOperations = async (page, limit) => {
+const getAllBulkOperations = async (page, limit, type) => {
 
     try {
 
         const response = await axios.get(
             `${baseUrl}/get-bulk`,{
-                params: { page, limit }
+                params: { page, limit, type }
             }
         );
         return response.data;
@@ -63,4 +90,4 @@ const getAllBulkOperations = async (page, limit) => {
     }
 };
 
-export { uploadFile, createOperationRecord, getAllBulkOperations };
+export { uploadFile, createOperationRecord, getAllBulkOperations, uploadDealerFile };

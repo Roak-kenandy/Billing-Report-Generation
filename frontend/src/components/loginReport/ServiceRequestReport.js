@@ -298,10 +298,10 @@ const ServiceRequestReport = () => {
       if (row.queueName === 'Installation TT') {
         summary.installationTT = row.totalTickets;
         summary.installationTTClosed = row.closedTickets;
-      } else if (row.queueName === 'Fault TT') {
+      } else if (row.queueName === 'Fault') {
         summary.faultTT = row.totalTickets;
         summary.faultTTClosed = row.closedTickets;
-      } else if (row.queueName === 'Relocation TT') {
+      } else if (row.queueName === 'Relocation') {
         summary.relocationTT = row.totalTickets;
         summary.relocationTTClosed = row.closedTickets;
       } else if (row.queueName === 'Migration TT') {

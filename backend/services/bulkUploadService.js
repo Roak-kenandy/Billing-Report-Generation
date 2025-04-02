@@ -156,11 +156,48 @@ const processBulkUpload = async (filePath) => {
     // return contacts.map(contact => ({ contact_id: contact.contact_id, contact_code: contact.contact_code }));
 };
 
-const createBulkOperation = async (batch, file_name, date, status) => {
+const processDealerBulkUpload = async (filePath) => {
+    // Read Excel file
+    const workbook = xlsx.readFile(filePath);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const data = xlsx.utils.sheet_to_json(worksheet);
+
+    // Extract contact codes
+    const accountNumbers = data.map(row => row['Dealer Name']).filter(Boolean);
+
+
+    // Get native collection reference
+    const collection = mongoose.connection.db.collection('Journals');
+
+
+    // const contacts = await collection.find(
+    //     { contact_code: { $in: contactCodes } },
+    //     { projection: { contact_id: 1,contact_code: 1, _id: 0 } }
+    // ).toArray();
+    // Find contacts
+    const contacts = await collection.find({
+        account_organisation_name: { $in: [...new Set(accountNumbers)] } // Deduplicate codes
+      }).toArray();
+      
+      // Create a map for quick lookup
+      const contactMap = new Map(contacts.map(c => [c.account_organisation_name, c]));
+
+      
+      // Map each Excel row to a contact (using the first occurrence in the database)
+      const result = accountNumbers.map(code => ({
+        account_id: contactMap.get(code)?.account_id,
+      }));
+
+      return result;
+    // Return array of objects with contact_id property
+    // return contacts.map(contact => ({ contact_id: contact.contact_id, contact_code: contact.contact_code }));
+};
+
+const createBulkOperation = async (batch, file_name, date, type, status) => {
     try {
 
         const newReport = new BulkOperationReports({
-            batch, file_name, date, status
+            batch, file_name, date,type, status
         });
 
         await newReport.save();
@@ -170,11 +207,15 @@ const createBulkOperation = async (batch, file_name, date, status) => {
     }
 };
 
-const getAllBulkOperations = async (page = 1, limit = 10) => {
+const getAllBulkOperations = async (page = 1, limit = 10, type) => {
     try {
         const skip = (page - 1) * limit;
-        const total = await BulkOperationReports.countDocuments();
-        const reports = await BulkOperationReports.find({})
+        const query = {};
+        if (type) {
+            query.type = type;
+        }
+        const total = await BulkOperationReports.countDocuments(query);
+        const reports = await BulkOperationReports.find(query)
             .skip(skip)
             .limit(limit)
             .sort({ date: -1 });
@@ -195,5 +236,6 @@ module.exports = {
     getAllBulkOperations,
     loginUser,
     forgotPassword,
-    resetPassword
+    resetPassword,
+    processDealerBulkUpload
 };

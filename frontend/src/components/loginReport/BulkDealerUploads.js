@@ -16,10 +16,10 @@ import {
 } from '@mui/material';
 import { CloudUpload, Description, CheckCircle, Autorenew } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { uploadFile, createOperationRecord, getAllBulkOperations } from '../../service/apiService';
+import {  createOperationRecord, getAllBulkOperations, uploadDealerFile } from '../../service/apiService';
 const xlsx = require('xlsx');
 
-const BulkUploads = () => {
+const BulkDealerUploads = () => {
   const [uploads, setUploads] = useState([]);
   const formatFileInputRef = useRef(null);
   const postingFileInputRef = useRef(null);
@@ -28,11 +28,71 @@ const BulkUploads = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [product, setProduct] = useState({
+    commission: null,
+    collected: null
+  });
+
+  const fetchProductData = async (searchValue) => {
+    try {
+      const query = {
+        page: 1,
+        size: 100,
+        search_value: searchValue
+      };
+  
+      const queryString = new URLSearchParams(query).toString();
+      const url = `https://app.crm.com/backoffice/v2/products${queryString ? `?${queryString}` : ''}`;
+  
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'api_key': 'c54504d4-0fbe-41cc-a11e-822710db9b8d'
+        },
+      });
+  
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+  
+      const data = await response.json();
+      return {
+        code: 'OK',
+        data: {
+          content: data // Adjust this based on your actual API response structure
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching product data:', error);
+      return {
+        code: 'ERROR',
+        error: error.message
+      };
+    }
+  };
+
+  const getProductsData = async () => {
+    const commission = await fetchProductData("Commission");
+    const collected = await fetchProductData("Collected Amount");
+    
+    if (commission.code === "OK" && collected.code === "OK") {
+      setProduct({
+        commission: commission.data.content,
+        collected: collected.data.content
+      });
+    }
+  };
+
+  useEffect(() => {
+    getProductsData();
+  }, []);
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const result = await getAllBulkOperations(currentPage, itemsPerPage,'Credit Debit Uploads');
+      const result = await getAllBulkOperations(currentPage, itemsPerPage, 'Dealer Uploads');
       setUploads(result.data.reports);
       setTotalPages(result.data.totalPages);
       setTotalRecords(result.data.totalRecords);
@@ -51,7 +111,7 @@ const BulkUploads = () => {
     const file = formatFileInputRef.current?.files?.[0];
     if (file) {
       try {
-        const result = await uploadFile(file);
+        const result = await uploadDealerFile(file);
         const reader = new FileReader();
         reader.onload = async (e) => {
           const data = new Uint8Array(e.target.result);
@@ -67,7 +127,7 @@ const BulkUploads = () => {
 
           const updatedData = jsonData.map((row, index) => ({
             ...row,
-            'Contact Code': result.contactIds[index]?.contact_id || row['Contact Code']
+            'Dealer Name': result.contactIds[index]?.account_id || row['Dealer Name']
           }));
 
           const newWs = xlsx.utils.json_to_sheet(updatedData);
@@ -76,7 +136,7 @@ const BulkUploads = () => {
 
           const buffer = xlsx.write(newWb, { type: 'array', bookType: 'xlsx' });
           const blob = new Blob([buffer], { type: 'application/octet-stream' });
-          const fileName = `updated_contacts_${Date.now()}.xlsx`;
+          const fileName = `updated_dealer_${Date.now()}.xlsx`;
 
           const link = document.createElement('a');
           link.href = window.URL.createObjectURL(blob);
@@ -119,7 +179,7 @@ const BulkUploads = () => {
           batch: `BATCH${Date.now().toString().slice(-4)}`,
           file_name: file.name,
           date: Math.floor(Date.now() / 1000),
-          type: 'Credit Debit Uploads',
+          type: 'Dealer Uploads',
           status: 'running'
         };
   
@@ -127,20 +187,31 @@ const BulkUploads = () => {
   
         try {
           const promises = jsonData.map(async (row) => {
+            const commision = (row['Original Amount'] * 108 / 58) / 1.08 * 0.08;
             const payload = {
-              id: row['Contact Code'],
-              action: row.Action || '',
-              entity: row.Entity || 'ACCOUNT',
-              amount: parseFloat(row.Amount),
-              currency_code: row['Currency Code'] || 'MVR',
-              notes: row['Notes'] || '',
+              account_id: row['Dealer Name'],
+              posted_date: new Date().getTime() / 1000,
+              state: "POSTED",
+              lines: [
+                {
+                    product_id:  product.collected.content[0].id,
+                    quantity: 1,
+                    unit_price: Number(row['Original Amount'])
+                },
+                {
+                    product_id: product.commission.content[0].id,
+                    quantity: 1,
+                    unit_price: row['Original Amount'] - commision
+                }
+            ]
             };
   
             const response = await fetch(
-              `https://app.crm.com/backoffice/v2/contacts/${payload.id}/journals`,
+              `https://app.crm.com/backoffice/v2/credit_notes`,
               {
                 method: 'POST',
                 headers: {
+                  'Accept': 'application/json',
                   'Content-Type': 'application/json',
                   'api_key': 'c54504d4-0fbe-41cc-a11e-822710db9b8d',
                 },
@@ -217,7 +288,7 @@ const BulkUploads = () => {
         }}
       >
         <Typography variant="h5" sx={{ fontWeight: 600, color: '#1e3a8a' }}>
-          Bulk Operations
+          Bulk Dealer Operations
         </Typography>
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           <Button
@@ -419,4 +490,4 @@ const BulkUploads = () => {
   );
 };
 
-export default BulkUploads;
+export default BulkDealerUploads;

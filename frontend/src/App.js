@@ -12,6 +12,7 @@ import ServiceRequestReport from "./components/loginReport/ServiceRequestReport"
 import ManualJournalReport from "./components/loginReport/ManualJournalReport";
 import RbacRoles from "./components/loginReport/RbacRoles";
 import BulkUploads from "./components/loginReport/BulkUploads";
+import BulkDealerUploads from "./components/loginReport/BulkDealerUploads";
 import { ToastContainer, Flip } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 // import RbacPermissions from "./components/loginReport/RbacPermissions";
@@ -43,6 +44,7 @@ function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="dealer" element={<DealerReport />} />
         <Route path="bulkUploads" element={<BulkUploads />} />
+        <Route path="bulkDealerUploads" element={<BulkDealerUploads />} />
         <Route path="collection" element={<CollectionReport />} />
         <Route path="serviceRequest" element={<ServiceRequestReport />} />
         <Route path="manualJournal" element={<ManualJournalReport />} />

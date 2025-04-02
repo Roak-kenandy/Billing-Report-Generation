@@ -57,6 +57,8 @@ router.delete('/users/:id', rbacController.deleteUser);
 //Bulk Upload Routes
 router.post('/upload-contacts', upload.single('file'), bulkUploadController.uploadContacts);
 
+router.post('/upload-dealer-contacts', upload.single('file'), bulkUploadController.uploadDealerContacts);
+
 router.post('/create-bulk', bulkUploadController.createBulkOperation);
 
 router.get('/get-bulk', bulkUploadController.getAllBulkOperations);
