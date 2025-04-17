@@ -13,6 +13,8 @@ import ManualJournalReport from "./components/loginReport/ManualJournalReport";
 import RbacRoles from "./components/loginReport/RbacRoles";
 import BulkUploads from "./components/loginReport/BulkUploads";
 import BulkDealerUploads from "./components/loginReport/BulkDealerUploads";
+import MtvRegisteredCustomer from './components/loginReport/MtvRegisteredCustomer';
+import ReferralCountReports from './components/loginReport/ReferralCountReports';
 import { ToastContainer, Flip } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 // import RbacPermissions from "./components/loginReport/RbacPermissions";
@@ -48,7 +50,9 @@ function App() {
         <Route path="collection" element={<CollectionReport />} />
         <Route path="serviceRequest" element={<ServiceRequestReport />} />
         <Route path="manualJournal" element={<ManualJournalReport />} />
+        <Route path="mtv/registered" element={<MtvRegisteredCustomer />} />
         <Route path="rbac/roles" element={<RbacRoles />} />
+        <Route path="mtv/registered/counts" element={<ReferralCountReports />} />
         {/* <Route path="rbac/permissions" element={<RbacPermissions />} /> */}
         </Route>
         </Route>

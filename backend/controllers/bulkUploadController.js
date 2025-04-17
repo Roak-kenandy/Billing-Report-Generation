@@ -1,4 +1,12 @@
 const bulkUploadService = require('../services/bulkUploadService');
+const CRM_BASE_URL = process.env.CRM_BASE_URL;
+const API_KEY = process.env.CRM_API_KEY;
+
+const crmHeaders = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'api_key': API_KEY,
+}
 
 const loginUser = async (req, res) => {
     const {email, password} = req.body;
@@ -108,6 +116,31 @@ const getAllBulkOperations = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+const getCrmDealerReports = async (req, res) => {
+    try {
+
+        // Create contact
+        const contactResponse = await fetch(`${CRM_BASE_URL}/credit_notes`, {
+            method: 'GET',
+            headers: crmHeaders,
+        });
+
+        const data = await contactResponse.json();
+
+        return res.status(201).json({
+            data: data.content
+        });
+
+    } catch (error) {
+        console.error('Credit notes error:', error);
+        const statusCode = error.message.includes('failed') ? 400 : 500;
+        return res.status(statusCode).json({
+            success: false,
+            message: error.message || 'Internal server error'
+        });
+    }
+};
 module.exports = {
     uploadContacts,
     createBulkOperation,
@@ -115,5 +148,6 @@ module.exports = {
     loginUser,
     forgotPassword,
     resetPassword,
-    uploadDealerContacts
+    uploadDealerContacts,
+    getCrmDealerReports
 };

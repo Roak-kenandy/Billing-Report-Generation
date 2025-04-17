@@ -289,6 +289,30 @@ const getDealerNames = async (req, res) => {
     }
 };
 
+const mtvRegisteredCustomer = async (req, res) => {
+    const { page, limit, search = '', startDate, endDate } = req.query;
+    try {
+        const data = await billingReportService.getMtvUserReports(
+            page ? parseInt(page) : undefined,
+            limit ? parseInt(limit) : undefined,
+            startDate,
+            endDate
+        );
+        res.send(data);
+    } catch (err) {
+        res.status(500).send({ message: 'Error fetching reports', error: err.message });
+    }
+};
+
+const getReferralCountReport = async (req, res) => {
+    try {
+        const data = await billingReportService.getReferralCountReport(req);
+        res.send(data);
+    } catch (err) {
+        res.status(500).send({ message: 'Error fetching reports', error: err.message });
+    }
+};
+
 module.exports = {
     getReports,
     exportCSV,
@@ -303,6 +327,7 @@ module.exports = {
     getGraphData,
     getQueueData,
     exportManualJournalReports,
-    getDealerNames
-    // fetchFutureReports
+    getDealerNames,
+    mtvRegisteredCustomer,
+    getReferralCountReport
 }

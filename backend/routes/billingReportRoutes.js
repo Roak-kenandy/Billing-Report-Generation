@@ -63,6 +63,13 @@ router.post('/create-bulk', bulkUploadController.createBulkOperation);
 
 router.get('/get-bulk', bulkUploadController.getAllBulkOperations);
 
+router.get('/crm-dealers', bulkUploadController.getCrmDealerReports);
+
+//MTV Registered Customer
+router.get('/mtv/registered', billingReportController.mtvRegisteredCustomer);
+
+router.get('/mtv/registered/count', billingReportController.getReferralCountReport);
+
 // router.get('/fetchFutureReports', billingReportController.fetchFutureReports);
 
 module.exports = router;

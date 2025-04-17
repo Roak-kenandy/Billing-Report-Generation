@@ -27,6 +27,9 @@ import {
     Book as BookIcon,
     Lock as LockIcon,
     CloudUpload as CloudUploadIcon,
+    Assignment as AssignmentIcon,
+    HowToReg as HowToRegIcon,
+    BarChart as BarChartIcon
 } from '@mui/icons-material';
 
 const ReusableLhs = () => {
@@ -36,6 +39,7 @@ const ReusableLhs = () => {
     const [openFinancialSubmenu, setOpenFinancialSubmenu] = useState(false);
     const [openSalesSubmenu, setOpenSalesSubmenu] = useState(false);
     const [openRbacSubmenu, setOpenRbacSubmenu] = useState(false);
+    const [openMtvRegisterSubmenu, setOpenMtvregisterSubmenu] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [userRoles, setUserRoles] = useState([]);
 
@@ -54,6 +58,11 @@ const ReusableLhs = () => {
 
     const rbacReportItems = [
         { name: 'User Roles', path: '/rbac/roles', icon: <PeopleIcon /> },
+    ];
+
+    const mtvRegisterReportItems = [
+        { name: 'Registered Customer', path: '/mtv/registered', icon: <HowToRegIcon /> },
+        { name: 'Registered Customer Counts', path: '/mtv/registered/counts', icon: <BarChartIcon /> },
     ];
 
     // Initialize component state based on current location and stored preferences
@@ -79,7 +88,8 @@ const ReusableLhs = () => {
             { path: '/dashboard' },
             ...financialReportItems,
             ...salesReportItems,
-            ...rbacReportItems
+            ...rbacReportItems,
+            ...mtvRegisterReportItems,
         ];
         const currentIndex = allMenuItems.findIndex(item => item.path === location.pathname);
         setSelectedIndex(currentIndex >= 0 ? currentIndex : 0);
@@ -94,6 +104,10 @@ const ReusableLhs = () => {
         } else if (rbacReportItems.some(item => item.path === location.pathname)) {
             setOpenRbacSubmenu(true);
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(true));
+        }
+        else if (mtvRegisterReportItems.some(item => item.path === location.pathname)) {
+            setOpenRbacSubmenu(true);
+            localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(true));
         }
     }, [location.pathname, navigate]);
 
@@ -125,31 +139,49 @@ const ReusableLhs = () => {
             setOpenFinancialSubmenu(newState);
             setOpenSalesSubmenu(false);
             setOpenRbacSubmenu(false);
+            setOpenMtvregisterSubmenu(false);
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
         } else if (menu === 'sales') {
             const newState = !openSalesSubmenu;
             setOpenSalesSubmenu(newState);
             setOpenFinancialSubmenu(false);
             setOpenRbacSubmenu(false);
+            setOpenMtvregisterSubmenu(false);
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
         } else if (menu === 'rbac') {
             const newState = !openRbacSubmenu;
             setOpenRbacSubmenu(newState);
             setOpenFinancialSubmenu(false);
             setOpenSalesSubmenu(false);
+            setOpenMtvregisterSubmenu(false);
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
+        }
+        else if (menu === 'mtvRegister') {
+            const newState = !openMtvRegisterSubmenu;
+            setOpenMtvregisterSubmenu(newState);
+            setOpenFinancialSubmenu(false);
+            setOpenSalesSubmenu(false);
+            setOpenRbacSubmenu(false);
+            localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(newState));
+            localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
         }
     };
 
     const canViewFinancialReports = userRoles.includes('Finance') || userRoles.includes('Admin');
     const canViewSalesDepartment = userRoles.includes('Sales') || userRoles.includes('Admin');
     const canViewRbacManagement = userRoles.includes('Admin');
+    const canViewMtvUsersManagement = userRoles.includes('Admin') || userRoles.includes('Sales');
 
     // Rest of your JSX remains the same...
     // Return statement with Box, List, etc. stays unchanged
@@ -389,6 +421,86 @@ const ReusableLhs = () => {
                             </>
                         )}
 
+                        {/* Register Reports Section */}
+                        {canViewMtvUsersManagement && (
+                            <>
+                                <ListItemButton
+                                    onClick={() => handleSubmenuToggle('mtvRegister')}
+                                    sx={{
+                                        py: 1.5,
+                                        mx: 1,
+                                        borderRadius: 2,
+                                        transition: 'all 0.3s ease',
+                                        '&:hover': {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                        },
+                                        backgroundColor: openMtvRegisterSubmenu ? 'rgba(255, 255, 255, 0.05)' : 'inherit',
+                                    }}
+                                >
+                                    <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                        <AssignmentIcon />
+                                    </ListItemIcon>
+                                    {isSidebarOpen && (
+                                        <>
+                                            <ListItemText
+                                                primary="MTV Register Reports"
+                                                primaryTypographyProps={{ fontWeight: 500 }}
+                                            />
+                                            {openMtvRegisterSubmenu ? (
+                                                <ExpandLess sx={{ color: '#93c5fd' }} />
+                                            ) : (
+                                                <ExpandMore sx={{ color: '#93c5fd' }} />
+                                            )}
+                                        </>
+                                    )}
+                                </ListItemButton>
+
+                                <Collapse in={openMtvRegisterSubmenu && isSidebarOpen} timeout="auto" unmountOnExit>
+                                    {mtvRegisterReportItems.map((item, index) => (
+                                        <ListItemButton
+                                            key={item.name}
+                                            selected={location?.pathname === item.path}
+                                            onClick={() => handleListItemClick(
+                                                index + financialReportItems.length + salesReportItems.length + 1,
+                                                item.path
+                                            )}
+                                            component={Link}
+                                            to={item.path}
+                                            sx={{
+                                                pl: isSidebarOpen ? 5 : 1,
+                                                py: 1.2,
+                                                mx: 1,
+                                                borderRadius: 2,
+                                                transition: 'all 0.3s ease',
+                                                '&:hover': {
+                                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                                    transform: isSidebarOpen ? 'translateX(5px)' : 'none',
+                                                },
+                                                '&.Mui-selected': {
+                                                    backgroundColor: '#3b82f6',
+                                                    color: '#ffffff',
+                                                    '&:hover': { backgroundColor: '#2563eb' },
+                                                },
+                                            }}
+                                        >
+                                            <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                                {item.icon}
+                                            </ListItemIcon>
+                                            {isSidebarOpen && (
+                                                <ListItemText
+                                                    primary={item.name}
+                                                    primaryTypographyProps={{
+                                                        fontSize: 14,
+                                                        fontWeight: 400,
+                                                    }}
+                                                />
+                                            )}
+                                        </ListItemButton>
+                                    ))}
+                                </Collapse>
+                            </>
+                        )}
+
                         {/* RBAC Section */}
                         {canViewRbacManagement && (
                             <>
@@ -525,7 +637,7 @@ const ReusableLhs = () => {
                     flexDirection: 'column',
                     gap: 3,
                     transition: 'all 0.3s ease',
-                    overflow:'hidden'
+                    overflow: 'hidden'
                 }}
             >
                 <Outlet />

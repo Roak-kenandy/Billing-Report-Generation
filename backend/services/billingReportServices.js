@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { parse } = require('json2csv');
+const { getMTVConnection } = require('../config/db');
 
 // const getReports = async (page, limit, search = '', startDate, endDate, atoll, island) => {
 //     try {
@@ -2393,277 +2394,215 @@ const getDealerNames = async () => {
 };
 
 
-// const fetchFutureReports = async (
-//     // search = '', startDate, endDate, atoll, island
-// ) => {
-//     try {
-//         // Calculate timestamps for date filtering
-//         // let startTimestamp, endTimestamp;
-//         // if (startDate) {
-//         //     startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
-//         // }
-//         // if (endDate) {
-//         //     endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
-//         // }
+const getMtvUserReports = async (page, limit, startDate, endDate) => {
+  try {
+      let dateFilter = {};
 
-//         // // Date filter for initial match (subscriptions with at least one matching service)
-//         // let dateFilter = {};
-//         // if (startDate || endDate) {
-//         //     const elemMatchConditions = {};
-//         //     if (startDate) {
-//         //         elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
-//         //     }
-//         //     if (endDate) {
-//         //         elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
-//         //     }
-//         //     dateFilter.services = { $elemMatch: elemMatchConditions };
-//         // }
+      // Convert MM/DD/YYYY to Date object
+      const parseDate = (dateStr, isEnd = false) => {
+          if (typeof dateStr === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+              const [month, day, year] = dateStr.split('/').map(Number);
+              const date = new Date(year, month - 1, day);
+              date.setHours(isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0, isEnd ? 999 : 0);
+              return date;
+          }
+          const date = new Date(dateStr);
+          if (isNaN(date.getTime())) throw new Error('Invalid date format');
+          date.setHours(isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0, isEnd ? 999 : 0);
+          return date;
+      };
 
-//         // // Date filter for individual services after unwind
-//         // let serviceDateFilter = {};
-//         // if (startDate) {
-//         //     serviceDateFilter["services.service_terms.start_date"] = { $gte: startTimestamp };
-//         // }
-//         // if (endDate) {
-//         //     serviceDateFilter["services.service_terms.end_date"] = { $lte: endTimestamp };
-//         // }
+      if (startDate && endDate) {
+          const startUTC = parseDate(startDate);
+          const endUTC = parseDate(endDate, true);
+          dateFilter.createdAt = { $gte: startUTC, $lte: endUTC };
+      } else if (startDate) {
+          const startUTC = parseDate(startDate);
+          dateFilter.createdAt = { $gte: startUTC };
+      } else if (endDate) {
+          const endUTC = parseDate(endDate, true);
+          dateFilter.createdAt = { $lte: endUTC };
+      }
 
-//         // // Match stage for search, atoll, and island
-//         // let matchStage = { ...dateFilter };
+      // Build the aggregation pipeline
+      const aggregationPipeline = [
+          { $match: dateFilter },
+          { $sort: { createdAt: -1 } },
+          {
+              $project: {
+                  _id: 0,
+                  Name: { $concat: ['$firstName', ' ', '$lastName'] },
+                  'Phone Number': '$phoneNumber',
+                  'Country Code': '$countryCode',
+                  'Referral Code': '$referralCode',
+                  'Referral Type': '$referralType',
+                  Date: {
+                      $dateToString: {
+                          format: '%d-%b-%Y',
+                          date: '$createdAt',
+                          timezone: 'Indian/Maldives',
+                      },
+                  },
+              },
+          },
+      ];
 
-//         // if (search) {
-//         //     matchStage.$text = { $search: search };
-//         // }
+      // Conditionally add pagination stages
+      const isPaginated = page !== undefined && limit !== undefined;
+      if (isPaginated) {
+          const skip = (page - 1) * limit;
+          aggregationPipeline.splice(2, 0, { $skip: skip }, { $limit: limit });
+      }
 
-//         // if (atoll) {
-//         //     matchStage['joinedData2.location.province'] = atoll;
-//         // }
+      const mtvDb = getMTVConnection();
+      const results = await mtvDb
+          .collection('MTVUsers')
+          .aggregate(aggregationPipeline)
+          .toArray();
 
-//         // if (island) {
-//         //     matchStage['joinedData2.location.city'] = island;
-//         // }
+      // Calculate total count for pagination (only needed if paginated)
+      let pagination = {};
+      if (isPaginated) {
+          const total = await mtvDb
+              .collection('MTVUsers')
+              .countDocuments(dateFilter);
+          pagination = {
+              total,
+              page,
+              limit,
+              totalPages: Math.ceil(total / limit),
+          };
+      }
 
-//         const aggregationPipeline = [
-//             {
-//                 $lookup: {
-//                     from: 'ContactProfiles',
-//                     localField: 'contact_id',
-//                     foreignField: 'contact_id',
-//                     as: 'joinedData2',
-//                 }
-//             },
-//             // { $match: matchStage },
-//             { $unwind: "$services" },
-//             // { $match: serviceDateFilter },
-//             {
-//                 $lookup: {
-//                     from: 'Devices',
-//                     localField: 'contact_id',
-//                     foreignField: 'ownership.id',
-//                     as: 'joinedData3',
-//                 }
-//             },
-//             {
-//                 $lookup: {
-//                     from: 'Orders',
-//                     localField: 'contact_id',
-//                     foreignField: 'contact_id',
-//                     as: 'ordersData',
-//                 }
-//             },
-//             {
-//                 $lookup: {
-//                     from: 'Journals',
-//                     localField: 'contact_id',
-//                     foreignField: 'contact_id',
-//                     as: 'joinedData4',
-//                 }
-//             },
-//             {
-//                 $project: {
-//                     _id: 0,
-//                     "Area": {
-//                         $cond: {
-//                             if: { $eq: [{ $type: '$joinedData2.tags.name' }, 'array'] },
-//                             then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData2.tags.name', 0] }, 0] },
-//                             else: '$joinedData2.tags.name',
-//                         }
-//                     },
-//                     "Customer Name": { $arrayElemAt: ['$joinedData2.profile.name', 0] },
-//                     "Dealer": {
-//                         $cond: {
-//                             if: { $eq: [{ $type: '$joinedData2.custom_fields.value_label' }, 'array'] },
-//                             then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData2.custom_fields.value_label', 0] }, 0] },
-//                             else: '$joinedData2.custom_fields.value_label',
-//                         }
-//                     },
-//                     "Sales Model": { $arrayElemAt: ['$joinedData2.sales_model.name', 0] },
-//                     "Price": { $round: [{ $toDouble: "$services.price_terms.price" }, 2] },
-//                     "start_date_timestamp": { $toLong: "$services.service_terms.start_date" },
-//                     "end_date_timestamp": { $toLong: "$services.service_terms.end_date" },
-//                 }
-//             },
-//             { $match: { "Area": "City Hotel" } },
-//             {
-//                 $group: {
-//                     _id: "$Customer Name",
-//                     dealer: { $first: "$Dealer" },
-//                     salesModel: { $first: "$Sales Model" },
-//                     totalPrice: { $sum: "$Price" },
-//                     subscriptionCount: { $sum: 1 },
-//                     minStartDate: { $min: "$start_date_timestamp" },
-//                     maxEndDate: { $max: "$end_date_timestamp" }
-//                 }
-//             },
-//             {
-//                 $project: {
-//                     _id: 0,
-//                     "Customer Name": "$_id",
-//                     "Dealer": "$dealer",
-//                     "Sales Model": "$salesModel",
-//                     "Total Price": "$totalPrice",
-//                     "Number of Subscriptions": "$subscriptionCount",
-//                     "Earliest Start Date": {
-//                         $dateToString: {
-//                             format: "%d-%b-%Y",
-//                             date: { $toDate: { $multiply: [ "$minStartDate", 1000 ] } }
-//                         }
-//                     },
-//                     "Latest End Date": {
-//                         $dateToString: {
-//                             format: "%d-%b-%Y",
-//                             date: { $toDate: { $multiply: [ "$maxEndDate", 1000 ] } }
-//                         }
-//                     }
-//                 }
-//             }
-//         ];
-
-//         const results = await mongoose.connection.db.collection('Subscriptions').aggregate(aggregationPipeline, { maxTimeMS: 600000, allowDiskUse: true }).toArray();
-
-//         return {
-//             message: 'Grouped Billing Reports Data for City Hotel',
-//             data: results
-//         };
-//     } catch (err) {
-//         console.log('Error occurred while fetching grouped reports!!', err);
-//         throw err;
-//     }
-// };
+      return {
+          message: 'User Reports Data',
+          data: results,
+          ...(isPaginated && { pagination }), // Only include pagination if paginated
+      };
+  } catch (err) {
+      console.log('Error occurred while fetching!!', err);
+      throw err;
+  }
+};
 
 
-// const getDisconnectionReport = async (search = '', startDate, endDate, atoll, island) => {
-//     try {
+const getReferralCountReport = async (req) => {
+  try {
+      // Parse query parameters, but allow them to be undefined for CSV download
+      const page = req.query.page ? parseInt(req.query.page) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit) : undefined;
+      const search = req.query.search ? req.query.search.toLowerCase() : '';
+      const skip = page && limit ? (page - 1) * limit : 0; // Only calculate skip if pagination is applied
 
-//         // Date filter for initial match
-//         let dateFilter = {};
-//         if (startDate || endDate) {
-//             dateFilter.services = { 
-//                 $elemMatch: {
-//                     ...(startDate && { 'service_terms.start_date': { $gte: startTimestamp } }),
-//                     ...(endDate && { 'service_terms.end_date': { $lte: endTimestamp } })
-//                 }
-//             };
-//         }
+      // Build the search regex for referralCode and referralType
+      const searchFilter = search
+          ? {
+                $or: [
+                    { referralCode: { $regex: search, $options: 'i' } },
+                    { referralType: { $regex: search, $options: 'i' } },
+                ],
+            }
+          : {};
 
-//         // Build match stage
-//         let matchStage = { 
-//             ...dateFilter,
-//             ...(atoll && { 'joinedData2.location.province': atoll }),
-//             ...(island && { 'joinedData2.location.city': island }),
-//             ...(search && { $text: { $search: search } })
-//         };
+      // Build the base aggregation pipeline (without pagination stages)
+      const aggregationPipeline = [
+          // Match users with a referralCode and apply search filter
+          {
+              $match: {
+                  referralCode: { $exists: true, $ne: null },
+                  ...searchFilter,
+              },
+          },
+          // Group by referralCode and referralType, and count the number of users
+          {
+              $group: {
+                  _id: {
+                      referralCode: '$referralCode',
+                      referralType: '$referralType',
+                  },
+                  referralCount: { $sum: 1 },
+              },
+          },
+          // Filter out groups with empty referralCode or referralType
+          {
+              $match: {
+                  '_id.referralCode': { $ne: '' },
+                  '_id.referralType': { $ne: '' },
+              },
+          },
+          // Project the desired output
+          {
+              $project: {
+                  _id: 0,
+                  'Referral Code': '$_id.referralCode',
+                  'Referral Type': '$_id.referralType',
+                  'Referral Count': '$referralCount',
+              },
+          },
+          // Sort by Referral Count in descending order
+          { $sort: { 'Referral Count': -1 } },
+      ];
 
-//         const aggregationPipeline = [
-//             {
-//                 $lookup: {
-//                     from: 'ContactProfiles',
-//                     localField: 'contact_id',
-//                     foreignField: 'contact_id',
-//                     as: 'joinedData2',
-//                 }
-//             },
-//             { $match: matchStage },
-//             { $unwind: "$services" },
-//             {
-//                 $match: {
-//                     ...(startDate && { "services.service_terms.start_date": { $gte: startTimestamp } }),
-//                     ...(endDate && { "services.service_terms.end_date": { $lte: endTimestamp } })
-//                 }
-//             },
-//             {
-//                 $lookup: {
-//                     from: 'Journals',
-//                     localField: 'contact_id',
-//                     foreignField: 'contact_id',
-//                     as: 'journalData',
-//                 }
-//             },
-//             {
-//                 $project: {
-//                     _id: 0,
-//                     "Contact Name": { $arrayElemAt: ['$joinedData2.profile.name', 0] },
-//                     "Account Number": { $arrayElemAt: ['$journalData.contact_code', 0] },
-//                     "Contact Code": { $arrayElemAt: ['$joinedData2.custom_fields.value', 0] },
-//                     "Contact Sales Model": { $arrayElemAt: ['$joinedData2.sales_model.name', 0] },
-//                     "Atoll": { $arrayElemAt: ['$joinedData2.location.province', 0] },
-//                     "Island": { $arrayElemAt: ['$joinedData2.location.city', 0] },
-//                     "Product Name": "$services.product.name",
-//                     "Product Sub Total": { $round: [{ $toDouble: "$services.price_terms.price" }, 2] },
-//                     "start_date": "$services.service_terms.start_date",
-//                     "end_date": "$services.service_terms.end_date",
-//                     "Area": {
-//                         $cond: {
-//                             if: { $eq: [{ $type: '$joinedData2.tags.name' }, 'array'] },
-//                             then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData2.tags.name', 0] }, 0] },
-//                             else: '$joinedData2.tags.name',
-//                         }
-//                     }
-//                 }
-//             },
-//             { $match: { "Area": "City Hotel" } },
-//             {
-//                 $project: {
-//                     "Contact Name": 1,
-//                     "Account Number": 1,
-//                     "Contact Code": 1,
-//                     "Contact Sales Model": 1,
-//                     "Atoll": 1,
-//                     "Island": 1,
-//                     "Product Name": 1,
-//                     "Product Sub Total": 1,
-//                     "Billed from date": {
-//                         $dateToString: {
-//                             format: "%m/%d/%y %H:%M",
-//                             date: { $toDate: { $multiply: ["$start_date", 1000] } }
-//                         }
-//                     },
-//                     "Billed to date": {
-//                         $dateToString: {
-//                             format: "%m/%d/%y %H:%M",
-//                             date: { $toDate: { $multiply: ["$end_date", 1000] } }
-//                         }
-//                     }
-//                 }
-//             }
-//         ];
+      // Conditionally add pagination stages if page and limit are provided
+      if (page !== undefined && limit !== undefined) {
+          aggregationPipeline.push(
+              { $skip: skip },
+              { $limit: limit }
+          );
+      }
 
-//         const results = await mongoose.connection.db.collection('Subscriptions')
-//             .aggregate(aggregationPipeline, { maxTimeMS: 600000, allowDiskUse: true })
-//             .toArray();
+      const mtvDb = getMTVConnection();
+      const results = await mtvDb
+          .collection('MTVUsers')
+          .aggregate(aggregationPipeline)
+          .toArray();
 
-//         return {
-//             message: 'Future Disconnection Report',
-//             data: results
-//         };
-//     } catch (err) {
-//         console.log('Error occurred while generating disconnection report!!', err);
-//         throw err;
-//     }
-// };
+      // Get total count for pagination metadata
+      const countPipeline = [
+          {
+              $match: {
+                  referralCode: { $exists: true, $ne: null },
+                  ...searchFilter,
+              },
+          },
+          {
+              $group: {
+                  _id: {
+                      referralCode: '$referralCode',
+                      referralType: '$referralType',
+                  },
+              },
+          },
+          // Filter out groups with empty referralCode or referralType
+          {
+              $match: {
+                  '_id.referralCode': { $ne: '' },
+                  '_id.referralType': { $ne: '' },
+              },
+          },
+          { $count: 'total' },
+      ];
+      const countResult = await mtvDb
+          .collection('MTVUsers')
+          .aggregate(countPipeline)
+          .toArray();
+      const total = countResult[0]?.total || 0;
 
-
-
+      return {
+          message: 'Referral Count Report Data',
+          data: results,
+          pagination: {
+              page: page || 1, // Default to 1 if not provided
+              limit: limit || total, // Use total as limit if not provided (i.e., full dataset)
+              total,
+              totalPages: limit ? Math.ceil(total / limit) : 1, // 1 page if no limit
+          },
+      };
+  } catch (err) {
+      console.log('Error occurred while fetching referral count report!!', err);
+      throw err;
+  }
+};
 
 module.exports = {
   getReports,
@@ -2679,6 +2618,7 @@ module.exports = {
   getGraphData,
   getQueueData,
   exportManualJournalReports,
-  getDealerNames
-  // fetchFutureReports
+  getDealerNames,
+  getMtvUserReports,
+  getReferralCountReport
 }
