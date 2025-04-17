@@ -62,7 +62,7 @@ const ReusableLhs = () => {
 
     const mtvRegisterReportItems = [
         { name: 'Registered Customer', path: '/mtv/registered', icon: <HowToRegIcon /> },
-        { name: 'Registered Customer Counts', path: '/mtv/registered/counts', icon: <BarChartIcon /> },
+        { name: 'Registered Referral Counts', path: '/mtv/registered/counts', icon: <BarChartIcon /> },
     ];
 
     // Initialize component state based on current location and stored preferences
