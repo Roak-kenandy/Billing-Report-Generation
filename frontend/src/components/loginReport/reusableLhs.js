@@ -40,6 +40,7 @@ const ReusableLhs = () => {
     const [openSalesSubmenu, setOpenSalesSubmenu] = useState(false);
     const [openRbacSubmenu, setOpenRbacSubmenu] = useState(false);
     const [openMtvRegisterSubmenu, setOpenMtvregisterSubmenu] = useState(false);
+    const [openDeviceSubmenu, setOpenDeviceSubmenu] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [userRoles, setUserRoles] = useState([]);
 
@@ -64,6 +65,10 @@ const ReusableLhs = () => {
         { name: 'Registered Customer', path: '/mtv/registered', icon: <HowToRegIcon /> },
         { name: 'Registered Referral Counts', path: '/mtv/registered/counts', icon: <BarChartIcon /> },
     ];
+
+    const deviceStatistics = [
+        { name: 'Device Statistics', path: '/device/statistics', icon: <BarChartIcon /> },
+    ]
 
     // Initialize component state based on current location and stored preferences
     useEffect(() => {
@@ -90,6 +95,7 @@ const ReusableLhs = () => {
             ...salesReportItems,
             ...rbacReportItems,
             ...mtvRegisterReportItems,
+            ...deviceStatistics
         ];
         const currentIndex = allMenuItems.findIndex(item => item.path === location.pathname);
         setSelectedIndex(currentIndex >= 0 ? currentIndex : 0);
@@ -106,8 +112,12 @@ const ReusableLhs = () => {
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(true));
         }
         else if (mtvRegisterReportItems.some(item => item.path === location.pathname)) {
-            setOpenRbacSubmenu(true);
+            setOpenMtvregisterSubmenu(true);
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(true));
+        }
+        else if (deviceStatistics.some(item => item.path === location.pathname)) {
+            setOpenDeviceSubmenu(true);
+            localStorage.setItem('openDeviceSubmenu', JSON.stringify(true));
         }
     }, [location.pathname, navigate]);
 
@@ -134,6 +144,7 @@ const ReusableLhs = () => {
     };
 
     const handleSubmenuToggle = (menu) => {
+        console.log('Submenu toggled:', menu);
         if (menu === 'financial') {
             const newState = !openFinancialSubmenu;
             setOpenFinancialSubmenu(newState);
@@ -160,10 +171,12 @@ const ReusableLhs = () => {
             setOpenFinancialSubmenu(false);
             setOpenSalesSubmenu(false);
             setOpenMtvregisterSubmenu(false);
+            setOpenDeviceSubmenu(false);
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
         }
         else if (menu === 'mtvRegister') {
             const newState = !openMtvRegisterSubmenu;
@@ -171,10 +184,25 @@ const ReusableLhs = () => {
             setOpenFinancialSubmenu(false);
             setOpenSalesSubmenu(false);
             setOpenRbacSubmenu(false);
+            setOpenDeviceSubmenu(false);
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
+        }
+        else if (menu === 'openDevice') {
+            const newState = !openDeviceSubmenu;
+            setOpenDeviceSubmenu(newState);
+            setOpenFinancialSubmenu(false);
+            setOpenSalesSubmenu(false);
+            setOpenRbacSubmenu(false);
+            setOpenMtvregisterSubmenu(false);
+            localStorage.setItem('openDeviceSubmenu', JSON.stringify(newState));
+            localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
         }
     };
 
@@ -182,6 +210,7 @@ const ReusableLhs = () => {
     const canViewSalesDepartment = userRoles.includes('Sales') || userRoles.includes('Admin');
     const canViewRbacManagement = userRoles.includes('Admin');
     const canViewMtvUsersManagement = userRoles.includes('Admin') || userRoles.includes('Sales');
+    const canViewDeviceStatistics = userRoles.includes('Admin');
 
     // Rest of your JSX remains the same...
     // Return statement with Box, List, etc. stays unchanged
@@ -457,6 +486,88 @@ const ReusableLhs = () => {
 
                                 <Collapse in={openMtvRegisterSubmenu && isSidebarOpen} timeout="auto" unmountOnExit>
                                     {mtvRegisterReportItems.map((item, index) => (
+                                        <ListItemButton
+                                            key={item.name}
+                                            selected={location?.pathname === item.path}
+                                            onClick={() => handleListItemClick(
+                                                index + financialReportItems.length + salesReportItems.length + 1,
+                                                item.path
+                                            )}
+                                            component={Link}
+                                            to={item.path}
+                                            sx={{
+                                                pl: isSidebarOpen ? 5 : 1,
+                                                py: 1.2,
+                                                mx: 1,
+                                                borderRadius: 2,
+                                                transition: 'all 0.3s ease',
+                                                '&:hover': {
+                                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                                    transform: isSidebarOpen ? 'translateX(5px)' : 'none',
+                                                },
+                                                '&.Mui-selected': {
+                                                    backgroundColor: '#3b82f6',
+                                                    color: '#ffffff',
+                                                    '&:hover': { backgroundColor: '#2563eb' },
+                                                },
+                                            }}
+                                        >
+                                            <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                                {item.icon}
+                                            </ListItemIcon>
+                                            {isSidebarOpen && (
+                                                <ListItemText
+                                                    primary={item.name}
+                                                    primaryTypographyProps={{
+                                                        fontSize: 14,
+                                                        fontWeight: 400,
+                                                    }}
+                                                />
+                                            )}
+                                        </ListItemButton>
+                                    ))}
+                                </Collapse>
+                            </>
+                        )}
+
+
+
+                        {/* Device Statistics Section */}
+                        {canViewDeviceStatistics && (
+                            <>
+                                <ListItemButton
+                                    onClick={() => handleSubmenuToggle('openDevice')}
+                                    sx={{
+                                        py: 1.5,
+                                        mx: 1,
+                                        borderRadius: 2,
+                                        transition: 'all 0.3s ease',
+                                        '&:hover': {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                        },
+                                        backgroundColor: openDeviceSubmenu ? 'rgba(255, 255, 255, 0.05)' : 'inherit',
+                                    }}
+                                >
+                                    <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                        <AssignmentIcon />
+                                    </ListItemIcon>
+                                    {isSidebarOpen && (
+                                        <>
+                                            <ListItemText
+                                                primary="Device Statistics"
+                                                primaryTypographyProps={{ fontWeight: 500 }}
+                                            />
+                                            {openDeviceSubmenu ? (
+                                                <ExpandLess sx={{ color: '#93c5fd' }} />
+                                            ) : (
+                                                <ExpandMore sx={{ color: '#93c5fd' }} />
+                                            )}
+                                        </>
+                                    )}
+                                </ListItemButton>
+
+                                <Collapse in={openDeviceSubmenu && isSidebarOpen} timeout="auto" unmountOnExit>
+                                    {deviceStatistics.map((item, index) => (
                                         <ListItemButton
                                             key={item.name}
                                             selected={location?.pathname === item.path}
