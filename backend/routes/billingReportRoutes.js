@@ -70,6 +70,10 @@ router.get('/mtv/registered', billingReportController.mtvRegisteredCustomer);
 
 router.get('/mtv/registered/count', billingReportController.getReferralCountReport);
 
+router.get('/devices/statistics', billingReportController.getDeviceStatistics);
+
+router.get('/devices/statistics/export', billingReportController.exportDeviceStatistics);
+
 // router.get('/fetchFutureReports', billingReportController.fetchFutureReports);
 
 module.exports = router;

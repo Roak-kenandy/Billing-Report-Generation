@@ -2604,6 +2604,140 @@ const getReferralCountReport = async (req) => {
   }
 };
 
+
+const getDeviceStatistics = async () => {
+  try {
+    const aggregationQuery = [
+      // Step 1: Filter ContactProfiles for specific tags
+      {
+        $match: {
+          'tags.name': { $in: ['Medianet TV', 'OTT'] }
+        }
+      },
+      // Step 2: Lookup Devices collection where ownership.id matches contact_id
+      {
+        $lookup: {
+          from: 'Devices',
+          localField: 'contact_id',
+          foreignField: 'ownership.id',
+          as: 'deviceData'
+        }
+      },
+      // Step 3: Unwind deviceData to process each device
+      {
+        $unwind: {
+          path: '$deviceData',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      // Step 4: Unwind tags and filter for Medianet TV and OTT
+      {
+        $unwind: '$tags'
+      },
+      {
+        $match: {
+          'tags.name': { $in: ['Medianet TV', 'OTT'] }
+        }
+      },
+      // Step 5: Group by tag name only, count total devices
+      {
+        $group: {
+          _id: '$tags.name',
+          totalDevices: { $sum: 1 }
+        }
+      },
+      // Step 6: Project the final output
+      {
+        $project: {
+          _id: 0,
+          tag: '$_id',
+          totalDevices: 1
+        }
+      },
+      // Step 7: Sort by tag for consistent output
+      {
+        $sort: {
+          tag: 1
+        }
+      }
+    ];
+
+    const results = await mongoose.connection.db.collection('ContactProfiles')
+      .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+      .toArray();
+
+    // Format the response
+    return {
+      statistics: results.map(item => ({
+        tag: item.tag,
+        totalDevices: item.totalDevices
+      }))
+    };
+  } catch (error) {
+    console.log('Error fetching device statistics:', error);
+    throw new Error("Error fetching device statistics");
+  }
+};
+
+const getDeviceStatisticsForExport = async () => {
+  try {
+    const aggregationQuery = [
+      // Step 1: Filter ContactProfiles for specific tags
+      {
+        $match: {
+          'tags.name': { $in: ['Medianet TV', 'OTT'] }
+        }
+      },
+      // Step 2: Lookup Devices collection where ownership.id matches contact_id
+      {
+        $lookup: {
+          from: 'Devices',
+          localField: 'contact_id',
+          foreignField: 'ownership.id',
+          as: 'deviceData'
+        }
+      },
+      // Step 3: Unwind deviceData to process each device
+      {
+        $unwind: {
+          path: '$deviceData',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      // Step 4: Unwind tags and filter for Medianet TV and OTT
+      {
+        $unwind: '$tags'
+      },
+      {
+        $match: {
+          'tags.name': { $in: ['Medianet TV', 'OTT'] }
+        }
+      },
+      // Step 5: Project the required fields
+      {
+        $project: {
+          _id: 0,
+          contact_id: '$contact_id',
+          tag: '$tags.name',
+          customFieldValue: '$deviceData.custom_fields.value',
+          productId: '$deviceData.product.id',
+          productName: '$deviceData.product.name'
+        }
+      }
+    ];
+
+    const results = await mongoose.connection.db.collection('ContactProfiles')
+      .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+      .toArray();
+
+    return results;
+  } catch (error) {
+    console.error('Error fetching device statistics for export:', error);
+    throw new Error('Error fetching device statistics for export');
+  }
+};
+
+
 module.exports = {
   getReports,
   exportReports,
@@ -2620,5 +2754,7 @@ module.exports = {
   exportManualJournalReports,
   getDealerNames,
   getMtvUserReports,
-  getReferralCountReport
+  getReferralCountReport,
+  getDeviceStatistics,
+  getDeviceStatisticsForExport
 }

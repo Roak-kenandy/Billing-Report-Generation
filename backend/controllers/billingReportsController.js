@@ -1,4 +1,5 @@
 const billingReportService = require('../services/billingReportServices');
+const { Parser } = require('json2csv');
 
 const getReports = async (req, res) => {
     const { page = 1, limit = 10, search = '', startDate, endDate, atoll, island } = req.query;
@@ -313,6 +314,50 @@ const getReferralCountReport = async (req, res) => {
     }
 };
 
+const getDeviceStatistics = async (req, res) => {
+    try {
+        const data = await billingReportService.getDeviceStatistics();
+        res.send(data);
+    } catch (err) {
+        res.status(500).send({ message: 'Error fetching devices statistics', error: err.message });
+    }
+};
+
+const exportDeviceStatistics = async (req, res) => {
+    try {
+      const data = await billingReportService.getDeviceStatisticsForExport();
+  
+      // Define fields for CSV
+      const fields = [
+        { label: 'Tag', value: 'tag' },
+        { label: 'Custom Field Value', value: 'customFieldValue' },
+        { label: 'Product ID', value: 'productId' },
+        { label: 'Product Name', value: 'productName' },
+        {label: 'Contact Id', value: 'contact_id'},
+      ];
+  
+      // Format data for CSV
+      const formattedData = data.map(item => ({
+        tag: item.tag || 'N/A',
+        customFieldValue: item.customFieldValue?.[0] || 'N/A', // Assuming custom_fields is an array
+        productId: item.productId || 'N/A',
+        productName: item.productName || 'N/A',
+        contact_id: item.contact_id || 'N/A',
+      }));
+  
+      // Generate CSV
+      const json2csvParser = new Parser({ fields });
+      const csv = json2csvParser.parse(formattedData);
+  
+      // Set response headers for CSV download
+      res.header('Content-Type', 'text/csv');
+      res.attachment('device_statistics.csv');
+      return res.send(csv);
+    } catch (err) {
+      res.status(500).send({ message: 'Error exporting device statistics', error: err.message });
+    }
+  };
+
 module.exports = {
     getReports,
     exportCSV,
@@ -329,5 +374,7 @@ module.exports = {
     exportManualJournalReports,
     getDealerNames,
     mtvRegisteredCustomer,
-    getReferralCountReport
+    getReferralCountReport,
+    getDeviceStatistics,
+    exportDeviceStatistics
 }
