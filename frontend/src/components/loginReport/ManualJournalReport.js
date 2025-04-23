@@ -30,9 +30,7 @@ const ManualJournalReport = () => {
         try {
             let url = `${API_URL}/getManualJournalReports?page=${page}&limit=${limit}`;
             const response = await fetch(url);
-            console.log(response, 'response');
             const data = await response.json();
-            console.log(data, 'manual reports');
             setReports(data.data);
             setPagination(data.pagination);
         } catch (err) {
@@ -159,7 +157,7 @@ const ManualJournalReport = () => {
                         <TableHead>
                             <TableRow>
                                 {[
-                                    'Account Number', 'Action Type', 'Amount', 'Posted Date', 'Remarks', 'Submitted By'
+                                    'Account Number','Contact Name', 'Action Type', 'Amount', 'Posted Date', 'Remarks', 'Submitted By'
                                 ].map((header) => (
                                     <TableCell
                                         key={header}
@@ -201,7 +199,7 @@ const ManualJournalReport = () => {
                                         }}
                                     >
                                         {[
-                                            'Account Number', 'Action Type', 'Amount', 'Posted Date', 'Remarks', 'Submitted By'
+                                            'Account Number','Contact Name', 'Action Type', 'Amount', 'Posted Date', 'Remarks', 'Submitted By'
                                         ].map((key) => (
                                             <TableCell
                                                 key={key}
