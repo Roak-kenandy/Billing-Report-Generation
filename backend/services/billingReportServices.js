@@ -1596,6 +1596,7 @@ const exportManualJournalReports = async (page, limit) => {
       $project: {
         _id: 0,
         "Account Number": "$account_number",
+        "Contact Name": "$contact_name",
         "Posted Date": {
           $dateToString: {
             format: "%Y-%m-%d %H:%M:%S",
@@ -1606,7 +1607,6 @@ const exportManualJournalReports = async (page, limit) => {
         "Amount": { $toDouble: "$amount" },
         "Remarks": { $ifNull: ["$notes", "N/A"] },
         "Submitted By": { $ifNull: ["$submited_by_user_name", "N/A"] },
-        "Contact Name": 1,
         "Business Name": 1
       }
     });
@@ -1614,6 +1614,8 @@ const exportManualJournalReports = async (page, limit) => {
     const results = await mongoose.connection.db.collection('Journals')
       .aggregate(aggregationPipeline, { maxTimeMS: 60000, allowDiskUse: true })
       .toArray();
+
+      console.log(results, 'results for the manual journal report')
 
     const total = await mongoose.connection.db.collection('Journals')
       .countDocuments(matchConditions);
