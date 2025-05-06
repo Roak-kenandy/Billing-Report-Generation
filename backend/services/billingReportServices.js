@@ -694,6 +694,1402 @@ const exportReports = async (search, startDate, endDate, atoll, island) => {
   }
 };
 
+// const exportCustomerReports = async (search, startDate, endDate, atoll, island, format, page, limit) => {
+//   console.log(page, limit, format, 'page and limit and format')
+//   try {
+//     // Calculate timestamps for date filtering
+//     let startTimestamp, endTimestamp;
+//     if (startDate) {
+//       startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+//     }
+//     if (endDate) {
+//       endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+//     }
+
+//     // Match stage for filtering
+//     let matchStage = {
+//       'custom_fields.key': 'service_provider', // Filter for service_provider in custom_fields
+//     };
+
+//     if (search) {
+//       matchStage.$text = { $search: search };
+//     }
+
+//     if (atoll) {
+//       matchStage['location.province'] = atoll;
+//     }
+
+//     if (island) {
+//       matchStage['location.city'] = island;
+//     }
+
+//     // Date filter for subscriptions (if applicable)
+//     let subscriptionDateFilter = {};
+//     if (startDate || endDate) {
+//       const elemMatchConditions = {};
+//       if (startDate) {
+//         elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
+//       }
+//       if (endDate) {
+//         elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
+//       }
+//       subscriptionDateFilter.services = { $elemMatch: elemMatchConditions };
+//     }
+
+//     // Aggregation pipeline for counting total items
+//     const countPipeline = [
+//       { $match: matchStage },
+//       {
+//         $lookup: {
+//           from: 'Subscriptions',
+//           localField: 'contact_id',
+//           foreignField: 'contact_id',
+//           as: 'subscriptionsData',
+//         },
+//       },
+//       { $match: subscriptionDateFilter },
+//       { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
+//       { $match: { 'subscriptionsData.services.state': 'EFFECTIVE' } },
+//       { $count: 'totalItems' },
+//     ];
+
+//     // Aggregation pipeline for paginated results
+//     const aggregationQuery = [
+//       { $match: matchStage },
+//       {
+//         $lookup: {
+//           from: 'Subscriptions',
+//           localField: 'contact_id',
+//           foreignField: 'contact_id',
+//           as: 'subscriptionsData',
+//         },
+//       },
+//       { $match: subscriptionDateFilter },
+//       { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
+//       { $match: { 'subscriptionsData.services.state': 'EFFECTIVE' } },
+//       {
+//         $lookup: {
+//           from: 'Devices',
+//           localField: 'contact_id',
+//           foreignField: 'ownership.id',
+//           as: 'devicesData',
+//         },
+//       },
+//       {
+//         $lookup: {
+//           from: 'Orders',
+//           localField: 'contact_id',
+//           foreignField: 'contact_id',
+//           as: 'ordersData',
+//         },
+//       },
+//       {
+//         $lookup: {
+//           from: 'Journals',
+//           localField: 'contact_id',
+//           foreignField: 'contact_id',
+//           as: 'journalsData',
+//         },
+//       },
+//       {
+//         $project: {
+//           _id: 0,
+//           // id: '$id',
+//           'Account Number': '$account.number',
+//           'Contact Code': {
+//             $concat: ['"', { $toString: { $arrayElemAt: ['$journalsData.contact_code', 0] } }, '"'],
+//           },
+//           'Customer Name': '$profile.name',
+//           'Customer Type': '$profile.type',
+//           'Service Provider': {
+//             $arrayElemAt: [
+//               {
+//                 $filter: {
+//                   input: '$custom_fields',
+//                   as: 'field',
+//                   cond: { $eq: ['$$field.key', 'service_provider'] },
+//                 },
+//               },
+//               0,
+//             ],
+//           },
+//           'Customer Code': {
+//             $arrayElemAt: [
+//               {
+//                 $filter: {
+//                   input: '$custom_fields',
+//                   as: 'field',
+//                   cond: { $eq: ['$$field.key', 'customer_code'] },
+//                 },
+//               },
+//               0,
+//             ],
+//           },
+//           Mobile: '$phone',
+//           Ward: '$location.address_line1',
+//           Road: '$location.address_line2',
+//           Island: '$location.city',
+//           Atoll: '$location.province',
+//           'Business Name': '$business_name',
+//           'Sales Model': '$sales_model.name',
+//           'Payment Type': {
+//             $cond: {
+//               if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
+//               then: 'QuickPay',
+//               else: { $arrayElemAt: ['$ordersData.payment_method.type', 0] },
+//             },
+//           },
+//           'Account Balance': {
+//             $cond: {
+//               if: { $eq: [{ $type: '$account.balance' }, 'array'] },
+//               then: { $toDouble: { $arrayElemAt: ['$account.balance', 0] } },
+//               else: { $toDouble: { $ifNull: ['$account.balance', '0.0'] } },
+//             },
+//           },
+//           'Credit Limit': {
+//             $cond: {
+//               if: { $eq: [{ $type: '$classification.credit_limit' }, 'array'] },
+//               then: { $toDouble: { $arrayElemAt: ['$classification.credit_limit', 0] } },
+//               else: { $toDouble: { $ifNull: ['$classification.credit_limit', '0.0'] } },
+//             },
+//           },
+//           Currency: '$classification.currency',
+//           'Account Status': '$account.life_cycle_state',
+//           'Registration Date': {
+//             $dateToString: {
+//               format: '%d-%b-%Y',
+//               date: {
+//                 $toDate: {
+//                   $multiply: [
+//                     {
+//                       $cond: {
+//                         if: { $eq: [{ $type: '$profile.registration_date' }, 'array'] },
+//                         then: { $toLong: { $arrayElemAt: ['$profile.registration_date', 0] } },
+//                         else: { $toLong: { $ifNull: ['$profile.registration_date', 0] } },
+//                       },
+//                     },
+//                     1000,
+//                   ],
+//                 },
+//               },
+//             },
+//           },
+//           'Device Name': { $arrayElemAt: ['$devicesData.product.name', 0] },
+//           'Service Status': '$subscriptionsData.services.state',
+//           'Service Package': '$subscriptionsData.services.product.name',
+//           'Service Price': {
+//             $cond: {
+//               if: { $eq: [{ $type: '$subscriptionsData.services.price_terms.price' }, 'array'] },
+//               then: { $round: [{ $toDouble: { $arrayElemAt: ['$subscriptionsData.services.price_terms.price', 0] } }, 2] },
+//               else: { $round: [{ $toDouble: { $ifNull: ['$subscriptionsData.services.price_terms.price', '0.0'] } }, 2] },
+//             },
+//           },
+//           'Service Start Date': {
+//             $map: {
+//               input: '$subscriptionsData.services.service_terms.start_date',
+//               as: 'startDate',
+//               in: {
+//                 $dateToString: {
+//                   format: "%d %b %Y",
+//                   date: {
+//                     $toDate: { $multiply: ['$$startDate', 1000] }
+//                   },
+//                   timezone: "Indian/Maldives"
+//                 }
+//               }
+//             }
+//           },
+//           'Service End Date': {
+//             $map: {
+//               input: '$subscriptionsData.services.service_terms.end_date',
+//               as: 'endDate',
+//               in: {
+//                 $dateToString: {
+//                   format: "%d %b %Y",
+//                   date: {
+//                     $toDate: { $multiply: ['$$endDate', 1000] }
+//                   },
+//                   timezone: "Indian/Maldives"
+//                 }
+//               }
+//             }
+//           }
+
+
+
+
+//         },
+//       },
+//     ];
+
+//     // Add pagination stages for JSON format
+//     let results;
+//     let pagination = null;
+//     if (format === 'json' && page && limit) {
+//       const pageNum = parseInt(page, 10) || 1;
+//       const limitNum = parseInt(limit, 10) || 10;
+//       const skipNum = (pageNum - 1) * limitNum;
+
+//       // Get total count
+//       const countResult = await mongoose.connection.db
+//         .collection('ContactProfiles')
+//         .aggregate(countPipeline, { maxTimeMS: 600000, allowDiskUse: true })
+//         .toArray();
+//       const totalItems = countResult.length > 0 ? countResult[0].totalItems : 0;
+//       const totalPages = Math.ceil(totalItems / limitNum);
+
+//       // Add skip and limit to the main query
+//       aggregationQuery.push(
+//         { $skip: skipNum },
+//         { $limit: limitNum }
+//       );
+
+//       // Execute paginated query
+//       results = await mongoose.connection.db
+//         .collection('ContactProfiles')
+//         .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+//         .toArray();
+
+//       // Prepare pagination metadata
+//       pagination = {
+//         totalItems,
+//         totalPages,
+//         currentPage: pageNum,
+//         pageSize: limitNum,
+//       };
+//     } else {
+//       // Execute non-paginated query (for CSV or JSON without pagination)
+//       results = await mongoose.connection.db
+//         .collection('ContactProfiles')
+//         .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+//         .toArray();
+//     }
+
+//     // Handle response format
+//     if (format === 'csv') {
+//       const fields = [
+//         // 'id',
+//         'Account Number',
+//         // 'Contact Code',
+//         'Customer Name',
+//         // 'Customer Type',
+//         'Service Provider.value_label',
+//         // 'Customer Code.value_label',
+//         'Mobile',
+//         'Island',
+//         'Atoll',
+//         'Ward',
+//         'Road',
+//         // 'Business Name',
+//         // 'Sales Model',
+//         // 'Payment Type',
+//         // 'Account Balance',
+//         // 'Credit Limit',
+//         // 'Currency',
+//         'Account Status',
+//         // 'Registration Date',
+//         'Device Name',
+//         'Service Status',
+//         'Service Package',
+//         // 'Service Price',
+//         'Service Start Date',
+//         // 'Service End Date',
+//       ];
+//       const csvData = parse(results, { fields });
+//       return { data: csvData, isCsv: true };
+//     }
+
+//     // Return JSON with pagination metadata
+//     return {
+//       data: results,
+//       isCsv: false,
+//       pagination,
+//     };
+//   } catch (error) {
+//     console.error('Error exporting customer report:', error);
+//     throw new Error('Error exporting customer report');
+//   }
+// };
+
+
+const exportCustomerReports = async (search, startDate, endDate, atoll, island, format, page, limit) => {
+  try {
+    // Calculate timestamps for date filtering
+    let startTimestamp, endTimestamp;
+    if (startDate) {
+      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+    }
+    if (endDate) {
+      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+    }
+
+    // Match stage for filtering
+    let matchStage = {
+      'custom_fields.key': 'service_provider', // Filter for service_provider in custom_fields
+    };
+
+    if (search) {
+      matchStage.$text = { $search: search };
+    }
+
+    if (atoll) {
+      matchStage['location.province'] = atoll;
+    }
+
+    if (island) {
+      matchStage['location.city'] = island;
+    }
+
+    // Date filter for subscriptions (if applicable)
+    let subscriptionDateFilter = {};
+    if (startDate || endDate) {
+      const elemMatchConditions = {};
+      if (startDate) {
+        elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
+      }
+      if (endDate) {
+        elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
+      }
+      subscriptionDateFilter.services = { $elemMatch: elemMatchConditions };
+    }
+
+    // Aggregation pipeline for counting total items
+    const countPipeline = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'Subscriptions',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'subscriptionsData',
+        },
+      },
+      { $match: subscriptionDateFilter },
+      { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
+      { $match: { 'subscriptionsData.services.state': 'EFFECTIVE' } }, // Filter for EFFECTIVE status
+      { $count: 'totalItems' },
+    ];
+
+    // Aggregation pipeline for paginated results
+    const aggregationQuery = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'Subscriptions',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'subscriptionsData',
+        },
+      },
+      { $match: subscriptionDateFilter },
+      { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
+      { $match: { 'subscriptionsData.services.state': 'EFFECTIVE' } }, // Filter for EFFECTIVE status
+      {
+        $lookup: {
+          from: 'Devices',
+          localField: 'contact_id',
+          foreignField: 'ownership.id',
+          as: 'devicesData',
+        },
+      },
+      {
+        $lookup: {
+          from: 'Orders',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'ordersData',
+        },
+      },
+      {
+        $lookup: {
+          from: 'Journals',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'journalsData',
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          'Account Number': '$account.number',
+          'Contact Code': {
+            $concat: ['"', { $toString: { $arrayElemAt: ['$journalsData.contact_code', 0] } }, '"'],
+          },
+          'Customer Name': '$profile.name',
+          'Customer Type': '$profile.type',
+          'Service Provider': {
+            $arrayElemAt: [
+              {
+                $filter: {
+                  input: '$custom_fields',
+                  as: 'field',
+                  cond: { $eq: ['$$field.key', 'service_provider'] },
+                },
+              },
+              0,
+            ],
+          },
+          'Customer Code': {
+            $arrayElemAt: [
+              {
+                $filter: {
+                  input: '$custom_fields',
+                  as: 'field',
+                  cond: { $eq: ['$$field.key', 'customer_code'] },
+                },
+              },
+              0,
+            ],
+          },
+          Mobile: '$phone',
+          Ward: '$location.address_line1',
+          Road: '$location.address_line2',
+          Island: '$location.city',
+          Atoll: '$location.province',
+          'Business Name': '$business_name',
+          'Sales Model': '$sales_model.name',
+          'Payment Type': {
+            $cond: {
+              if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
+              then: 'QuickPay',
+              else: { $arrayElemAt: ['$ordersData.payment_method.type', 0] },
+            },
+          },
+          'Account Balance': {
+            $cond: {
+              if: { $eq: [{ $type: '$account.balance' }, 'array'] },
+              then: { $toDouble: { $arrayElemAt: ['$account.balance', 0] } },
+              else: { $toDouble: { $ifNull: ['$account.balance', '0.0'] } },
+            },
+          },
+          'Credit Limit': {
+            $cond: {
+              if: { $eq: [{ $type: '$classification.credit_limit' }, 'array'] },
+              then: { $toDouble: { $arrayElemAt: ['$classification.credit_limit', 0] } },
+              else: { $toDouble: { $ifNull: ['$classification.credit_limit', '0.0'] } },
+            },
+          },
+          Currency: '$classification.currency',
+          'Account Status': '$account.life_cycle_state',
+          'Registration Date': {
+            $dateToString: {
+              format: '%d-%b-%Y',
+              date: {
+                $toDate: {
+                  $multiply: [
+                    {
+                      $cond: {
+                        if: { $eq: [{ $type: '$profile.registration_date' }, 'array'] },
+                        then: { $toLong: { $arrayElemAt: ['$profile.registration_date', 0] } },
+                        else: { $toLong: { $ifNull: ['$profile.registration_date', 0] } },
+                      },
+                    },
+                    1000,
+                  ],
+                },
+              },
+            },
+          },
+          'Device Name': { $arrayElemAt: ['$devicesData.product.name', 0] },
+          'Service Status': {
+            $filter: {
+              input: '$subscriptionsData.services.state',
+              as: 'status',
+              cond: { $eq: ['$$status', 'EFFECTIVE'] }
+            }
+          },
+          'Service Package': {
+            $filter: {
+              input: '$subscriptionsData.services.product.name',
+              as: 'package',
+              cond: {
+                $eq: [
+                  { $arrayElemAt: ['$subscriptionsData.services.state', { $indexOfArray: ['$subscriptionsData.services.product.name', '$$package'] }] },
+                  'EFFECTIVE'
+                ]
+              }
+            }
+          },
+          'Service Price': {
+            $cond: {
+              if: { $eq: [{ $type: '$subscriptionsData.services.price_terms.price' }, 'array'] },
+              then: { $round: [{ $toDouble: { $arrayElemAt: ['$subscriptionsData.services.price_terms.price', 0] } }, 2] },
+              else: { $round: [{ $toDouble: { $ifNull: ['$subscriptionsData.services.price_terms.price', '0.0'] } }, 2] },
+            },
+          },
+          'Service Start Date': {
+            $map: {
+              input: {
+                $filter: {
+                  input: '$subscriptionsData.services.service_terms.start_date',
+                  as: 'startDate',
+                  cond: {
+                    $eq: [
+                      { $arrayElemAt: ['$subscriptionsData.services.state', { $indexOfArray: ['$subscriptionsData.services.service_terms.start_date', '$$startDate'] }] },
+                      'EFFECTIVE'
+                    ]
+                  }
+                }
+              },
+              as: 'startDate',
+              in: {
+                $dateToString: {
+                  format: "%d %b %Y",
+                  date: {
+                    $toDate: { $multiply: ['$$startDate', 1000] }
+                  },
+                  timezone: "Indian/Maldives"
+                }
+              }
+            }
+          },
+          'Service End Date': {
+            $map: {
+              input: {
+                $filter: {
+                  input: '$subscriptionsData.services.service_terms.end_date',
+                  as: 'endDate',
+                  cond: {
+                    $eq: [
+                      { $arrayElemAt: ['$subscriptionsData.services.state', { $indexOfArray: ['$subscriptionsData.services.service_terms.end_date', '$$endDate'] }] },
+                      'EFFECTIVE'
+                    ]
+                  }
+                }
+              },
+              as: 'endDate',
+              in: {
+                $dateToString: {
+                  format: "%d %b %Y",
+                  date: {
+                    $toDate: { $multiply: ['$$endDate', 1000] }
+                  },
+                  timezone: "Indian/Maldives"
+                }
+              }
+            }
+          },
+          'Tag Area': {
+            $reduce: {
+              input: {
+                $map: {
+                  input: '$tags',
+                  as: 'tag',
+                  in: '$$tag.name',
+                },
+              },
+              initialValue: '',
+              in: {
+                $cond: {
+                  if: { $eq: ['$$value', ''] },
+                  then: '$$this',
+                  else: { $concat: ['$$value', ', ', '$$this'] },
+                },
+              },
+            },
+          },
+        },
+      },
+    ];
+
+    // Add pagination stages for JSON format
+    let results;
+    let pagination = null;
+    if (format === 'json' && page && limit) {
+      const pageNum = parseInt(page, 10) || 1;
+      const limitNum = parseInt(limit, 10) || 10;
+      const skipNum = (pageNum - 1) * limitNum;
+
+      // Get total count
+      const countResult = await mongoose.connection.db
+        .collection('ContactProfiles')
+        .aggregate(countPipeline, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+      const totalItems = countResult.length > 0 ? countResult[0].totalItems : 0;
+      const totalPages = Math.ceil(totalItems / limitNum);
+
+      // Add skip and limit to the main query
+      aggregationQuery.push(
+        { $skip: skipNum },
+        { $limit: limitNum }
+      );
+
+      // Execute paginated query
+      results = await mongoose.connection.db
+        .collection('ContactProfiles')
+        .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+
+      // Prepare pagination metadata
+      pagination = {
+        totalItems,
+        totalPages,
+        currentPage: pageNum,
+        pageSize: limitNum,
+      };
+    } else {
+      // Execute non-paginated query (for CSV or JSON without pagination)
+      results = await mongoose.connection.db
+        .collection('ContactProfiles')
+        .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+    }
+
+    // Handle response format
+    if (format === 'csv') {
+      const fields = [
+        { label: 'Account Number', value: 'Account Number' },
+        { label: 'Customer Name', value: 'Customer Name' },
+        { label: 'Service Provider', value: 'Service Provider.value_label' },
+        { label: 'Mobile', value: 'Mobile' },
+        {label: 'Area', value: 'Tag Area'},
+        { label: 'Island', value: 'Island' },
+        { label: 'Atoll', value: 'Atoll' },
+        { label: 'Ward', value: 'Ward' },
+        { label: 'Road', value: 'Road' },
+        { label: 'Account Status', value: 'Account Status' },
+        { label: 'Device Name', value: 'Device Name' },
+        { label: 'Service Status', value: 'Service Status' },
+        { label: 'Service Package', value: 'Service Package' },
+        // { label: 'Service Start Date', value: 'Service Start Date' },
+        { label: 'Service End Date', value: 'Service End Date' },
+      ];
+      const csvData = parse(results, { fields });
+      return { data: csvData, isCsv: true };
+    }
+
+    // Return JSON with pagination metadata
+    return {
+      data: results,
+      isCsv: false,
+      pagination,
+    };
+  } catch (error) {
+    console.error('Error exporting customer report:', error);
+    throw new Error('Error exporting customer report');
+  }
+};
+
+const exportCustomerReportsNotEffective = async (search, startDate, endDate, atoll, island, format, page, limit) => {
+  try {
+    // Calculate timestamps for date filtering
+    let startTimestamp, endTimestamp;
+    if (startDate) {
+      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+    }
+    if (endDate) {
+      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+    }
+
+    // Match stage for filtering
+    let matchStage = {
+      'custom_fields.key': 'service_provider', // Filter for service_provider in custom_fields
+    };
+
+    if (search) {
+      matchStage.$text = { $search: search };
+    }
+
+    if (atoll) {
+      matchStage['location.province'] = atoll;
+    }
+
+    if (island) {
+      matchStage['location.city'] = island;
+    }
+
+    // Date filter for subscriptions (if applicable)
+    let subscriptionDateFilter = {};
+    if (startDate || endDate) {
+      const elemMatchConditions = {};
+      if (startDate) {
+        elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
+      }
+      if (endDate) {
+        elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
+      }
+      subscriptionDateFilter.services = { $elemMatch: elemMatchConditions };
+    }
+
+    // Aggregation pipeline for counting total items
+    const countPipeline = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'Subscriptions',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'subscriptionsData',
+        },
+      },
+      { $match: subscriptionDateFilter },
+      { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
+      { $match: { 'subscriptionsData.services.state': 'NOT_EFFECTIVE' } }, // Filter for NOT_EFFECTIVE status
+      { $count: 'totalItems' },
+    ];
+
+    // Aggregation pipeline for paginated results
+    const aggregationQuery = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'Subscriptions',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'subscriptionsData',
+        },
+      },
+      { $match: subscriptionDateFilter },
+      { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
+      { $match: { 'subscriptionsData.services.state': 'NOT_EFFECTIVE' } }, // Filter for NOT_EFFECTIVE status
+      {
+        $lookup: {
+          from: 'Devices',
+          localField: 'contact_id',
+          foreignField: 'ownership.id',
+          as: 'devicesData',
+        },
+      },
+      {
+        $lookup: {
+          from: 'Orders',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'ordersData',
+        },
+      },
+      {
+        $lookup: {
+          from: 'Journals',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'journalsData',
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          'Account Number': '$account.number',
+          'Contact Code': {
+            $concat: ['"', { $toString: { $arrayElemAt: ['$journalsData.contact_code', 0] } }, '"'],
+          },
+          'Customer Name': '$profile.name',
+          'Customer Type': '$profile.type',
+          'Service Provider': {
+            $arrayElemAt: [
+              {
+                $filter: {
+                  input: '$custom_fields',
+                  as: 'field',
+                  cond: { $eq: ['$$field.key', 'service_provider'] },
+                },
+              },
+              0,
+            ],
+          },
+          'Customer Code': {
+            $arrayElemAt: [
+              {
+                $filter: {
+                  input: '$custom_fields',
+                  as: 'field',
+                  cond: { $eq: ['$$field.key', 'customer_code'] },
+                },
+              },
+              0,
+            ],
+          },
+          Mobile: '$phone',
+          Ward: '$location.address_line1',
+          Road: '$location.address_line2',
+          Island: '$location.city',
+          Atoll: '$location.province',
+          'Business Name': '$business_name',
+          'Sales Model': '$sales_model.name',
+          'Payment Type': {
+            $cond: {
+              if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
+              then: 'QuickPay',
+              else: { $arrayElemAt: ['$ordersData.payment_method.type', 0] },
+            },
+          },
+          'Account Balance': {
+            $cond: {
+              if: { $eq: [{ $type: '$account.balance' }, 'array'] },
+              then: { $toDouble: { $arrayElemAt: ['$account.balance', 0] } },
+              else: { $toDouble: { $ifNull: ['$account.balance', '0.0'] } },
+            },
+          },
+          'Credit Limit': {
+            $cond: {
+              if: { $eq: [{ $type: '$classification.credit_limit' }, 'array'] },
+              then: { $toDouble: { $arrayElemAt: ['$classification.credit_limit', 0] } },
+              else: { $toDouble: { $ifNull: ['$classification.credit_limit', '0.0'] } },
+            },
+          },
+          Currency: '$classification.currency',
+          'Account Status': '$account.life_cycle_state',
+          'Registration Date': {
+            $dateToString: {
+              format: '%d-%b-%Y',
+              date: {
+                $toDate: {
+                  $multiply: [
+                    {
+                      $cond: {
+                        if: { $eq: [{ $type: '$profile.registration_date' }, 'array'] },
+                        then: { $toLong: { $arrayElemAt: ['$profile.registration_date', 0] } },
+                        else: { $toLong: { $ifNull: ['$profile.registration_date', 0] } },
+                      },
+                    },
+                    1000,
+                  ],
+                },
+              },
+            },
+          },
+          'Device Name': { $arrayElemAt: ['$devicesData.product.name', 0] },
+          'Service Status': {
+            $filter: {
+              input: '$subscriptionsData.services.state',
+              as: 'status',
+              cond: { $eq: ['$$status', 'NOT_EFFECTIVE'] }
+            }
+          },
+          'Service Package': {
+            $filter: {
+              input: '$subscriptionsData.services.product.name',
+              as: 'package',
+              cond: {
+                $eq: [
+                  { $arrayElemAt: ['$subscriptionsData.services.state', { $indexOfArray: ['$subscriptionsData.services.product.name', '$$package'] }] },
+                  'NOT_EFFECTIVE'
+                ]
+              }
+            }
+          },
+          'Service Price': {
+            $cond: {
+              if: { $eq: [{ $type: '$subscriptionsData.services.price_terms.price' }, 'array'] },
+              then: { $round: [{ $toDouble: { $arrayElemAt: ['$subscriptionsData.services.price_terms.price', 0] } }, 2] },
+              else: { $round: [{ $toDouble: { $ifNull: ['$subscriptionsData.services.price_terms.price', '0.0'] } }, 2] },
+            },
+          },
+          'Service Start Date': {
+            $map: {
+              input: {
+                $filter: {
+                  input: '$subscriptionsData.services.service_terms.start_date',
+                  as: 'startDate',
+                  cond: {
+                    $eq: [
+                      { $arrayElemAt: ['$subscriptionsData.services.state', { $indexOfArray: ['$subscriptionsData.services.service_terms.start_date', '$$startDate'] }] },
+                      'NOT_EFFECTIVE'
+                    ]
+                  }
+                }
+              },
+              as: 'startDate',
+              in: {
+                $dateToString: {
+                  format: "%d %b %Y",
+                  date: {
+                    $toDate: { $multiply: ['$$startDate', 1000] }
+                  },
+                  timezone: "Indian/Maldives"
+                }
+              }
+            }
+          },
+          'Service End Date': {
+            $map: {
+              input: {
+                $filter: {
+                  input: '$subscriptionsData.services.service_terms.end_date',
+                  as: 'endDate',
+                  cond: {
+                    $eq: [
+                      { $arrayElemAt: ['$subscriptionsData.services.state', { $indexOfArray: ['$subscriptionsData.services.service_terms.end_date', '$$endDate'] }] },
+                      'NOT_EFFECTIVE'
+                    ]
+                  }
+                }
+              },
+              as: 'endDate',
+              in: {
+                $dateToString: {
+                  format: "%d %b %Y",
+                  date: {
+                    $toDate: { $multiply: ['$$endDate', 1000] }
+                  },
+                  timezone: "Indian/Maldives"
+                }
+              }
+            }
+          },
+          'Tag Area': {
+            $reduce: {
+              input: {
+                $map: {
+                  input: '$tags',
+                  as: 'tag',
+                  in: '$$tag.name',
+                },
+              },
+              initialValue: '',
+              in: {
+                $cond: {
+                  if: { $eq: ['$$value', ''] },
+                  then: '$$this',
+                  else: { $concat: ['$$value', ', ', '$$this'] },
+                },
+              },
+            },
+          },
+        },
+      },
+    ];
+
+    // Add pagination stages for JSON format
+    let results;
+    let pagination = null;
+    if (format === 'json' && page && limit) {
+      const pageNum = parseInt(page, 10) || 1;
+      const limitNum = parseInt(limit, 10) || 10;
+      const skipNum = (pageNum - 1) * limitNum;
+
+      // Get total count
+      const countResult = await mongoose.connection.db
+        .collection('ContactProfiles')
+        .aggregate(countPipeline, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+      const totalItems = countResult.length > 0 ? countResult[0].totalItems : 0;
+      const totalPages = Math.ceil(totalItems / limitNum);
+
+      // Add skip and limit to the main query
+      aggregationQuery.push(
+        { $skip: skipNum },
+        { $limit: limitNum }
+      );
+
+      // Execute paginated query
+      results = await mongoose.connection.db
+        .collection('ContactProfiles')
+        .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+
+      // Prepare pagination metadata
+      pagination = {
+        totalItems,
+        totalPages,
+        currentPage: pageNum,
+        pageSize: limitNum,
+      };
+    } else {
+      // Execute non-paginated query (for CSV or JSON without pagination)
+      results = await mongoose.connection.db
+        .collection('ContactProfiles')
+        .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+    }
+
+    // Handle response format
+    if (format === 'csv') {
+      const fields = [
+        { label: 'Account Number', value: 'Account Number' },
+        { label: 'Customer Name', value: 'Customer Name' },
+        { label: 'Service Provider', value: 'Service Provider.value_label' },
+        { label: 'Mobile', value: 'Mobile' },
+        { label: 'Area', value: 'Tag Area'},
+        { label: 'Island', value: 'Island' },
+        { label: 'Atoll', value: 'Atoll' },
+        { label: 'Ward', value: 'Ward' },
+        { label: 'Road', value: 'Road' },
+        // { label: 'Account Status', value: 'Account Status' },
+        { label: 'Device Name', value: 'Device Name' },
+        { label: 'Service Status', value: 'Service Status' },
+        { label: 'Service Package', value: 'Service Package' },
+        // { label: 'Service Start Date', value: 'Service Start Date' },
+        { label: 'Service End Date', value: 'Service End Date' },
+      ];
+      const csvData = parse(results, { fields });
+      return { data: csvData, isCsv: true };
+    }
+
+    // Return JSON with pagination metadata
+    return {
+      data: results,
+      isCsv: false,
+      pagination,
+    };
+  } catch (error) {
+    console.error('Error exporting customer report:', error);
+    throw new Error('Error exporting customer report');
+  }
+};
+
+const exportCustomerDealerWiseCollection = async (search, startDate, endDate, atoll, island, format, page, limit) => {
+  try {
+    // Calculate timestamps for date filtering
+    let startTimestamp, endTimestamp;
+    if (startDate) {
+      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+    }
+    if (endDate) {
+      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+    }
+
+    // Match stage for filtering
+    let matchStage = {
+      'custom_fields.key': 'service_provider', // Filter for service_provider in custom_fields
+    };
+
+    if (search) {
+      matchStage.$text = { $search: search };
+    }
+
+    if (atoll) {
+      matchStage['location.province'] = atoll;
+    }
+
+    if (island) {
+      matchStage['location.city'] = island;
+    }
+
+    // Date filter for subscriptions (if applicable)
+    let subscriptionDateFilter = {};
+    if (startDate || endDate) {
+      const elemMatchConditions = {};
+      if (startDate) {
+        elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
+      }
+      if (endDate) {
+        elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
+      }
+      subscriptionDateFilter.services = { $elemMatch: elemMatchConditions };
+    }
+
+    // Aggregation pipeline for counting total items
+    const countPipeline = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'Subscriptions',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'subscriptionsData',
+        },
+      },
+      { $match: subscriptionDateFilter },
+      { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
+      { $count: 'totalItems' },
+    ];
+
+    // Aggregation pipeline for paginated results
+    const aggregationQuery = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'Subscriptions',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'subscriptionsData',
+        },
+      },
+      { $match: subscriptionDateFilter },
+      { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'Devices',
+          localField: 'contact_id',
+          foreignField: 'ownership.id',
+          as: 'devicesData',
+        },
+      },
+      {
+        $lookup: {
+          from: 'Orders',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'ordersData',
+        },
+      },
+      {
+        $lookup: {
+          from: 'Journals',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'journalsData',
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          'Account Number': '$account.number',
+          'Contact Code': {
+            $concat: ['"', { $toString: { $arrayElemAt: ['$journalsData.contact_code', 0] } }, '"'],
+          },
+          'Customer Name': '$profile.name',
+          'Customer Type': '$profile.type',
+          'Service Provider': {
+            $arrayElemAt: [
+              {
+                $filter: {
+                  input: '$custom_fields',
+                  as: 'field',
+                  cond: { $eq: ['$$field.key', 'service_provider'] },
+                },
+              },
+              0,
+            ],
+          },
+          'Customer Code': {
+            $arrayElemAt: [
+              {
+                $filter: {
+                  input: '$custom_fields',
+                  as: 'field',
+                  cond: { $eq: ['$$field.key', 'customer_code'] },
+                },
+              },
+              0,
+            ],
+          },
+          Mobile: '$phone',
+          Ward: '$location.address_line1',
+          Road: '$location.address_line2',
+          Island: '$location.city',
+          Atoll: '$location.province',
+          'Business Name': '$business_name',
+          'Sales Model': '$sales_model.name',
+          'Payment Type': {
+            $cond: {
+              if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
+              then: 'QuickPay',
+              else: { $arrayElemAt: ['$ordersData.payment_method.type', 0] },
+            },
+          },
+          'Account Balance': {
+            $cond: {
+              if: { $eq: [{ $type: '$account.balance' }, 'array'] },
+              then: { $toDouble: { $arrayElemAt: ['$account.balance', 0] } },
+              else: { $toDouble: { $ifNull: ['$account.balance', '0.0'] } },
+            },
+          },
+          'Credit Limit': {
+            $cond: {
+              if: { $eq: [{ $type: '$classification.credit_limit' }, 'array'] },
+              then: { $toDouble: { $arrayElemAt: ['$classification.credit_limit', 0] } },
+              else: { $toDouble: { $ifNull: ['$classification.credit_limit', '0.0'] } },
+            },
+          },
+          Currency: '$classification.currency',
+          'Account Status': '$account.life_cycle_state',
+          'Registration Date': {
+            $dateToString: {
+              format: '%d-%b-%Y',
+              date: {
+                $toDate: {
+                  $multiply: [
+                    {
+                      $cond: {
+                        if: { $eq: [{ $type: '$profile.registration_date' }, 'array'] },
+                        then: { $toLong: { $arrayElemAt: ['$profile.registration_date', 0] } },
+                        else: { $toLong: { $ifNull: ['$profile.registration_date', 0] } },
+                      },
+                    },
+                    1000,
+                  ],
+                },
+              },
+            },
+          },
+          'Device Name': { $arrayElemAt: ['$devicesData.product.name', 0] },
+          'Service Status': '$subscriptionsData.services.state',
+          'Service Package': '$subscriptionsData.services.product.name',
+          'Service Price': {
+            $reduce: {
+              input: {
+                $map: {
+                  input: '$subscriptionsData.services.price_terms.price',
+                  as: 'price',
+                  in: {
+                    $round: [
+                      {
+                        $toDouble: {
+                          $ifNull: ['$$price', '0.0']
+                        }
+                      },
+                      2
+                    ]
+                  }
+                }
+              },
+              initialValue: '',
+              in: {
+                $cond: {
+                  if: { $eq: ['$$value', ''] },
+                  then: { $toString: '$$this' },
+                  else: { $concat: ['$$value', ', ', { $toString: '$$this' }] }
+                }
+              }
+            }
+          },
+          'Service Start Date': {
+            $reduce: {
+              input: {
+                $map: {
+                  input: '$subscriptionsData.services.service_terms.start_date',
+                  as: 'startDate',
+                  in: {
+                    $dateToString: {
+                      format: "%d %b %Y",
+                      date: {
+                        $toDate: { $multiply: ['$$startDate', 1000] }
+                      },
+                      timezone: "Indian/Maldives"
+                    }
+                  }
+                }
+              },
+              initialValue: '',
+              in: {
+                $cond: {
+                  if: { $eq: ['$$value', ''] },
+                  then: '$$this',
+                  else: { $concat: ['$$value', ', ', '$$this'] }
+                }
+              }
+            }
+          },
+          'Service End Date': {
+            $reduce: {
+              input: {
+                $map: {
+                  input: '$subscriptionsData.services.service_terms.end_date',
+                  as: 'endDate',
+                  in: {
+                    $dateToString: {
+                      format: "%d %b %Y",
+                      date: {
+                        $toDate: { $multiply: ['$$endDate', 1000] }
+                      },
+                      timezone: "Indian/Maldives"
+                    }
+                  }
+                }
+              },
+              initialValue: '',
+              in: {
+                $cond: {
+                  if: { $eq: ['$$value', ''] },
+                  then: '$$this',
+                  else: { $concat: ['$$value', ', ', '$$this'] }
+                }
+              }
+            }
+          },
+          'Tag Area': {
+            $reduce: {
+              input: {
+                $map: {
+                  input: '$tags',
+                  as: 'tag',
+                  in: '$$tag.name',
+                },
+              },
+              initialValue: '',
+              in: {
+                $cond: {
+                  if: { $eq: ['$$value', ''] },
+                  then: '$$this',
+                  else: { $concat: ['$$value', ', ', '$$this'] },
+                },
+              },
+            },
+          },
+        },
+      },
+    ];
+
+    // Add pagination stages for JSON format
+    let results;
+    let pagination = null;
+    if (format === 'json' && page && limit) {
+      const pageNum = parseInt(page, 10) || 1;
+      const limitNum = parseInt(limit, 10) || 10;
+      const skipNum = (pageNum - 1) * limitNum;
+
+      // Get total count
+      const countResult = await mongoose.connection.db
+        .collection('ContactProfiles')
+        .aggregate(countPipeline, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+      const totalItems = countResult.length > 0 ? countResult[0].totalItems : 0;
+      const totalPages = Math.ceil(totalItems / limitNum);
+
+      // Add skip and limit to the main query
+      aggregationQuery.push(
+        { $skip: skipNum },
+        { $limit: limitNum }
+      );
+
+      // Execute paginated query
+      results = await mongoose.connection.db
+        .collection('ContactProfiles')
+        .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+
+      // Prepare pagination metadata
+      pagination = {
+        totalItems,
+        totalPages,
+        currentPage: pageNum,
+        pageSize: limitNum,
+      };
+    } else {
+      // Execute non-paginated query (for CSV or JSON without pagination)
+      results = await mongoose.connection.db
+        .collection('ContactProfiles')
+        .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+    }
+
+    // Handle response format
+    if (format === 'csv') {
+      const fields = [
+        { label: 'Account Number', value: 'Account Number' },
+        { label: 'Customer Name', value: 'Customer Name' },
+        { label: 'Dealer', value: 'Service Provider.value_label' },
+        { label: 'Mobile', value: 'Mobile' },
+        { label: 'Area', value: 'Tag Area' },
+        { label: 'Island', value: 'Island' },
+        { label: 'Atoll', value: 'Atoll' },
+        { label: 'Ward', value: 'Ward' },
+        { label: 'Road', value: 'Road' },
+        { label: 'Payment Type', value: 'Payment Type' },
+        { label: 'Service Price', value: 'Service Price' },
+        { label: 'Device Name', value: 'Device Name' },
+        { label: 'Service Status', value: 'Service Status' },
+        { label: 'Service Package', value: 'Service Package' },
+        { label: 'Service End Date', value: 'Service End Date' },
+      ];
+      const csvData = parse(results, { fields });
+      return { data: csvData, isCsv: true };
+    }
+
+    // Return JSON with pagination metadata
+    return {
+      data: results,
+      isCsv: false,
+      pagination,
+    };
+  } catch (error) {
+    console.error('Error exporting customer report:', error);
+    throw new Error('Error exporting customer report');
+  }
+};
+
 const exportDealerReports = async (startDate, endDate, dealerName) => {
 
   try {
@@ -809,8 +2205,6 @@ const exportDealerReports = async (startDate, endDate, dealerName) => {
 
     return csvData;
   }
-
-
   catch (error) {
     console.log('Error exporting report:', error);
     throw new Error("Error exporting report");
@@ -1615,8 +3009,6 @@ const exportManualJournalReports = async (page, limit) => {
       .aggregate(aggregationPipeline, { maxTimeMS: 60000, allowDiskUse: true })
       .toArray();
 
-      console.log(results, 'results for the manual journal report')
-
     const total = await mongoose.connection.db.collection('Journals')
       .countDocuments(matchConditions);
 
@@ -2398,211 +3790,211 @@ const getDealerNames = async () => {
 
 const getMtvUserReports = async (page, limit, startDate, endDate) => {
   try {
-      let dateFilter = {};
+    let dateFilter = {};
 
-      // Convert MM/DD/YYYY to Date object
-      const parseDate = (dateStr, isEnd = false) => {
-          if (typeof dateStr === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
-              const [month, day, year] = dateStr.split('/').map(Number);
-              const date = new Date(year, month - 1, day);
-              date.setHours(isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0, isEnd ? 999 : 0);
-              return date;
-          }
-          const date = new Date(dateStr);
-          if (isNaN(date.getTime())) throw new Error('Invalid date format');
-          date.setHours(isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0, isEnd ? 999 : 0);
-          return date;
-      };
-
-      if (startDate && endDate) {
-          const startUTC = parseDate(startDate);
-          const endUTC = parseDate(endDate, true);
-          dateFilter.createdAt = { $gte: startUTC, $lte: endUTC };
-      } else if (startDate) {
-          const startUTC = parseDate(startDate);
-          dateFilter.createdAt = { $gte: startUTC };
-      } else if (endDate) {
-          const endUTC = parseDate(endDate, true);
-          dateFilter.createdAt = { $lte: endUTC };
+    // Convert MM/DD/YYYY to Date object
+    const parseDate = (dateStr, isEnd = false) => {
+      if (typeof dateStr === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+        const [month, day, year] = dateStr.split('/').map(Number);
+        const date = new Date(year, month - 1, day);
+        date.setHours(isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0, isEnd ? 999 : 0);
+        return date;
       }
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) throw new Error('Invalid date format');
+      date.setHours(isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0, isEnd ? 999 : 0);
+      return date;
+    };
 
-      // Build the aggregation pipeline
-      const aggregationPipeline = [
-          { $match: dateFilter },
-          { $sort: { createdAt: -1 } },
-          {
-              $project: {
-                  _id: 0,
-                  Name: { $concat: ['$firstName', ' ', '$lastName'] },
-                  'Phone Number': '$phoneNumber',
-                  'Country Code': '$countryCode',
-                  'Referral Code': '$referralCode',
-                  'Referral Type': '$referralType',
-                  Date: {
-                      $dateToString: {
-                          format: '%d-%b-%Y',
-                          date: '$createdAt',
-                          timezone: 'Indian/Maldives',
-                      },
-                  },
-              },
+    if (startDate && endDate) {
+      const startUTC = parseDate(startDate);
+      const endUTC = parseDate(endDate, true);
+      dateFilter.createdAt = { $gte: startUTC, $lte: endUTC };
+    } else if (startDate) {
+      const startUTC = parseDate(startDate);
+      dateFilter.createdAt = { $gte: startUTC };
+    } else if (endDate) {
+      const endUTC = parseDate(endDate, true);
+      dateFilter.createdAt = { $lte: endUTC };
+    }
+
+    // Build the aggregation pipeline
+    const aggregationPipeline = [
+      { $match: dateFilter },
+      { $sort: { createdAt: -1 } },
+      {
+        $project: {
+          _id: 0,
+          Name: { $concat: ['$firstName', ' ', '$lastName'] },
+          'Phone Number': '$phoneNumber',
+          'Country Code': '$countryCode',
+          'Referral Code': '$referralCode',
+          'Referral Type': '$referralType',
+          Date: {
+            $dateToString: {
+              format: '%d-%b-%Y',
+              date: '$createdAt',
+              timezone: 'Indian/Maldives',
+            },
           },
-      ];
+        },
+      },
+    ];
 
-      // Conditionally add pagination stages
-      const isPaginated = page !== undefined && limit !== undefined;
-      if (isPaginated) {
-          const skip = (page - 1) * limit;
-          aggregationPipeline.splice(2, 0, { $skip: skip }, { $limit: limit });
-      }
+    // Conditionally add pagination stages
+    const isPaginated = page !== undefined && limit !== undefined;
+    if (isPaginated) {
+      const skip = (page - 1) * limit;
+      aggregationPipeline.splice(2, 0, { $skip: skip }, { $limit: limit });
+    }
 
-      const mtvDb = getMTVConnection();
-      const results = await mtvDb
-          .collection('MTVUsers')
-          .aggregate(aggregationPipeline)
-          .toArray();
+    const mtvDb = getMTVConnection();
+    const results = await mtvDb
+      .collection('MTVUsers')
+      .aggregate(aggregationPipeline)
+      .toArray();
 
-      // Calculate total count for pagination (only needed if paginated)
-      let pagination = {};
-      if (isPaginated) {
-          const total = await mtvDb
-              .collection('MTVUsers')
-              .countDocuments(dateFilter);
-          pagination = {
-              total,
-              page,
-              limit,
-              totalPages: Math.ceil(total / limit),
-          };
-      }
-
-      return {
-          message: 'User Reports Data',
-          data: results,
-          ...(isPaginated && { pagination }), // Only include pagination if paginated
+    // Calculate total count for pagination (only needed if paginated)
+    let pagination = {};
+    if (isPaginated) {
+      const total = await mtvDb
+        .collection('MTVUsers')
+        .countDocuments(dateFilter);
+      pagination = {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       };
+    }
+
+    return {
+      message: 'User Reports Data',
+      data: results,
+      ...(isPaginated && { pagination }), // Only include pagination if paginated
+    };
   } catch (err) {
-      console.log('Error occurred while fetching!!', err);
-      throw err;
+    console.log('Error occurred while fetching!!', err);
+    throw err;
   }
 };
 
 
 const getReferralCountReport = async (req) => {
   try {
-      // Parse query parameters, but allow them to be undefined for CSV download
-      const page = req.query.page ? parseInt(req.query.page) : undefined;
-      const limit = req.query.limit ? parseInt(req.query.limit) : undefined;
-      const search = req.query.search ? req.query.search.toLowerCase() : '';
-      const skip = page && limit ? (page - 1) * limit : 0; // Only calculate skip if pagination is applied
+    // Parse query parameters, but allow them to be undefined for CSV download
+    const page = req.query.page ? parseInt(req.query.page) : undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit) : undefined;
+    const search = req.query.search ? req.query.search.toLowerCase() : '';
+    const skip = page && limit ? (page - 1) * limit : 0; // Only calculate skip if pagination is applied
 
-      // Build the search regex for referralCode and referralType
-      const searchFilter = search
-          ? {
-                $or: [
-                    { referralCode: { $regex: search, $options: 'i' } },
-                    { referralType: { $regex: search, $options: 'i' } },
-                ],
-            }
-          : {};
-
-      // Build the base aggregation pipeline (without pagination stages)
-      const aggregationPipeline = [
-          // Match users with a referralCode and apply search filter
-          {
-              $match: {
-                  referralCode: { $exists: true, $ne: null },
-                  ...searchFilter,
-              },
-          },
-          // Group by referralCode and referralType, and count the number of users
-          {
-              $group: {
-                  _id: {
-                      referralCode: '$referralCode',
-                      referralType: '$referralType',
-                  },
-                  referralCount: { $sum: 1 },
-              },
-          },
-          // Filter out groups with empty referralCode or referralType
-          {
-              $match: {
-                  '_id.referralCode': { $ne: '' },
-                  '_id.referralType': { $ne: '' },
-              },
-          },
-          // Project the desired output
-          {
-              $project: {
-                  _id: 0,
-                  'Referral Code': '$_id.referralCode',
-                  'Referral Type': '$_id.referralType',
-                  'Referral Count': '$referralCount',
-              },
-          },
-          // Sort by Referral Count in descending order
-          { $sort: { 'Referral Count': -1 } },
-      ];
-
-      // Conditionally add pagination stages if page and limit are provided
-      if (page !== undefined && limit !== undefined) {
-          aggregationPipeline.push(
-              { $skip: skip },
-              { $limit: limit }
-          );
+    // Build the search regex for referralCode and referralType
+    const searchFilter = search
+      ? {
+        $or: [
+          { referralCode: { $regex: search, $options: 'i' } },
+          { referralType: { $regex: search, $options: 'i' } },
+        ],
       }
+      : {};
 
-      const mtvDb = getMTVConnection();
-      const results = await mtvDb
-          .collection('MTVUsers')
-          .aggregate(aggregationPipeline)
-          .toArray();
+    // Build the base aggregation pipeline (without pagination stages)
+    const aggregationPipeline = [
+      // Match users with a referralCode and apply search filter
+      {
+        $match: {
+          referralCode: { $exists: true, $ne: null },
+          ...searchFilter,
+        },
+      },
+      // Group by referralCode and referralType, and count the number of users
+      {
+        $group: {
+          _id: {
+            referralCode: '$referralCode',
+            referralType: '$referralType',
+          },
+          referralCount: { $sum: 1 },
+        },
+      },
+      // Filter out groups with empty referralCode or referralType
+      {
+        $match: {
+          '_id.referralCode': { $ne: '' },
+          '_id.referralType': { $ne: '' },
+        },
+      },
+      // Project the desired output
+      {
+        $project: {
+          _id: 0,
+          'Referral Code': '$_id.referralCode',
+          'Referral Type': '$_id.referralType',
+          'Referral Count': '$referralCount',
+        },
+      },
+      // Sort by Referral Count in descending order
+      { $sort: { 'Referral Count': -1 } },
+    ];
 
-      // Get total count for pagination metadata
-      const countPipeline = [
-          {
-              $match: {
-                  referralCode: { $exists: true, $ne: null },
-                  ...searchFilter,
-              },
-          },
-          {
-              $group: {
-                  _id: {
-                      referralCode: '$referralCode',
-                      referralType: '$referralType',
-                  },
-              },
-          },
-          // Filter out groups with empty referralCode or referralType
-          {
-              $match: {
-                  '_id.referralCode': { $ne: '' },
-                  '_id.referralType': { $ne: '' },
-              },
-          },
-          { $count: 'total' },
-      ];
-      const countResult = await mtvDb
-          .collection('MTVUsers')
-          .aggregate(countPipeline)
-          .toArray();
-      const total = countResult[0]?.total || 0;
+    // Conditionally add pagination stages if page and limit are provided
+    if (page !== undefined && limit !== undefined) {
+      aggregationPipeline.push(
+        { $skip: skip },
+        { $limit: limit }
+      );
+    }
 
-      return {
-          message: 'Referral Count Report Data',
-          data: results,
-          pagination: {
-              page: page || 1, // Default to 1 if not provided
-              limit: limit || total, // Use total as limit if not provided (i.e., full dataset)
-              total,
-              totalPages: limit ? Math.ceil(total / limit) : 1, // 1 page if no limit
+    const mtvDb = getMTVConnection();
+    const results = await mtvDb
+      .collection('MTVUsers')
+      .aggregate(aggregationPipeline)
+      .toArray();
+
+    // Get total count for pagination metadata
+    const countPipeline = [
+      {
+        $match: {
+          referralCode: { $exists: true, $ne: null },
+          ...searchFilter,
+        },
+      },
+      {
+        $group: {
+          _id: {
+            referralCode: '$referralCode',
+            referralType: '$referralType',
           },
-      };
+        },
+      },
+      // Filter out groups with empty referralCode or referralType
+      {
+        $match: {
+          '_id.referralCode': { $ne: '' },
+          '_id.referralType': { $ne: '' },
+        },
+      },
+      { $count: 'total' },
+    ];
+    const countResult = await mtvDb
+      .collection('MTVUsers')
+      .aggregate(countPipeline)
+      .toArray();
+    const total = countResult[0]?.total || 0;
+
+    return {
+      message: 'Referral Count Report Data',
+      data: results,
+      pagination: {
+        page: page || 1, // Default to 1 if not provided
+        limit: limit || total, // Use total as limit if not provided (i.e., full dataset)
+        total,
+        totalPages: limit ? Math.ceil(total / limit) : 1, // 1 page if no limit
+      },
+    };
   } catch (err) {
-      console.log('Error occurred while fetching referral count report!!', err);
-      throw err;
+    console.log('Error occurred while fetching referral count report!!', err);
+    throw err;
   }
 };
 
@@ -2758,5 +4150,8 @@ module.exports = {
   getMtvUserReports,
   getReferralCountReport,
   getDeviceStatistics,
-  getDeviceStatisticsForExport
+  getDeviceStatisticsForExport,
+  exportCustomerReports,
+  exportCustomerReportsNotEffective,
+  exportCustomerDealerWiseCollection
 }

@@ -21,6 +21,12 @@ router.get('/getReports', billingReportController.getReports);
 
 router.get('/getAllReports', billingReportController.exportCSV);
 
+router.get('/customerDealers', billingReportController.exportCustomerCSVorJSON);
+
+router.get('/customerDisconnectedDealers', billingReportController.exportCustomerReportsNotEffective);
+
+router.get('/customerDealerWiseCollection', billingReportController.exportCustomerDealerWiseCollection);
+
 router.get('/getCollectionReports', billingReportController.exportCollectionReports);
 
 router.get('/getAtolls', billingReportController.getAtollsData);

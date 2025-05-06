@@ -16,6 +16,9 @@ import BulkDealerUploads from "./components/loginReport/BulkDealerUploads";
 import MtvRegisteredCustomer from './components/loginReport/MtvRegisteredCustomer';
 import ReferralCountReports from './components/loginReport/ReferralCountReports';
 import DeviceStatistics from './components/loginReport/DeviceStatistics';
+import SubscribedDealerReports from './components/loginReport/SubscribedDealerReports';
+import SubscribedDisconnectedReports from './components/loginReport/SubscribedDisconnectedReport';
+import DealerWisecollection from './components/loginReport/DealerWiseCollection'
 import { ToastContainer, Flip } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 // import RbacPermissions from "./components/loginReport/RbacPermissions";
@@ -55,6 +58,9 @@ function App() {
         <Route path="rbac/roles" element={<RbacRoles />} />
         <Route path="mtv/registered/counts" element={<ReferralCountReports />} />
         <Route path="device/statistics" element={<DeviceStatistics />} />
+        <Route path="subscribed/dealers" element={<SubscribedDealerReports />} />
+        <Route path="subscribed/disconnected" element={<SubscribedDisconnectedReports />} />
+        <Route path="dealerWiseCollection" element={<DealerWisecollection />} />
         {/* <Route path="rbac/permissions" element={<RbacPermissions />} /> */}
         </Route>
         </Route>

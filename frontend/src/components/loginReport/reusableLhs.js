@@ -31,6 +31,7 @@ import {
     HowToReg as HowToRegIcon,
     BarChart as BarChartIcon
 } from '@mui/icons-material';
+import { el } from 'date-fns/locale';
 
 const ReusableLhs = () => {
     const navigate = useNavigate();
@@ -41,6 +42,7 @@ const ReusableLhs = () => {
     const [openRbacSubmenu, setOpenRbacSubmenu] = useState(false);
     const [openMtvRegisterSubmenu, setOpenMtvregisterSubmenu] = useState(false);
     const [openDeviceSubmenu, setOpenDeviceSubmenu] = useState(false);
+    const [openDealerMenu, setOpenDealerMenu] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [userRoles, setUserRoles] = useState([]);
 
@@ -70,6 +72,12 @@ const ReusableLhs = () => {
         { name: 'Device Statistics', path: '/device/statistics', icon: <BarChartIcon /> },
     ]
 
+    const dealerReports = [
+        { name: 'Subscribed Dealer Reports', path: '/subscribed/dealers', icon: <BarChartIcon /> },
+        { name: 'Subscribed Disconnected Reports', path: '/subscribed/disconnected', icon: <BarChartIcon /> },
+        { name: 'Dealer Wise Collection', path: '/dealerWiseCollection', icon: <BarChartIcon /> },
+    ]
+
     // Initialize component state based on current location and stored preferences
     useEffect(() => {
         // Check authentication
@@ -95,7 +103,8 @@ const ReusableLhs = () => {
             ...salesReportItems,
             ...rbacReportItems,
             ...mtvRegisterReportItems,
-            ...deviceStatistics
+            ...deviceStatistics,
+            ...dealerReports,
         ];
         const currentIndex = allMenuItems.findIndex(item => item.path === location.pathname);
         setSelectedIndex(currentIndex >= 0 ? currentIndex : 0);
@@ -118,6 +127,10 @@ const ReusableLhs = () => {
         else if (deviceStatistics.some(item => item.path === location.pathname)) {
             setOpenDeviceSubmenu(true);
             localStorage.setItem('openDeviceSubmenu', JSON.stringify(true));
+        }
+        else if (dealerReports.some(item => item.path === location.pathname)) {
+            setOpenDealerMenu(true);
+            localStorage.setItem('openDealersSubmenu', JSON.stringify(true));
         }
     }, [location.pathname, navigate]);
 
@@ -204,6 +217,21 @@ const ReusableLhs = () => {
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
         }
+        else if (menu === 'openDealer') {
+            const newState = !openDealerMenu;
+            setOpenDealerMenu(newState);
+            setOpenDeviceSubmenu(false);
+            setOpenFinancialSubmenu(false);
+            setOpenSalesSubmenu(false);
+            setOpenRbacSubmenu(false);
+            setOpenMtvregisterSubmenu(false);
+            localStorage.setItem('openDealersSubmenu', JSON.stringify(newState));
+            localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
+            localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
+        }
     };
 
     const canViewFinancialReports = userRoles.includes('Finance') || userRoles.includes('Admin');
@@ -211,6 +239,7 @@ const ReusableLhs = () => {
     const canViewRbacManagement = userRoles.includes('Admin');
     const canViewMtvUsersManagement = userRoles.includes('Admin') || userRoles.includes('Sales');
     const canViewDeviceStatistics = userRoles.includes('Admin');
+    const canViewDealerReports = userRoles.includes('Admin') || userRoles.includes('Finance') || userRoles.includes('Sales');
 
     // Rest of your JSX remains the same...
     // Return statement with Box, List, etc. stays unchanged
@@ -568,6 +597,86 @@ const ReusableLhs = () => {
 
                                 <Collapse in={openDeviceSubmenu && isSidebarOpen} timeout="auto" unmountOnExit>
                                     {deviceStatistics.map((item, index) => (
+                                        <ListItemButton
+                                            key={item.name}
+                                            selected={location?.pathname === item.path}
+                                            onClick={() => handleListItemClick(
+                                                index + financialReportItems.length + salesReportItems.length + 1,
+                                                item.path
+                                            )}
+                                            component={Link}
+                                            to={item.path}
+                                            sx={{
+                                                pl: isSidebarOpen ? 5 : 1,
+                                                py: 1.2,
+                                                mx: 1,
+                                                borderRadius: 2,
+                                                transition: 'all 0.3s ease',
+                                                '&:hover': {
+                                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                                    transform: isSidebarOpen ? 'translateX(5px)' : 'none',
+                                                },
+                                                '&.Mui-selected': {
+                                                    backgroundColor: '#3b82f6',
+                                                    color: '#ffffff',
+                                                    '&:hover': { backgroundColor: '#2563eb' },
+                                                },
+                                            }}
+                                        >
+                                            <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                                {item.icon}
+                                            </ListItemIcon>
+                                            {isSidebarOpen && (
+                                                <ListItemText
+                                                    primary={item.name}
+                                                    primaryTypographyProps={{
+                                                        fontSize: 14,
+                                                        fontWeight: 400,
+                                                    }}
+                                                />
+                                            )}
+                                        </ListItemButton>
+                                    ))}
+                                </Collapse>
+                            </>
+                        )}
+
+                        {/* Dealer Reports Section */}
+                        {canViewDealerReports && (
+                            <>
+                                <ListItemButton
+                                    onClick={() => handleSubmenuToggle('openDealer')}
+                                    sx={{
+                                        py: 1.5,
+                                        mx: 1,
+                                        borderRadius: 2,
+                                        transition: 'all 0.3s ease',
+                                        '&:hover': {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                        },
+                                        backgroundColor: openDealerMenu ? 'rgba(255, 255, 255, 0.05)' : 'inherit',
+                                    }}
+                                >
+                                    <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                        <AssignmentIcon />
+                                    </ListItemIcon>
+                                    {isSidebarOpen && (
+                                        <>
+                                            <ListItemText
+                                                primary="Dealer Reports"
+                                                primaryTypographyProps={{ fontWeight: 500 }}
+                                            />
+                                            {openDealerMenu ? (
+                                                <ExpandLess sx={{ color: '#93c5fd' }} />
+                                            ) : (
+                                                <ExpandMore sx={{ color: '#93c5fd' }} />
+                                            )}
+                                        </>
+                                    )}
+                                </ListItemButton>
+
+                                <Collapse in={openDealerMenu && isSidebarOpen} timeout="auto" unmountOnExit>
+                                    {dealerReports.map((item, index) => (
                                         <ListItemButton
                                             key={item.name}
                                             selected={location?.pathname === item.path}
