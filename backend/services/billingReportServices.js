@@ -2243,6 +2243,66 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
               },
             },
           },
+          'GST': {
+            $reduce: {
+              input: {
+                $map: {
+                  input: '$subscriptionsData.services.price_terms.price',
+                  as: 'price',
+                  in: {
+                    $round: [
+                      {
+                        $multiply: [
+                          { $divide: [{ $toDouble: { $ifNull: ['$$price', '0.0'] } }, 2.16] },
+                          0.16
+                        ]
+                      },
+                      2
+                    ]
+                  },
+                },
+              },
+              initialValue: '',
+              in: {
+                $cond: {
+                  if: { $eq: ['$$value', ''] },
+                  then: { $toString: '$$this' },
+                  else: { $concat: ['$$value', ', ', { $toString: '$$this' }] },
+                },
+              },
+            },
+          },
+          'Amount': {
+            $reduce: {
+              input: {
+                $map: {
+                  input: '$subscriptionsData.services.price_terms.price',
+                  as: 'price',
+                  in: {
+                    $ceil: {
+                      $add: [
+                        { $divide: [{ $toDouble: { $ifNull: ['$$price', '0.0'] } }, 2.16] },
+                        {
+                          $multiply: [
+                            { $divide: [{ $toDouble: { $ifNull: ['$$price', '0.0'] } }, 2.16] },
+                            0.16
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                },
+              },
+              initialValue: '',
+              in: {
+                $cond: {
+                  if: { $eq: ['$$value', ''] },
+                  then: { $toString: '$$this' },
+                  else: { $concat: ['$$value', ', ', { $toString: '$$this' }] },
+                },
+              },
+            },
+          },
         },
       },
     ];
@@ -2311,6 +2371,8 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
         { label: 'Road', value: 'Road' },
         { label: 'Payment Type', value: 'Payment Type' },
         { label: 'Service Price', value: 'Service Price' },
+        { label: 'GST', value: 'GST' },
+        { label: 'Amount', value: 'Amount' },
         { label: 'Device Name', value: 'Device Name' },
         { label: 'Service Status', value: 'Service Status' },
         { label: 'Service Package', value: 'Service Package' },

@@ -235,6 +235,8 @@ const DealerWiseCollection = () => {
     'Payment Type': 'Payment Type',
     'Payment Action': 'Payment Action',
     'Service Price': 'Service Price',
+    'GST': 'GST',
+    'Amount': 'Amount',
     'Service Provider': 'Dealer',
     // 'Service Status': 'Status',
     // 'Service Package': 'Package',
