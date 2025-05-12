@@ -80,6 +80,10 @@ router.get('/devices/statistics', billingReportController.getDeviceStatistics);
 
 router.get('/devices/statistics/export', billingReportController.exportDeviceStatistics);
 
+router.get('/devices/names', billingReportController.getDeviceNames);
+
+router.get('/vip/tags', billingReportController.getVipTags);
+
 // router.get('/fetchFutureReports', billingReportController.fetchFutureReports);
 
 module.exports = router;

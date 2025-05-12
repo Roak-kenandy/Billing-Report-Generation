@@ -1012,7 +1012,7 @@ const exportReports = async (search, startDate, endDate, atoll, island) => {
 // };
 
 
-const exportCustomerReports = async (search, startDate, endDate, atoll, island, format, page, limit) => {
+const exportCustomerReports = async (search, startDate, endDate, atoll, island, format, page, limit, serviceProvider) => {
   try {
     // Calculate timestamps for date filtering
     let startTimestamp, endTimestamp;
@@ -1024,9 +1024,19 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
     }
 
     // Match stage for filtering
-    let matchStage = {
-      'custom_fields.key': 'service_provider', // Filter for service_provider in custom_fields
-    };
+    let matchStage = {};
+
+    if (serviceProvider) {
+      matchStage['custom_fields'] = {
+        $elemMatch: {
+          key: 'service_provider',
+          value_label: serviceProvider,
+        },
+      };
+    } else {
+      // Only include records with a service_provider field if no specific provider is requested
+      matchStage['custom_fields.key'] = 'service_provider';
+    }
 
     if (search) {
       matchStage.$text = { $search: search };
@@ -1040,7 +1050,7 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
       matchStage['location.city'] = island;
     }
 
-    // Date filter for subscriptions (if applicable)
+    // Date filter for subscriptions
     let subscriptionDateFilter = {};
     if (startDate || endDate) {
       const elemMatchConditions = {};
@@ -1066,7 +1076,7 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
       },
       { $match: subscriptionDateFilter },
       { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
-      { $match: { 'subscriptionsData.services.state': 'EFFECTIVE' } }, // Filter for EFFECTIVE status
+      { $match: { 'subscriptionsData.services.state': 'EFFECTIVE' } },
       { $count: 'totalItems' },
     ];
 
@@ -1083,7 +1093,7 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
       },
       { $match: subscriptionDateFilter },
       { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
-      { $match: { 'subscriptionsData.services.state': 'EFFECTIVE' } }, // Filter for EFFECTIVE status
+      { $match: { 'subscriptionsData.services.state': 'EFFECTIVE' } },
       {
         $lookup: {
           from: 'Devices',
@@ -1118,16 +1128,23 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
           'Customer Name': '$profile.name',
           'Customer Type': '$profile.type',
           'Service Provider': {
-            $arrayElemAt: [
-              {
-                $filter: {
-                  input: '$custom_fields',
-                  as: 'field',
-                  cond: { $eq: ['$$field.key', 'service_provider'] },
+            $let: {
+              vars: {
+                spField: {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: '$custom_fields',
+                        as: 'field',
+                        cond: { $eq: ['$$field.key', 'service_provider'] },
+                      },
+                    },
+                    0,
+                  ],
                 },
               },
-              0,
-            ],
+              in: '$$spField.value_label',
+            },
           },
           'Customer Code': {
             $arrayElemAt: [
@@ -1195,8 +1212,8 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
             $filter: {
               input: '$subscriptionsData.services.state',
               as: 'status',
-              cond: { $eq: ['$$status', 'EFFECTIVE'] }
-            }
+              cond: { $eq: ['$$status', 'EFFECTIVE'] },
+            },
           },
           'Service Package': {
             $filter: {
@@ -1204,11 +1221,16 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
               as: 'package',
               cond: {
                 $eq: [
-                  { $arrayElemAt: ['$subscriptionsData.services.state', { $indexOfArray: ['$subscriptionsData.services.product.name', '$$package'] }] },
-                  'EFFECTIVE'
-                ]
-              }
-            }
+                  {
+                    $arrayElemAt: [
+                      '$subscriptionsData.services.state',
+                      { $indexOfArray: ['$subscriptionsData.services.product.name', '$$package'] },
+                    ],
+                  },
+                  'EFFECTIVE',
+                ],
+              },
+            },
           },
           'Service Price': {
             $cond: {
@@ -1225,23 +1247,26 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
                   as: 'startDate',
                   cond: {
                     $eq: [
-                      { $arrayElemAt: ['$subscriptionsData.services.state', { $indexOfArray: ['$subscriptionsData.services.service_terms.start_date', '$$startDate'] }] },
-                      'EFFECTIVE'
-                    ]
-                  }
-                }
+                      {
+                        $arrayElemAt: [
+                          '$subscriptionsData.services.state',
+                          { $indexOfArray: ['$subscriptionsData.services.service_terms.start_date', '$$startDate'] },
+                        ],
+                      },
+                      'EFFECTIVE',
+                    ],
+                  },
+                },
               },
               as: 'startDate',
               in: {
                 $dateToString: {
-                  format: "%d %b %Y",
-                  date: {
-                    $toDate: { $multiply: ['$$startDate', 1000] }
-                  },
-                  timezone: "Indian/Maldives"
-                }
-              }
-            }
+                  format: '%d %b %Y',
+                  date: { $toDate: { $multiply: ['$$startDate', 1000] } },
+                  timezone: 'Indian/Maldives',
+                },
+              },
+            },
           },
           'Service End Date': {
             $map: {
@@ -1251,23 +1276,26 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
                   as: 'endDate',
                   cond: {
                     $eq: [
-                      { $arrayElemAt: ['$subscriptionsData.services.state', { $indexOfArray: ['$subscriptionsData.services.service_terms.end_date', '$$endDate'] }] },
-                      'EFFECTIVE'
-                    ]
-                  }
-                }
+                      {
+                        $arrayElemAt: [
+                          '$subscriptionsData.services.state',
+                          { $indexOfArray: ['$subscriptionsData.services.service_terms.end_date', '$$endDate'] },
+                        ],
+                      },
+                      'EFFECTIVE',
+                    ],
+                  },
+                },
               },
               as: 'endDate',
               in: {
                 $dateToString: {
-                  format: "%d %b %Y",
-                  date: {
-                    $toDate: { $multiply: ['$$endDate', 1000] }
-                  },
-                  timezone: "Indian/Maldives"
-                }
-              }
-            }
+                  format: '%d %b %Y',
+                  date: { $toDate: { $multiply: ['$$endDate', 1000] } },
+                  timezone: 'Indian/Maldives',
+                },
+              },
+            },
           },
           'Tag Area': {
             $reduce: {
@@ -1340,9 +1368,9 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
       const fields = [
         { label: 'Account Number', value: 'Account Number' },
         { label: 'Customer Name', value: 'Customer Name' },
-        { label: 'Service Provider', value: 'Service Provider.value_label' },
+        { label: 'Service Provider', value: 'Service Provider' },
         { label: 'Mobile', value: 'Mobile' },
-        {label: 'Area', value: 'Tag Area'},
+        { label: 'Area', value: 'Tag Area' },
         { label: 'Island', value: 'Island' },
         { label: 'Atoll', value: 'Atoll' },
         { label: 'Ward', value: 'Ward' },
@@ -1351,7 +1379,6 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
         { label: 'Device Name', value: 'Device Name' },
         { label: 'Service Status', value: 'Service Status' },
         { label: 'Service Package', value: 'Service Package' },
-        // { label: 'Service Start Date', value: 'Service Start Date' },
         { label: 'Service End Date', value: 'Service End Date' },
       ];
       const csvData = parse(results, { fields });
@@ -1370,7 +1397,7 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
   }
 };
 
-const exportCustomerReportsNotEffective = async (search, startDate, endDate, atoll, island, format, page, limit) => {
+const exportCustomerReportsNotEffective = async (search, startDate, endDate, atoll, island, format, page, limit, serviceProvider) => {
   try {
     // Calculate timestamps for date filtering
     let startTimestamp, endTimestamp;
@@ -1382,9 +1409,18 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
     }
 
     // Match stage for filtering
-    let matchStage = {
-      'custom_fields.key': 'service_provider', // Filter for service_provider in custom_fields
-    };
+    let matchStage = {};
+
+    if (serviceProvider) {
+      matchStage['custom_fields'] = {
+        $elemMatch: {
+          key: 'service_provider',
+          value_label: serviceProvider,
+        },
+      };
+    } else {
+      matchStage['custom_fields.key'] = 'service_provider';
+    }
 
     if (search) {
       matchStage.$text = { $search: search };
@@ -1398,7 +1434,7 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
       matchStage['location.city'] = island;
     }
 
-    // Date filter for subscriptions (if applicable)
+    // Date filter for subscriptions
     let subscriptionDateFilter = {};
     if (startDate || endDate) {
       const elemMatchConditions = {};
@@ -1424,7 +1460,7 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
       },
       { $match: subscriptionDateFilter },
       { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
-      { $match: { 'subscriptionsData.services.state': 'NOT_EFFECTIVE' } }, // Filter for NOT_EFFECTIVE status
+      { $match: { 'subscriptionsData.services.state': 'NOT_EFFECTIVE' } },
       { $count: 'totalItems' },
     ];
 
@@ -1441,7 +1477,7 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
       },
       { $match: subscriptionDateFilter },
       { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
-      { $match: { 'subscriptionsData.services.state': 'NOT_EFFECTIVE' } }, // Filter for NOT_EFFECTIVE status
+      { $match: { 'subscriptionsData.services.state': 'NOT_EFFECTIVE' } },
       {
         $lookup: {
           from: 'Devices',
@@ -1476,16 +1512,23 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
           'Customer Name': '$profile.name',
           'Customer Type': '$profile.type',
           'Service Provider': {
-            $arrayElemAt: [
-              {
-                $filter: {
-                  input: '$custom_fields',
-                  as: 'field',
-                  cond: { $eq: ['$$field.key', 'service_provider'] },
+            $let: {
+              vars: {
+                spField: {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: '$custom_fields',
+                        as: 'field',
+                        cond: { $eq: ['$$field.key', 'service_provider'] },
+                      },
+                    },
+                    0,
+                  ],
                 },
               },
-              0,
-            ],
+              in: '$$spField.value_label',
+            },
           },
           'Customer Code': {
             $arrayElemAt: [
@@ -1553,8 +1596,8 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
             $filter: {
               input: '$subscriptionsData.services.state',
               as: 'status',
-              cond: { $eq: ['$$status', 'NOT_EFFECTIVE'] }
-            }
+              cond: { $eq: ['$$status', 'NOT_EFFECTIVE'] },
+            },
           },
           'Service Package': {
             $filter: {
@@ -1562,11 +1605,16 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
               as: 'package',
               cond: {
                 $eq: [
-                  { $arrayElemAt: ['$subscriptionsData.services.state', { $indexOfArray: ['$subscriptionsData.services.product.name', '$$package'] }] },
-                  'NOT_EFFECTIVE'
-                ]
-              }
-            }
+                  {
+                    $arrayElemAt: [
+                      '$subscriptionsData.services.state',
+                      { $indexOfArray: ['$subscriptionsData.services.product.name', '$$package'] },
+                    ],
+                  },
+                  'NOT_EFFECTIVE',
+                ],
+              },
+            },
           },
           'Service Price': {
             $cond: {
@@ -1583,23 +1631,26 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
                   as: 'startDate',
                   cond: {
                     $eq: [
-                      { $arrayElemAt: ['$subscriptionsData.services.state', { $indexOfArray: ['$subscriptionsData.services.service_terms.start_date', '$$startDate'] }] },
-                      'NOT_EFFECTIVE'
-                    ]
-                  }
-                }
+                      {
+                        $arrayElemAt: [
+                          '$subscriptionsData.services.state',
+                          { $indexOfArray: ['$subscriptionsData.services.service_terms.start_date', '$$startDate'] },
+                        ],
+                      },
+                      'NOT_EFFECTIVE',
+                    ],
+                  },
+                },
               },
               as: 'startDate',
               in: {
                 $dateToString: {
-                  format: "%d %b %Y",
-                  date: {
-                    $toDate: { $multiply: ['$$startDate', 1000] }
-                  },
-                  timezone: "Indian/Maldives"
-                }
-              }
-            }
+                  format: '%d %b %Y',
+                  date: { $toDate: { $multiply: ['$$startDate', 1000] } },
+                  timezone: 'Indian/Maldives',
+                },
+              },
+            },
           },
           'Service End Date': {
             $map: {
@@ -1609,23 +1660,26 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
                   as: 'endDate',
                   cond: {
                     $eq: [
-                      { $arrayElemAt: ['$subscriptionsData.services.state', { $indexOfArray: ['$subscriptionsData.services.service_terms.end_date', '$$endDate'] }] },
-                      'NOT_EFFECTIVE'
-                    ]
-                  }
-                }
+                      {
+                        $arrayElemAt: [
+                          '$subscriptionsData.services.state',
+                          { $indexOfArray: ['$subscriptionsData.services.service_terms.end_date', '$$endDate'] },
+                        ],
+                      },
+                      'NOT_EFFECTIVE',
+                    ],
+                  },
+                },
               },
               as: 'endDate',
               in: {
                 $dateToString: {
-                  format: "%d %b %Y",
-                  date: {
-                    $toDate: { $multiply: ['$$endDate', 1000] }
-                  },
-                  timezone: "Indian/Maldives"
-                }
-              }
-            }
+                  format: '%d %b %Y',
+                  date: { $toDate: { $multiply: ['$$endDate', 1000] } },
+                  timezone: 'Indian/Maldives',
+                },
+              },
+            },
           },
           'Tag Area': {
             $reduce: {
@@ -1698,18 +1752,16 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
       const fields = [
         { label: 'Account Number', value: 'Account Number' },
         { label: 'Customer Name', value: 'Customer Name' },
-        { label: 'Service Provider', value: 'Service Provider.value_label' },
+        { label: 'Service Provider', value: 'Service Provider' },
         { label: 'Mobile', value: 'Mobile' },
-        { label: 'Area', value: 'Tag Area'},
+        { label: 'Area', value: 'Tag Area' },
         { label: 'Island', value: 'Island' },
         { label: 'Atoll', value: 'Atoll' },
         { label: 'Ward', value: 'Ward' },
         { label: 'Road', value: 'Road' },
-        // { label: 'Account Status', value: 'Account Status' },
         { label: 'Device Name', value: 'Device Name' },
         { label: 'Service Status', value: 'Service Status' },
         { label: 'Service Package', value: 'Service Package' },
-        // { label: 'Service Start Date', value: 'Service Start Date' },
         { label: 'Service End Date', value: 'Service End Date' },
       ];
       const csvData = parse(results, { fields });
@@ -1728,9 +1780,17 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
   }
 };
 
-const exportCustomerDealerWiseCollection = async (search, startDate, endDate, atoll, island, format, page, limit) => {
+const exportCustomerDealerWiseCollection = async (search, startDate, endDate, atoll, island, format, page, limit, serviceProvider) => {
   try {
-    // Calculate timestamps for date filtering
+    // Validate date inputs
+    if (startDate && isNaN(new Date(startDate).getTime())) {
+      throw new Error('Invalid startDate');
+    }
+    if (endDate && isNaN(new Date(endDate).getTime())) {
+      throw new Error('Invalid endDate');
+    }
+
+    // Calculate timestamps for date filtering (in seconds)
     let startTimestamp, endTimestamp;
     if (startDate) {
       startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
@@ -1740,9 +1800,17 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
     }
 
     // Match stage for filtering
-    let matchStage = {
-      'custom_fields.key': 'service_provider', // Filter for service_provider in custom_fields
-    };
+    let matchStage = {};
+    if (serviceProvider) {
+      matchStage['custom_fields'] = {
+        $elemMatch: {
+          key: 'service_provider',
+          value_label: serviceProvider,
+        },
+      };
+    } else {
+      matchStage['custom_fields.key'] = 'service_provider';
+    }
 
     if (search) {
       matchStage.$text = { $search: search };
@@ -1756,17 +1824,23 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
       matchStage['location.city'] = island;
     }
 
-    // Date filter for subscriptions (if applicable)
-    let subscriptionDateFilter = {};
+    // Date filter for journals
+    let journalDateFilter = {};
     if (startDate || endDate) {
-      const elemMatchConditions = {};
+      const dateConditions = {};
       if (startDate) {
-        elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
+        dateConditions.$gte = startTimestamp;
       }
       if (endDate) {
-        elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
+        dateConditions.$lte = endTimestamp;
       }
-      subscriptionDateFilter.services = { $elemMatch: elemMatchConditions };
+      journalDateFilter = {
+        $or: [
+          { 'journalsData.posted_date': dateConditions },
+          { journalsData: { $exists: false } },
+          { journalsData: null },
+        ],
+      };
     }
 
     // Aggregation pipeline for counting total items
@@ -1774,14 +1848,16 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
       { $match: matchStage },
       {
         $lookup: {
-          from: 'Subscriptions',
+          from: 'Journals',
           localField: 'contact_id',
           foreignField: 'contact_id',
-          as: 'subscriptionsData',
+          as: 'journalsData',
         },
       },
-      { $match: subscriptionDateFilter },
-      { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
+      {
+        $unwind: { path: '$journalsData', preserveNullAndEmptyArrays: true },
+      },
+      { $match: journalDateFilter },
       { $count: 'totalItems' },
     ];
 
@@ -1796,8 +1872,9 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
           as: 'subscriptionsData',
         },
       },
-      { $match: subscriptionDateFilter },
-      { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
+      {
+        $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true },
+      },
       {
         $lookup: {
           from: 'Devices',
@@ -1823,37 +1900,78 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
         },
       },
       {
+        $unwind: { path: '$journalsData', preserveNullAndEmptyArrays: true },
+      },
+      { $match: journalDateFilter },
+      {
         $project: {
           _id: 0,
           'Account Number': '$account.number',
           'Contact Code': {
-            $concat: ['"', { $toString: { $arrayElemAt: ['$journalsData.contact_code', 0] } }, '"'],
+            $cond: {
+              if: { $or: [{ $eq: ['$journalsData', null] }, { $eq: ['$journalsData.contact_code', null] }] },
+              then: '',
+              else: { $concat: ['"', { $toString: '$journalsData.contact_code' }, '"'] },
+            },
           },
           'Customer Name': '$profile.name',
           'Customer Type': '$profile.type',
           'Service Provider': {
-            $arrayElemAt: [
-              {
-                $filter: {
-                  input: '$custom_fields',
-                  as: 'field',
-                  cond: { $eq: ['$$field.key', 'service_provider'] },
+            $let: {
+              vars: {
+                spField: {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: '$custom_fields',
+                        as: 'field',
+                        cond: { $eq: ['$$field.key', 'service_provider'] },
+                      },
+                    },
+                    0,
+                  ],
                 },
               },
-              0,
-            ],
+              in: '$$spField.value_label',
+            },
           },
           'Customer Code': {
-            $arrayElemAt: [
-              {
-                $filter: {
-                  input: '$custom_fields',
-                  as: 'field',
-                  cond: { $eq: ['$$field.key', 'customer_code'] },
+            $cond: {
+              if: {
+                $eq: [
+                  {
+                    $size: {
+                      $filter: {
+                        input: '$custom_fields',
+                        as: 'field',
+                        cond: { $eq: ['$$field.key', 'customer_code'] },
+                      },
+                    },
+                  },
+                  0,
+                ],
+              },
+              then: '',
+              else: {
+                $let: {
+                  vars: {
+                    codeField: {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: '$custom_fields',
+                            as: 'field',
+                            cond: { $eq: ['$$field.key', 'customer_code'] },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  },
+                  in: '$$codeField.value_label',
                 },
               },
-              0,
-            ],
+            },
           },
           Mobile: '$phone',
           Ward: '$location.address_line1',
@@ -1917,23 +2035,23 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
                     $round: [
                       {
                         $toDouble: {
-                          $ifNull: ['$$price', '0.0']
-                        }
+                          $ifNull: ['$$price', '0.0'],
+                        },
                       },
-                      2
-                    ]
-                  }
-                }
+                      2,
+                    ],
+                  },
+                },
               },
               initialValue: '',
               in: {
                 $cond: {
                   if: { $eq: ['$$value', ''] },
                   then: { $toString: '$$this' },
-                  else: { $concat: ['$$value', ', ', { $toString: '$$this' }] }
-                }
-              }
-            }
+                  else: { $concat: ['$$value', ', ', { $toString: '$$this' }] },
+                },
+              },
+            },
           },
           'Service Start Date': {
             $reduce: {
@@ -1943,24 +2061,22 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
                   as: 'startDate',
                   in: {
                     $dateToString: {
-                      format: "%d %b %Y",
-                      date: {
-                        $toDate: { $multiply: ['$$startDate', 1000] }
-                      },
-                      timezone: "Indian/Maldives"
-                    }
-                  }
-                }
+                      format: '%d %b %Y',
+                      date: { $toDate: { $multiply: ['$$startDate', 1000] } },
+                      timezone: 'Indian/Maldives',
+                    },
+                  },
+                },
               },
               initialValue: '',
               in: {
                 $cond: {
                   if: { $eq: ['$$value', ''] },
                   then: '$$this',
-                  else: { $concat: ['$$value', ', ', '$$this'] }
-                }
-              }
-            }
+                  else: { $concat: ['$$value', ', ', '$$this'] },
+                },
+              },
+            },
           },
           'Service End Date': {
             $reduce: {
@@ -1970,24 +2086,22 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
                   as: 'endDate',
                   in: {
                     $dateToString: {
-                      format: "%d %b %Y",
-                      date: {
-                        $toDate: { $multiply: ['$$endDate', 1000] }
-                      },
-                      timezone: "Indian/Maldives"
-                    }
-                  }
-                }
+                      format: '%d %b %Y',
+                      date: { $toDate: { $multiply: ['$$endDate', 1000] } },
+                      timezone: 'Indian/Maldives',
+                    },
+                  },
+                },
               },
               initialValue: '',
               in: {
                 $cond: {
                   if: { $eq: ['$$value', ''] },
                   then: '$$this',
-                  else: { $concat: ['$$value', ', ', '$$this'] }
-                }
-              }
-            }
+                  else: { $concat: ['$$value', ', ', '$$this'] },
+                },
+              },
+            },
           },
           'Tag Area': {
             $reduce: {
@@ -2004,6 +2118,123 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
                   if: { $eq: ['$$value', ''] },
                   then: '$$this',
                   else: { $concat: ['$$value', ', ', '$$this'] },
+                },
+              },
+            },
+          },
+          'Posted Date': {
+            $cond: {
+              if: { $or: [{ $eq: ['$journalsData', null] }, { $eq: ['$journalsData.posted_date', null] }] },
+              then: '',
+              else: {
+                $dateToString: {
+                  format: '%d-%b-%Y',
+                  date: { $toDate: { $multiply: ['$journalsData.posted_date', 1000] } },
+                  timezone: 'Indian/Maldives',
+                },
+              },
+            },
+          },
+          'User Name': {
+            $cond: {
+              if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
+              then: 'Quick Pay',
+              else: {
+                $cond: {
+                  if: { $or: [{ $eq: ['$journalsData', null] }, { $eq: ['$journalsData.submited_by_user_name', null] }] },
+                  then: '',
+                  else: { $toString: '$journalsData.submited_by_user_name' },
+                },
+              },
+            },
+          },
+          'Decoder No': {
+            $cond: {
+              if: {
+                $or: [
+                  { $eq: [{ $type: { $arrayElemAt: ['$devicesData.custom_fields', 0] } }, 'missing'] },
+                  { $eq: [{ $arrayElemAt: ['$devicesData.custom_fields', 0] }, null] },
+                  { $eq: [{ $size: { $arrayElemAt: ['$devicesData.custom_fields', 0] } }, 0] },
+                ],
+              },
+              then: '',
+              else: {
+                $let: {
+                  vars: {
+                    codeField: {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: { $arrayElemAt: ['$devicesData.custom_fields', 0] },
+                            as: 'field',
+                            cond: { $eq: ['$$field.key', 'code'] },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  },
+                  in: {
+                    $cond: {
+                      if: { $or: [{ $eq: ['$$codeField', null] }, { $eq: ['$$codeField', undefined] }] },
+                      then: '',
+                      else: { $toString: '$$codeField.value' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          'Receipt ID': {
+            $cond: {
+              if: { $or: [{ $eq: ['$journalsData', null] }, { $eq: ['$journalsData.related_entity.reference_code', null] }] },
+              then: '',
+              else: { $toString: '$journalsData.related_entity.reference_code' },
+            },
+          },
+          'Address': {
+            $reduce: {
+              input: [
+                { $toString: { $ifNull: ['$location.address_line1', ''] } },
+                { $toString: { $ifNull: ['$location.address_line2', ''] } },
+                { $toString: { $ifNull: ['$location.address_name', ''] } },
+                { $toString: { $ifNull: ['$location.city', ''] } },
+                { $toString: { $ifNull: ['$location.country', ''] } },
+                { $toString: { $ifNull: ['$location.town_city', ''] } },
+                { $toString: { $ifNull: ['$location.state_province_county', ''] } },
+              ],
+              initialValue: '',
+              in: {
+                $cond: {
+                  if: {
+                    $and: [
+                      { $ne: ['$$this', ''] },
+                      { $ne: ['$$value', ''] },
+                    ],
+                  },
+                  then: { $concat: ['$$value', ', ', '$$this'] },
+                  else: {
+                    $cond: {
+                      if: { $eq: ['$$value', ''] },
+                      then: '$$this',
+                      else: '$$value',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          'Payment Action': {
+            $cond: {
+              if: { $or: [{ $eq: ['$journalsData', null] }, { $eq: ['$journalsData.account_type', null] }] },
+              then: '',
+              else: {
+                $switch: {
+                  branches: [
+                    { case: { $eq: ['$journalsData.account_type', 'CREDIT'] }, then: 'Add' },
+                    { case: { $eq: ['$journalsData.account_type', 'DEBIT'] }, then: 'Deduct' },
+                  ],
+                  default: '',
                 },
               },
             },
@@ -2027,6 +2258,7 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
         .toArray();
       const totalItems = countResult.length > 0 ? countResult[0].totalItems : 0;
       const totalPages = Math.ceil(totalItems / limitNum);
+
 
       // Add skip and limit to the main query
       aggregationQuery.push(
@@ -2058,9 +2290,15 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
     // Handle response format
     if (format === 'csv') {
       const fields = [
+        { label: 'Posted Date', value: 'Posted Date' },
+        { label: 'User Name', value: 'User Name' },
+        { label: 'Decoder No.', value: 'Decoder No' },
+        { label: 'Receipt ID', value: 'Receipt ID' },
+        { label: 'Address', value: 'Address' },
+        { label: 'Payment Action', value: 'Payment Action' },
         { label: 'Account Number', value: 'Account Number' },
         { label: 'Customer Name', value: 'Customer Name' },
-        { label: 'Dealer', value: 'Service Provider.value_label' },
+        { label: 'Dealer', value: 'Service Provider' },
         { label: 'Mobile', value: 'Mobile' },
         { label: 'Area', value: 'Tag Area' },
         { label: 'Island', value: 'Island' },
@@ -2072,6 +2310,7 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
         { label: 'Device Name', value: 'Device Name' },
         { label: 'Service Status', value: 'Service Status' },
         { label: 'Service Package', value: 'Service Package' },
+        { label: 'Service Start Date', value: 'Service Start Date' },
         { label: 'Service End Date', value: 'Service End Date' },
       ];
       const csvData = parse(results, { fields });
@@ -4073,6 +4312,99 @@ const getDeviceStatistics = async () => {
   }
 };
 
+const getDeviceNames = async () => {
+  try {
+    const aggregationQuery = [
+      // Step 1: Unwind services array to process each service
+      {
+        $unwind: {
+          path: '$services',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      // Step 2: Match only services with state "EFFECTIVE"
+      {
+        $match: {
+          'services.state': 'EFFECTIVE'
+        }
+      },
+      // Step 3: Lookup Devices collection where ownership.id matches contact_id
+      {
+        $lookup: {
+          from: 'Devices',
+          localField: 'contact_id',
+          foreignField: 'ownership.id',
+          as: 'deviceData'
+        }
+      },
+      // Step 4: Unwind deviceData to process each device
+      {
+        $unwind: {
+          path: '$deviceData',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      // Step 5: Match devices with product name "MX 380"
+      {
+        $match: {
+          'deviceData.product.name': 'MX 380'
+        }
+      },
+      // Step 6: Project to include phone with each device
+      {
+        $project: {
+          organisationName: '$organisation_name',
+          phone: '$phone', // Correct path to the phone field
+          deviceName: '$deviceData.product.name',
+          ownershipName: '$deviceData.ownership.name'
+        }
+      },
+      // Step 7: Group by organisation name and collect devices with their phone
+      {
+        $group: {
+          _id: '$organisationName',
+          devices: {
+            $push: {
+              deviceName: '$deviceName',
+              ownershipName: '$ownershipName',
+              phone: '$phone'
+            }
+          }
+        }
+      },
+      // Step 8: Project the final output
+      {
+        $project: {
+          _id: 0,
+          organisationName: '$_id',
+          devices: 1
+        }
+      },
+      // Step 9: Sort by organisation name for consistent output
+      {
+        $sort: {
+          organisationName: 1
+        }
+      }
+    ];
+
+    const results = await mongoose.connection.db.collection('ContactProfiles')
+      .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+      .toArray();
+
+    // Format the response
+    return {
+      statistics: results.map(item => ({
+        organisationName: item.organisationName,
+        devices: item.devices
+      }))
+    };
+  } catch (error) {
+    console.log('Error fetching device statistics:', error);
+    throw new Error("Error fetching device statistics");
+  }
+};
+
 const getDeviceStatisticsForExport = async () => {
   try {
     const aggregationQuery = [
@@ -4131,6 +4463,143 @@ const getDeviceStatisticsForExport = async () => {
   }
 };
 
+const getVipTags = async () => {
+  try {
+    // Define aggregation pipeline
+    const aggregationQuery = [
+      {
+        $match: {
+          'tags.name': 'VIP'
+        }
+      },
+      {
+        $lookup: {
+          from: 'Subscriptions',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'subscriptionData'
+        }
+      },
+      {
+        $lookup: {
+          from: 'Devices',
+          localField: 'contact_id',
+          foreignField: 'ownership.id',
+          as: 'deviceData'
+        }
+      },
+      {
+        $lookup: {
+          from: 'Orders',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'orderData'
+        }
+      },
+      {
+        $lookup: {
+          from: 'Journals',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'journalData'
+        }
+      },
+      {
+        $unwind: {
+          path: '$subscriptionData.services',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          ContactCode: {
+            $concat: ['"', { $toString: { $arrayElemAt: ['$journalData.contact_code', 0] } }, '"']
+          },
+          DeviceCode: {
+            $cond: {
+              if: { $eq: [{ $type: '$deviceData.custom_fields.value' }, 'array'] },
+              then: { $arrayElemAt: [{ $arrayElemAt: ['$deviceData.custom_fields.value', 0] }, 0] },
+              else: '$deviceData.custom_fields.value'
+            }
+          },
+          CustomerName: '$profile.name',
+          CustomerType: '$profile.type',
+          CustomerType2: {
+            $cond: {
+              if: {
+                $or: [
+                  { $not: { $isArray: '$company_profile.industry_name' } },
+                  { $eq: [{ $size: { $ifNull: ['$company_profile.industry_name', []] } }, 0] }
+                ]
+              },
+              then: 'N/A',
+              else: { $arrayElemAt: ['$company_profile.industry_name', 0] }
+            }
+          },
+          PaymentType: {
+            $cond: {
+              if: { $eq: [{ $arrayElemAt: ['$orderData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
+              then: 'QuickPay',
+              else: { $arrayElemAt: ['$orderData.payment_method.type', 0] }
+            }
+          },
+          SalesModel: '$sales_model.name',
+          Area: {
+            $cond: {
+              if: { $eq: [{ $type: '$tags.name' }, 'array'] },
+              then: { $arrayElemAt: ['$tags.name', 0] },
+              else: '$tags.name'
+            }
+          },
+          ServiceProvider: {
+            $cond: {
+              if: { $eq: [{ $type: '$custom_fields.value_label' }, 'array'] },
+              then: { $arrayElemAt: [{ $arrayElemAt: ['$custom_fields.value_label', 0] }, 0] },
+              else: '$custom_fields.value_label'
+            }
+          },
+          Mobile: '$phone',
+          Ward: '$location.address_line1',
+          Road: '$location.address_line2',
+          Island: '$location.city',
+          Atoll: '$location.province',
+          STB: { $arrayElemAt: ['$deviceData.product.name', 0] },
+          Status: '$subscriptionData.services.state',
+          Package: '$subscriptionData.services.product.name',
+          Price: { $round: [{ $toDouble: '$subscriptionData.services.price_terms.price' }, 2] },
+          StartDate: {
+            $dateToString: {
+              format: '%d-%b-%Y',
+              date: { $toDate: { $multiply: [{ $toLong: '$subscriptionData.services.service_terms.start_date' }, 1000] } }
+            }
+          },
+          EndDate: {
+            $dateToString: {
+              format: '%d-%b-%Y',
+              date: { $toDate: { $multiply: [{ $toLong: '$subscriptionData.services.service_terms.end_date' }, 1000] } }
+            }
+          },
+          VipTag: { $arrayElemAt: ['$tags.name', 0] }
+        }
+      }
+    ];
+
+    // Perform aggregation
+    const results = await mongoose.connection.db.collection('ContactProfiles')
+      .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+      .toArray();
+
+    // Convert to CSV
+    const csvData = parse(results);
+
+    return csvData;
+  } catch (error) {
+    console.error('Error fetching VIP tag report:', error);
+    throw new Error('Error fetching VIP tag report');
+  }
+};
+
 
 module.exports = {
   getReports,
@@ -4153,5 +4622,7 @@ module.exports = {
   getDeviceStatisticsForExport,
   exportCustomerReports,
   exportCustomerReportsNotEffective,
-  exportCustomerDealerWiseCollection
+  exportCustomerDealerWiseCollection,
+  getDeviceNames,
+  getVipTags
 }

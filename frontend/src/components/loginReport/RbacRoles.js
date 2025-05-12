@@ -16,12 +16,14 @@ import {
     CircularProgress,
     Alert,
     Modal,
+    TextField,
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 
 const RbacRoles = () => {
     const [users, setUsers] = useState([]);
     const [newRole, setNewRole] = useState('');
+    const [serviceProviderName, setServiceProviderName] = useState('');
     const [roleToRemove, setRoleToRemove] = useState('');
     const [selectedUser, setSelectedUser] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -51,7 +53,11 @@ const RbacRoles = () => {
         if (!newRole || !selectedUser) return;
         setLoading(true);
         try {
-            const updatedRoles = [...new Set([...selectedUser.roles, newRole])]; // Avoid duplicates
+            let roleToAdd = newRole;
+            if (newRole === 'Service Provider' && serviceProviderName) {
+                roleToAdd = `Service Provider: ${serviceProviderName}`;
+            }
+            const updatedRoles = [...new Set([...selectedUser.roles, roleToAdd])];
             const response = await fetch(`https://mdnrpt.medianet.mv/billing-reports/users/${selectedUser._id}/roles`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -59,11 +65,11 @@ const RbacRoles = () => {
             });
             if (!response.ok) throw new Error('Failed to add role');
             setNewRole('');
+            setServiceProviderName('');
             fetchUsers();
             setOpenModal(false);
         } catch (err) {
-            setError(err.message);
-        } finally {
+            setError(err.messagephysic)
             setLoading(false);
         }
     };
@@ -107,6 +113,7 @@ const RbacRoles = () => {
     const handleOpenModal = (user) => {
         setSelectedUser(user);
         setNewRole('');
+        setServiceProviderName('');
         setRoleToRemove('');
         setOpenModal(true);
     };
@@ -114,6 +121,7 @@ const RbacRoles = () => {
     const handleCloseModal = () => {
         setOpenModal(false);
         setSelectedUser(null);
+        setServiceProviderName('');
     };
 
     return (
@@ -136,23 +144,23 @@ const RbacRoles = () => {
                     mx: 'auto',
                     borderRadius: '8px',
                     boxShadow: 3,
-                    maxHeight: '400px', // Fixed height for the table
-                    overflowY: 'auto', // Enable vertical scrolling
+                    maxHeight: '400px',
+                    overflowY: 'auto',
                 }}
             >
-                <Table stickyHeader> {/* stickyHeader keeps the header fixed */}
+                <Table stickyHeader>
                     <TableHead>
                         <TableRow sx={{ backgroundColor: '#2563eb' }}>
-                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)', }}>
+                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)' }}>
                                 Name
                             </TableCell>
-                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)', }}>
+                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)' }}>
                                 Email
                             </TableCell>
-                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)',}}>
+                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)' }}>
                                 Roles
                             </TableCell>
-                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)', }}>
+                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)' }}>
                                 Actions
                             </TableCell>
                         </TableRow>
@@ -177,7 +185,6 @@ const RbacRoles = () => {
                 </Table>
             </TableContainer>
 
-            {/* Edit Roles Modal */}
             <Modal open={openModal} onClose={handleCloseModal}>
                 <Box
                     sx={{
@@ -197,7 +204,6 @@ const RbacRoles = () => {
                     </Typography>
 
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        {/* Add Role */}
                         <Box>
                             <Typography sx={{ mb: 1, color: '#374151' }}>Add New Role</Typography>
                             <Select
@@ -211,7 +217,18 @@ const RbacRoles = () => {
                                 <MenuItem value="Finance">Finance</MenuItem>
                                 <MenuItem value="Sales">Sales</MenuItem>
                                 <MenuItem value="Admin">Admin</MenuItem>
+                                <MenuItem value="Service Provider">Service Provider</MenuItem>
                             </Select>
+                            {newRole === 'Service Provider' && (
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Service Provider Name (Optional)"
+                                    value={serviceProviderName}
+                                    onChange={(e) => setServiceProviderName(e.target.value)}
+                                    sx={{ mt: 2 }}
+                                />
+                            )}
                             <Button
                                 variant="contained"
                                 onClick={handleAddRole}
@@ -222,7 +239,6 @@ const RbacRoles = () => {
                             </Button>
                         </Box>
 
-                        {/* Remove Role */}
                         {selectedUser?.roles.length > 0 && (
                             <Box>
                                 <Typography sx={{ mb: 1, color: '#374151' }}>Remove Role</Typography>

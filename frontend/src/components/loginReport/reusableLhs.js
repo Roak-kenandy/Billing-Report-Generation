@@ -29,9 +29,8 @@ import {
     CloudUpload as CloudUploadIcon,
     Assignment as AssignmentIcon,
     HowToReg as HowToRegIcon,
-    BarChart as BarChartIcon
+    BarChart as BarChartIcon,
 } from '@mui/icons-material';
-import { el } from 'date-fns/locale';
 
 const ReusableLhs = () => {
     const navigate = useNavigate();
@@ -70,13 +69,14 @@ const ReusableLhs = () => {
 
     const deviceStatistics = [
         { name: 'Device Statistics', path: '/device/statistics', icon: <BarChartIcon /> },
-    ]
+        { name: 'Device Names', path: '/deviceNames', icon: <BarChartIcon /> },
+    ];
 
     const dealerReports = [
         { name: 'Subscribed Dealer Reports', path: '/subscribed/dealers', icon: <BarChartIcon /> },
         { name: 'Subscribed Disconnected Reports', path: '/subscribed/disconnected', icon: <BarChartIcon /> },
         { name: 'Dealer Wise Collection', path: '/dealerWiseCollection', icon: <BarChartIcon /> },
-    ]
+    ];
 
     // Initialize component state based on current location and stored preferences
     useEffect(() => {
@@ -95,10 +95,13 @@ const ReusableLhs = () => {
         setOpenFinancialSubmenu(JSON.parse(localStorage.getItem('financialSubmenuOpen')) || false);
         setOpenSalesSubmenu(JSON.parse(localStorage.getItem('salesSubmenuOpen')) || false);
         setOpenRbacSubmenu(JSON.parse(localStorage.getItem('rbacSubmenuOpen')) || false);
+        setOpenMtvregisterSubmenu(JSON.parse(localStorage.getItem('mtvRegisterSubmenuOpen')) || false);
+        setOpenDeviceSubmenu(JSON.parse(localStorage.getItem('openDeviceSubmenu')) || false);
+        setOpenDealerMenu(JSON.parse(localStorage.getItem('openDealersSubmenu')) || false);
 
         // Set selected index based on current path
         const allMenuItems = [
-            { path: '/dashboard' },
+            ...(roles.some(role => role.startsWith('Service Provider')) ? [] : [{ path: '/dashboard' }]),
             ...financialReportItems,
             ...salesReportItems,
             ...rbacReportItems,
@@ -119,27 +122,28 @@ const ReusableLhs = () => {
         } else if (rbacReportItems.some(item => item.path === location.pathname)) {
             setOpenRbacSubmenu(true);
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(true));
-        }
-        else if (mtvRegisterReportItems.some(item => item.path === location.pathname)) {
+        } else if (mtvRegisterReportItems.some(item => item.path === location.pathname)) {
             setOpenMtvregisterSubmenu(true);
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(true));
-        }
-        else if (deviceStatistics.some(item => item.path === location.pathname)) {
+        } else if (deviceStatistics.some(item => item.path === location.pathname)) {
             setOpenDeviceSubmenu(true);
             localStorage.setItem('openDeviceSubmenu', JSON.stringify(true));
-        }
-        else if (dealerReports.some(item => item.path === location.pathname)) {
+        } else if (dealerReports.some(item => item.path === location.pathname)) {
             setOpenDealerMenu(true);
             localStorage.setItem('openDealersSubmenu', JSON.stringify(true));
         }
     }, [location.pathname, navigate]);
 
-    // Redirect to dashboard if root path
+    // Redirect to appropriate path based on role
     useEffect(() => {
         if (location.pathname === '/') {
-            navigate('/dashboard');
+            if (userRoles.some(role => role.startsWith('Service Provider'))) {
+                navigate('/subscribed/dealers');
+            } else {
+                navigate('/dashboard');
+            }
         }
-    }, [location.pathname, navigate]);
+    }, [location.pathname, navigate, userRoles]);
 
     const handleListItemClick = (index, path) => {
         setSelectedIndex(index);
@@ -157,27 +161,34 @@ const ReusableLhs = () => {
     };
 
     const handleSubmenuToggle = (menu) => {
-        console.log('Submenu toggled:', menu);
         if (menu === 'financial') {
             const newState = !openFinancialSubmenu;
             setOpenFinancialSubmenu(newState);
             setOpenSalesSubmenu(false);
             setOpenRbacSubmenu(false);
             setOpenMtvregisterSubmenu(false);
+            setOpenDeviceSubmenu(false);
+            setOpenDealerMenu(false);
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
+            localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
         } else if (menu === 'sales') {
             const newState = !openSalesSubmenu;
             setOpenSalesSubmenu(newState);
             setOpenFinancialSubmenu(false);
             setOpenRbacSubmenu(false);
             setOpenMtvregisterSubmenu(false);
+            setOpenDeviceSubmenu(false);
+            setOpenDealerMenu(false);
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
+            localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
         } else if (menu === 'rbac') {
             const newState = !openRbacSubmenu;
             setOpenRbacSubmenu(newState);
@@ -185,39 +196,42 @@ const ReusableLhs = () => {
             setOpenSalesSubmenu(false);
             setOpenMtvregisterSubmenu(false);
             setOpenDeviceSubmenu(false);
+            setOpenDealerMenu(false);
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
-        }
-        else if (menu === 'mtvRegister') {
+            localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
+        } else if (menu === 'mtvRegister') {
             const newState = !openMtvRegisterSubmenu;
             setOpenMtvregisterSubmenu(newState);
             setOpenFinancialSubmenu(false);
             setOpenSalesSubmenu(false);
             setOpenRbacSubmenu(false);
             setOpenDeviceSubmenu(false);
+            setOpenDealerMenu(false);
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
-        }
-        else if (menu === 'openDevice') {
+            localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
+        } else if (menu === 'openDevice') {
             const newState = !openDeviceSubmenu;
             setOpenDeviceSubmenu(newState);
             setOpenFinancialSubmenu(false);
             setOpenSalesSubmenu(false);
             setOpenRbacSubmenu(false);
             setOpenMtvregisterSubmenu(false);
+            setOpenDealerMenu(false);
             localStorage.setItem('openDeviceSubmenu', JSON.stringify(newState));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
-        }
-        else if (menu === 'openDealer') {
+            localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
+        } else if (menu === 'openDealer') {
             const newState = !openDealerMenu;
             setOpenDealerMenu(newState);
             setOpenDeviceSubmenu(false);
@@ -234,15 +248,16 @@ const ReusableLhs = () => {
         }
     };
 
-    const canViewFinancialReports = userRoles.includes('Finance') || userRoles.includes('Admin');
-    const canViewSalesDepartment = userRoles.includes('Sales') || userRoles.includes('Admin');
-    const canViewRbacManagement = userRoles.includes('Admin');
-    const canViewMtvUsersManagement = userRoles.includes('Admin') || userRoles.includes('Sales');
-    const canViewDeviceStatistics = userRoles.includes('Admin');
-    const canViewDealerReports = userRoles.includes('Admin') || userRoles.includes('Finance') || userRoles.includes('Sales');
+    // Role-based visibility logic
+    const isServiceProvider = userRoles.some(role => role.startsWith('Service Provider'));
+    const canViewFinancialReports = !isServiceProvider && (userRoles.includes('Finance') || userRoles.includes('Admin'));
+    const canViewSalesDepartment = !isServiceProvider && (userRoles.includes('Sales') || userRoles.includes('Admin'));
+    const canViewRbacManagement = !isServiceProvider && userRoles.includes('Admin');
+    const canViewMtvUsersManagement = !isServiceProvider && (userRoles.includes('Admin') || userRoles.includes('Sales'));
+    const canViewDeviceStatistics = !isServiceProvider && userRoles.includes('Admin');
+    const canViewDealerReports = userRoles.includes('Admin') || userRoles.includes('Finance') || userRoles.includes('Sales') || isServiceProvider;
+    const canViewDashboard = !isServiceProvider;
 
-    // Rest of your JSX remains the same...
-    // Return statement with Box, List, etc. stays unchanged
     return (
         <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
             {/* LHS Navigation Panel */}
@@ -250,7 +265,7 @@ const ReusableLhs = () => {
                 sx={{
                     width: isSidebarOpen ? '20%' : '60px',
                     minWidth: isSidebarOpen ? '250px' : '60px',
-                    maxWidth: isSidebarOpen ? '300px' : '60px',
+                    maxWidth: isSidebarOpen ? '300px' : '60',
                     background: 'linear-gradient(180deg, #1e3a8a 0%, #1e40af 100%)',
                     color: '#ffffff',
                     display: 'flex',
@@ -292,38 +307,40 @@ const ReusableLhs = () => {
                 {/* Scrollable Menu Section */}
                 <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
                     <List component="nav" sx={{ py: 1 }}>
-                        {/* Dashboard (visible to all roles) */}
-                        <ListItemButton
-                            component={Link}
-                            to="/dashboard"
-                            selected={location?.pathname === '/dashboard'}
-                            sx={{
-                                py: 1.5,
-                                mx: 1,
-                                borderRadius: 2,
-                                transition: 'all 0.3s ease',
-                                '&:hover': {
-                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                                    transform: isSidebarOpen ? 'translateX(5px)' : 'none',
-                                },
-                                '&.Mui-selected': {
-                                    backgroundColor: '#3b82f6',
-                                    color: '#ffffff',
-                                    '&:hover': { backgroundColor: '#2563eb' },
-                                },
-                            }}
-                            onClick={() => handleListItemClick(0, '/dashboard')}
-                        >
-                            <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
-                                <DashboardIcon />
-                            </ListItemIcon>
-                            {isSidebarOpen && (
-                                <ListItemText
-                                    primary="Dashboard"
-                                    primaryTypographyProps={{ fontWeight: 500 }}
-                                />
-                            )}
-                        </ListItemButton>
+                        {/* Dashboard (visible to non-Service Provider roles) */}
+                        {canViewDashboard && (
+                            <ListItemButton
+                                component={Link}
+                                to="/dashboard"
+                                selected={location?.pathname === '/dashboard'}
+                                sx={{
+                                    py: 1.5,
+                                    mx: 1,
+                                    borderRadius: 2,
+                                    transition: 'all 0.3s ease',
+                                    '&:hover': {
+                                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                        transform: isSidebarOpen ? 'translateX(5px)' : 'none',
+                                    },
+                                    '&.Mui-selected': {
+                                        backgroundColor: '#3b82f6',
+                                        color: '#ffffff',
+                                        '&:hover': { backgroundColor: '#2563eb' },
+                                    },
+                                }}
+                                onClick={() => handleListItemClick(0, '/dashboard')}
+                            >
+                                <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                    <DashboardIcon />
+                                </ListItemIcon>
+                                {isSidebarOpen && (
+                                    <ListItemText
+                                        primary="Dashboard"
+                                        primaryTypographyProps={{ fontWeight: 500 }}
+                                    />
+                                )}
+                            </ListItemButton>
+                        )}
 
                         {/* Financial Reports Section */}
                         {canViewFinancialReports && (
@@ -559,8 +576,6 @@ const ReusableLhs = () => {
                             </>
                         )}
 
-
-
                         {/* Device Statistics Section */}
                         {canViewDeviceStatistics && (
                             <>
@@ -601,7 +616,7 @@ const ReusableLhs = () => {
                                             key={item.name}
                                             selected={location?.pathname === item.path}
                                             onClick={() => handleListItemClick(
-                                                index + financialReportItems.length + salesReportItems.length + 1,
+                                                index + financialReportItems.length + salesReportItems.length + mtvRegisterReportItems.length + 1,
                                                 item.path
                                             )}
                                             component={Link}
@@ -681,7 +696,9 @@ const ReusableLhs = () => {
                                             key={item.name}
                                             selected={location?.pathname === item.path}
                                             onClick={() => handleListItemClick(
-                                                index + financialReportItems.length + salesReportItems.length + 1,
+                                                isServiceProvider
+                                                    ? index
+                                                    : index + financialReportItems.length + salesReportItems.length + mtvRegisterReportItems.length + deviceStatistics.length + 1,
                                                 item.path
                                             )}
                                             component={Link}
@@ -761,7 +778,7 @@ const ReusableLhs = () => {
                                             key={item.name}
                                             selected={location?.pathname === item.path}
                                             onClick={() => handleListItemClick(
-                                                index + financialReportItems.length + salesReportItems.length + 1,
+                                                index + financialReportItems.length + salesReportItems.length + mtvRegisterReportItems.length + deviceStatistics.length + dealerReports.length + 1,
                                                 item.path
                                             )}
                                             component={Link}
@@ -857,7 +874,7 @@ const ReusableLhs = () => {
                     flexDirection: 'column',
                     gap: 3,
                     transition: 'all 0.3s ease',
-                    overflow: 'hidden'
+                    overflow: 'hidden',
                 }}
             >
                 <Outlet />

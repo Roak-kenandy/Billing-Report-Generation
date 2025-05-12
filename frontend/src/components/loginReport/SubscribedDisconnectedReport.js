@@ -24,7 +24,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { format } from 'date-fns'; // Import date-fns for formatting dates
+import { format } from 'date-fns';
 
 const SubscribedDisconnectedReports = () => {
   const [reports, setReports] = useState([]);
@@ -42,26 +42,43 @@ const SubscribedDisconnectedReports = () => {
   const [selectedIsland, setSelectedIsland] = useState('');
   const [appliedAtoll, setAppliedAtoll] = useState('');
   const [appliedIsland, setAppliedIsland] = useState('');
-  const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
-  const isFetchingRef = useRef(false); // Prevent double fetches
+
+  // Initialize serviceProvider state with extracted value
+  const roles = JSON.parse(localStorage.getItem('userRoles')) || [];
+  const spRole = roles.find(role => role.startsWith('Service Provider'));
+  const initialServiceProvider = spRole && spRole.includes(':') ? spRole.split(':')[1].trim() : '';
+  const [serviceProvider, setServiceProvider] = useState(initialServiceProvider);
+
+  // const API_URL = 'http://localhost:3003/billing-reports';
+    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+  const isFetchingRef = useRef(false);
+
+  // Log serviceProvider for debugging
+  useEffect(() => {
+  }, [serviceProvider]);
 
   // Memoize fetchReports
   const fetchReports = useCallback(
-    async (page, limit, search = '', start = '', end = '', atoll = '', island = '') => {
+    async (page, limit, search = '', start = '', end = '', atoll = '', island = '', sp = '') => {
       if (isFetchingRef.current) {
         console.log('Skipping fetch: already in progress');
         return;
       }
       isFetchingRef.current = true;
 
-      console.log('Fetching reports with payload:', { page, limit, search, start, end, atoll, island });
       setLoading(true);
       try {
         const safePage = page || 1;
         const safeLimit = limit || 10;
         let url = `${API_URL}/customerDisconnectedDealers?page=${safePage}&limit=${safeLimit}&format=json`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
         if (start) url += `&startDate=${encodeURIComponent(start)}`;
         if (end) url += `&endDate=${encodeURIComponent(end)}`;
+        if (atoll) url += `&atoll=${encodeURIComponent(atoll)}`;
+        if (island) url += `&island=${encodeURIComponent(island)}`;
+        if (sp) url += `&serviceProvider=${encodeURIComponent(sp)}`;
+
+        console.log('Constructed URL:', url); // Debug URL
 
         const response = await fetch(url);
         if (!response.ok) {
@@ -129,7 +146,8 @@ const SubscribedDisconnectedReports = () => {
       appliedStartDate,
       appliedEndDate,
       atollName,
-      islandName
+      islandName,
+      serviceProvider
     );
   }, [
     fetchReports,
@@ -141,6 +159,7 @@ const SubscribedDisconnectedReports = () => {
     appliedAtoll,
     appliedIsland,
     atolls,
+    serviceProvider,
   ]);
 
   const handlePageChange = (event, value) => {
@@ -172,6 +191,9 @@ const SubscribedDisconnectedReports = () => {
         const selectedIslandName = selectedAtollData?.islands.find(i => i.islands_id === appliedIsland)?.islands_name;
         if (selectedIslandName) url += `&island=${encodeURIComponent(selectedIslandName)}`;
       }
+      if (serviceProvider) url += `&serviceProvider=${encodeURIComponent(serviceProvider)}`;
+
+      console.log('CSV Download URL:', url); // Debug URL
 
       const response = await fetch(url);
       if (!response.ok) throw new Error('Export failed');
@@ -180,7 +202,7 @@ const SubscribedDisconnectedReports = () => {
 
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.setAttribute('download', 'customer_reports.csv');
+      link.setAttribute('download', 'customer_disconnected_reports.csv');
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -196,35 +218,28 @@ const SubscribedDisconnectedReports = () => {
   const fieldMap = {
     'Account Number': 'Account Number',
     'Customer Name': 'Customer Name',
-    'Mobile': 'Mobile',
+    Mobile: 'Mobile',
     'Tag Area': 'Area',
-    'Island': 'Island',
-    'Atoll': 'Atoll',
-    'Ward': 'Ward',
-    'Road': 'Road',
+    Island: 'Island',
+    Atoll: 'Atoll',
+    Ward: 'Ward',
+    Road: 'Road',
     'Device Name': 'STB',
     'Service Provider': 'Service Provider',
-    // 'Account Status': 'Account Status',
     'Service Status': 'Status',
     'Service Package': 'Package',
-    // 'Service Start Date': 'Start Date',
     'Service End Date': 'End Date',
   };
 
   // Fields that may have multiple values
-  const multiValueFields = [
-    'Service Status',
-    'Service Package',
-    // 'Service Start Date',
-    'Service End Date',
-  ];
+  const multiValueFields = ['Service Status', 'Service Package', 'Service End Date'];
 
   // Format date to "dd MMM yyyy"
   const formatDate = (dateStr) => {
     try {
       return format(new Date(dateStr), 'dd MMM yyyy');
     } catch {
-      return dateStr; // Return as is if not a valid date
+      return dateStr;
     }
   };
 
@@ -428,17 +443,14 @@ const SubscribedDisconnectedReports = () => {
                     {Object.keys(fieldMap).map((backendKey) => {
                       let displayValue = report[backendKey] || '-';
 
-                      // Handle multi-value fields
                       if (multiValueFields.includes(backendKey)) {
                         if (Array.isArray(displayValue)) {
-                          // If array, format dates if applicable and join with commas
                           displayValue = displayValue
                             .map((val) =>
                               backendKey.includes('Date') ? formatDate(val) : val
                             )
                             .join(', ');
                         } else if (typeof displayValue === 'string' && displayValue.includes(',')) {
-                          // If comma-separated string, format dates if applicable
                           displayValue = displayValue
                             .split(',')
                             .map((val) =>
@@ -446,12 +458,10 @@ const SubscribedDisconnectedReports = () => {
                             )
                             .join(', ');
                         } else if (backendKey.includes('Date') && displayValue !== '-') {
-                          // Single date value
                           displayValue = formatDate(displayValue);
                         }
                       }
 
-                      // Special handling for specific fields
                       if (backendKey === 'Service Provider' || backendKey === 'Customer Code') {
                         displayValue =
                           displayValue && typeof displayValue === 'object'

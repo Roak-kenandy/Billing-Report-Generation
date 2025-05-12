@@ -26,76 +26,106 @@ const exportCSV = async (req, res) => {
 };
 
 const exportCustomerCSVorJSON = async (req, res) => {
-    try {
-      const { search, startDate, endDate, atoll, island, format, page, limit } = req.query;
-  
-      const response = await billingReportService.exportCustomerReports(search, startDate, endDate, atoll, island, format, page, limit);
-  
-      if (response.isCsv) {
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', 'attachment; filename=customer_reports.csv');
-        res.send(response.data);
-      } else {
-        res.status(200).json({
-          data: response.data,
-          pagination: response.pagination,
-        });
-      }
-    } catch (error) {
-      res.status(500).json({
-        message: 'Error exporting report',
-        error: error.message,
-      });
-    }
-  };
+  try {
+    const { search, startDate, endDate, atoll, island, format, page, limit, serviceProvider } = req.query;
 
-  const exportCustomerReportsNotEffective = async (req, res) => {
-    try {
-      const { search, startDate, endDate, atoll, island, format, page, limit } = req.query;
-  
-      const response = await billingReportService.exportCustomerReportsNotEffective(search, startDate, endDate, atoll, island, format, page, limit);
-  
-      if (response.isCsv) {
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', 'attachment; filename=customer_reports.csv');
-        res.send(response.data);
-      } else {
-        res.status(200).json({
-          data: response.data,
-          pagination: response.pagination,
-        });
-      }
-    } catch (error) {
-      res.status(500).json({
-        message: 'Error exporting report',
-        error: error.message,
-      });
-    }
-  };
+    const response = await billingReportService.exportCustomerReports(
+      search,
+      startDate,
+      endDate,
+      atoll,
+      island,
+      format,
+      page,
+      limit,
+      serviceProvider
+    );
 
-  const exportCustomerDealerWiseCollection = async (req, res) => {
-    try {
-      const { search, startDate, endDate, atoll, island, format, page, limit } = req.query;
-  
-      const response = await billingReportService.exportCustomerDealerWiseCollection(search, startDate, endDate, atoll, island, format, page, limit);
-  
-      if (response.isCsv) {
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', 'attachment; filename=customer_reports.csv');
-        res.send(response.data);
-      } else {
-        res.status(200).json({
-          data: response.data,
-          pagination: response.pagination,
-        });
-      }
-    } catch (error) {
-      res.status(500).json({
-        message: 'Error exporting report',
-        error: error.message,
+    if (response.isCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=customer_reports.csv');
+      res.send(response.data);
+    } else {
+      res.status(200).json({
+        data: response.data,
+        pagination: response.pagination,
       });
     }
-  };
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error exporting report',
+      error: error.message,
+    });
+  }
+};
+
+const exportCustomerReportsNotEffective = async (req, res) => {
+  try {
+    const { search, startDate, endDate, atoll, island, format, page, limit, serviceProvider } = req.query;
+
+    const response = await billingReportService.exportCustomerReportsNotEffective(
+      search,
+      startDate,
+      endDate,
+      atoll,
+      island,
+      format,
+      page,
+      limit,
+      serviceProvider
+    );
+
+    if (response.isCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=customer_disconnected_reports.csv');
+      res.send(response.data);
+    } else {
+      res.status(200).json({
+        data: response.data,
+        pagination: response.pagination,
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error exporting report',
+      error: error.message,
+    });
+  }
+};
+
+const exportCustomerDealerWiseCollection = async (req, res) => {
+  try {
+    const { search, startDate, endDate, atoll, island, format, page, limit, serviceProvider } = req.query;
+
+    const response = await billingReportService.exportCustomerDealerWiseCollection(
+      search,
+      startDate,
+      endDate,
+      atoll,
+      island,
+      format,
+      page,
+      limit,
+      serviceProvider
+    );
+
+    if (response.isCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=dealer_wise_collection.csv');
+      res.send(response.data);
+    } else {
+      res.status(200).json({
+        data: response.data,
+        pagination: response.pagination,
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error exporting report',
+      error: error.message,
+    });
+  }
+};
 
 const exportCollectionReports = async (req, res) => {
     try {
@@ -395,6 +425,43 @@ const getDeviceStatistics = async (req, res) => {
     }
 };
 
+
+
+const getDeviceNames = async (req, res) => {
+  try {
+    const data = await billingReportService.getDeviceNames();
+
+    // Define fields for CSV
+    const fields = [
+      { label: 'Organisation Name', value: 'organisationName' },
+      { label: 'Device Name', value: 'deviceName' },
+      { label: 'Ownership Name', value: 'ownershipName' },
+      { label: 'Phone', value: 'phone' }
+    ];
+
+    // Format data for CSV
+    const formattedData = data.statistics.flatMap(item => 
+      item.devices.map(device => ({
+        organisationName: item.organisationName || 'N/A',
+        deviceName: device.deviceName || 'N/A',
+        ownershipName: device.ownershipName || 'N/A',
+        phone: device.phone || 'N/A' // Map phone from the device object
+      }))
+    );
+
+    // Generate CSV
+    const json2csvParser = new Parser({ fields });
+    const csv = json2csvParser.parse(formattedData);
+
+    // Set response headers for CSV download
+    res.header('Content-Type', 'text/csv');
+    res.attachment('device_statistics.csv');
+    return res.send(csv);
+  } catch (err) {
+    res.status(500).send({ message: 'Error exporting device statistics', error: err.message });
+  }
+};
+
 const exportDeviceStatistics = async (req, res) => {
     try {
       const data = await billingReportService.getDeviceStatisticsForExport();
@@ -430,6 +497,23 @@ const exportDeviceStatistics = async (req, res) => {
     }
   };
 
+  const getVipTags = async (req, res) => {
+    try {
+        
+        const csvData = await billingReportService.getVipTags();
+        
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=vip_reports.csv');
+        res.send(csvData);
+
+    } catch (error) {
+        res.status(500).json({ 
+            message: 'Error exporting CSV', 
+            error: error.message 
+        });
+    }
+};
+
 module.exports = {
     getReports,
     exportCSV,
@@ -451,5 +535,7 @@ module.exports = {
     exportDeviceStatistics,
     exportCustomerCSVorJSON,
     exportCustomerReportsNotEffective,
-    exportCustomerDealerWiseCollection
+    exportCustomerDealerWiseCollection,
+    getDeviceNames,
+    getVipTags
 }
