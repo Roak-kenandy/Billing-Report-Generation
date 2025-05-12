@@ -1272,14 +1272,14 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
             $map: {
               input: {
                 $filter: {
-                  input: '$subscriptionsData.services.service_terms.end_date',
+                  input: '$subscriptionsData.services.rated_up_to_date',
                   as: 'endDate',
                   cond: {
                     $eq: [
                       {
                         $arrayElemAt: [
                           '$subscriptionsData.services.state',
-                          { $indexOfArray: ['$subscriptionsData.services.service_terms.end_date', '$$endDate'] },
+                          { $indexOfArray: ['$subscriptionsData.services.rated_up_to_date', '$$endDate'] },
                         ],
                       },
                       'EFFECTIVE',
@@ -1656,14 +1656,14 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
             $map: {
               input: {
                 $filter: {
-                  input: '$subscriptionsData.services.service_terms.end_date',
+                  input: '$subscriptionsData.services.rated_up_to_date',
                   as: 'endDate',
                   cond: {
                     $eq: [
                       {
                         $arrayElemAt: [
                           '$subscriptionsData.services.state',
-                          { $indexOfArray: ['$subscriptionsData.services.service_terms.end_date', '$$endDate'] },
+                          { $indexOfArray: ['$subscriptionsData.services.rated_up_to_date', '$$endDate'] },
                         ],
                       },
                       'NOT_EFFECTIVE',
@@ -2079,26 +2079,30 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
             },
           },
           'Service End Date': {
-            $reduce: {
+            $map: {
               input: {
-                $map: {
-                  input: '$subscriptionsData.services.service_terms.end_date',
+                $filter: {
+                  input: '$subscriptionsData.services.rated_up_to_date',
                   as: 'endDate',
-                  in: {
-                    $dateToString: {
-                      format: '%d %b %Y',
-                      date: { $toDate: { $multiply: ['$$endDate', 1000] } },
-                      timezone: 'Indian/Maldives',
-                    },
+                  cond: {
+                    $eq: [
+                      {
+                        $arrayElemAt: [
+                          '$subscriptionsData.services.state',
+                          { $indexOfArray: ['$subscriptionsData.services.rated_up_to_date', '$$endDate'] },
+                        ],
+                      },
+                      'NOT_EFFECTIVE',
+                    ],
                   },
                 },
               },
-              initialValue: '',
+              as: 'endDate',
               in: {
-                $cond: {
-                  if: { $eq: ['$$value', ''] },
-                  then: '$$this',
-                  else: { $concat: ['$$value', ', ', '$$this'] },
+                $dateToString: {
+                  format: '%d %b %Y',
+                  date: { $toDate: { $multiply: ['$$endDate', 1000] } },
+                  timezone: 'Indian/Maldives',
                 },
               },
             },
