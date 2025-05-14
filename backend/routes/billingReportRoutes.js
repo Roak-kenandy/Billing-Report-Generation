@@ -27,6 +27,8 @@ router.get('/customerDisconnectedDealers', billingReportController.exportCustome
 
 router.get('/customerDealerWiseCollection', billingReportController.exportCustomerDealerWiseCollection);
 
+router.get('/customerWiseCollection', billingReportController.exportCustomerCollection);
+
 router.get('/getCollectionReports', billingReportController.exportCollectionReports);
 
 router.get('/getAtolls', billingReportController.getAtollsData);

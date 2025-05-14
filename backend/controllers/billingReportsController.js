@@ -127,6 +127,39 @@ const exportCustomerDealerWiseCollection = async (req, res) => {
   }
 };
 
+const exportCustomerCollection = async (req, res) => {
+  try {
+    const { search, startDate, endDate, atoll, island, format, page, limit } = req.query;
+
+    const response = await billingReportService.exportCustomerCollection(
+      search,
+      startDate,
+      endDate,
+      atoll,
+      island,
+      format,
+      page,
+      limit,
+    );
+
+    if (response.isCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=customer_wise_collection.csv');
+      res.send(response.data);
+    } else {
+      res.status(200).json({
+        data: response.data,
+        pagination: response.pagination,
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error exporting report',
+      error: error.message,
+    });
+  }
+};
+
 const exportCollectionReports = async (req, res) => {
     try {
         const { search, startDate,endDate, atoll, island } = req.query;
@@ -537,5 +570,6 @@ module.exports = {
     exportCustomerReportsNotEffective,
     exportCustomerDealerWiseCollection,
     getDeviceNames,
-    getVipTags
+    getVipTags,
+    exportCustomerCollection
 }
