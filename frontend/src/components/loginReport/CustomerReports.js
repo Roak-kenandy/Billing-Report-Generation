@@ -361,6 +361,7 @@ const CustomerReports = () => {
                             <TableRow>
                                 {[
                                     'Name',
+                                    'Customer Code',
                                     'Phone',
                                     'Registered Date',
                                     'Address Line 1',
@@ -415,6 +416,7 @@ const CustomerReports = () => {
                                     >
                                         {[
                                             'Name',
+                                            'Customer Code',
                                             'Phone',
                                             'Registered Date',
                                             'Address Line 1',

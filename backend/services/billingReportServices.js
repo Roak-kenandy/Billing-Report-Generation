@@ -437,6 +437,14 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
         },
       },
       {
+        $lookup: {
+          from: 'Journals',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'joinedDataJournals',
+        },
+      },
+      {
         $project: {
           _id: 0,
           Name: {
@@ -539,6 +547,28 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
               else: '',
             },
           },
+          'Customer Code': {
+            $cond: {
+              if: {
+                $and: [
+                  { $isArray: '$joinedDataJournals' },
+                  { $gt: [{ $size: '$joinedDataJournals' }, 0] },
+                ],
+              },
+              then: {
+                $ifNull: [
+                  {
+                    $concat: [
+                      "'",
+                      { $toString: { $arrayElemAt: ['$joinedDataJournals.contact_code', 0] } }
+                    ]
+                  },
+                  ''
+                ]
+              },
+              else: ''
+            }
+          }
         },
       },
     ];
