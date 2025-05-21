@@ -20,7 +20,7 @@ import SubscribedDealerReports from './components/loginReport/SubscribedDealerRe
 import SubscribedDisconnectedReports from './components/loginReport/SubscribedDisconnectedReport';
 import DealerWisecollection from './components/loginReport/DealerWiseCollection';
 // import DeviceNames from './components/loginReport/DeviceNames';
-import DynamicReportBuilder from './components/loginReport/DynamicReportBuilder';
+// import DynamicReportBuilder from './components/loginReport/DynamicReportBuilder';
 import CustomerReports from './components/loginReport/CustomerReports';
 import { ToastContainer, Flip } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -65,7 +65,7 @@ function App() {
         <Route path="subscribed/disconnected" element={<SubscribedDisconnectedReports />} />
         <Route path="dealerWiseCollection" element={<DealerWisecollection />} />
         {/* <Route path="deviceNames" element={<DeviceNames />} /> */}
-        <Route path="dynamicReportBuilder" element={<DynamicReportBuilder />} />
+        {/* <Route path="dynamicReportBuilder" element={<DynamicReportBuilder />} /> */}
         <Route path="customerReports" element={<CustomerReports />} />
         {/* <Route path="rbac/permissions" element={<RbacPermissions />} /> */}
         </Route>
