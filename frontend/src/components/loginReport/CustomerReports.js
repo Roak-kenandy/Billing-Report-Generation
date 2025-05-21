@@ -40,8 +40,8 @@ const CustomerReports = () => {
     const [selectedIsland, setSelectedIsland] = useState('');
     const [appliedAtoll, setAppliedAtoll] = useState('');
     const [appliedIsland, setAppliedIsland] = useState('');
-    // const API_URL = 'http://localhost:3003/billing-reports';
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    // const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    const API_URL = 'http://localhost:3003/billing-reports';
 
     useEffect(() => {
         const fetchAtolls = async () => {
@@ -356,14 +356,19 @@ const CustomerReports = () => {
                         },
                     }}
                 >
-                    <Table stickyHeader sx={{ minWidth: 800 }}>
+                    <Table stickyHeader sx={{ minWidth: 1200 }}>
                         <TableHead>
                             <TableRow>
                                 {[
                                     'Name',
                                     'Phone',
                                     'Registered Date',
-                                    'Address',
+                                    'Address Line 1',
+                                    'Address Line 2',
+                                    'Address Name',
+                                    'City',
+                                    'Country',
+                                    'Province',
                                     'Atoll',
                                     'Island',
                                     'Service Provider',
@@ -390,7 +395,7 @@ const CustomerReports = () => {
                             {loading ? (
                                 Array.from({ length: 10 }).map((_, index) => (
                                     <TableRow key={index}>
-                                        {Array.from({ length: 8 }).map((_, cellIndex) => (
+                                        {Array.from({ length: 13 }).map((_, cellIndex) => (
                                             <TableCell key={cellIndex} sx={{ py: 2 }}>
                                                 <Skeleton variant="text" animation="wave" />
                                             </TableCell>
@@ -412,7 +417,12 @@ const CustomerReports = () => {
                                             'Name',
                                             'Phone',
                                             'Registered Date',
-                                            'Address',
+                                            'Address Line 1',
+                                            'Address Line 2',
+                                            'Address Name',
+                                            'City',
+                                            'Country',
+                                            'Province',
                                             'Atoll',
                                             'Island',
                                             'Service Provider',
