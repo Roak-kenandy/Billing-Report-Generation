@@ -18,7 +18,10 @@ import ReferralCountReports from './components/loginReport/ReferralCountReports'
 import DeviceStatistics from './components/loginReport/DeviceStatistics';
 import SubscribedDealerReports from './components/loginReport/SubscribedDealerReports';
 import SubscribedDisconnectedReports from './components/loginReport/SubscribedDisconnectedReport';
-import DealerWisecollection from './components/loginReport/DealerWiseCollection'
+import DealerWisecollection from './components/loginReport/DealerWiseCollection';
+import DeviceNames from './components/loginReport/DeviceNames';
+import DynamicReportBuilder from './components/loginReport/DynamicReportBuilder';
+import CustomerReports from './components/loginReport/CustomerReports';
 import { ToastContainer, Flip } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 // import RbacPermissions from "./components/loginReport/RbacPermissions";
@@ -61,6 +64,9 @@ function App() {
         <Route path="subscribed/dealers" element={<SubscribedDealerReports />} />
         <Route path="subscribed/disconnected" element={<SubscribedDisconnectedReports />} />
         <Route path="dealerWiseCollection" element={<DealerWisecollection />} />
+        <Route path="deviceNames" element={<DeviceNames />} />
+        <Route path="dynamicReportBuilder" element={<DynamicReportBuilder />} />
+        <Route path="customerReports" element={<CustomerReports />} />
         {/* <Route path="rbac/permissions" element={<RbacPermissions />} /> */}
         </Route>
         </Route>

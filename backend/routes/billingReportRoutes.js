@@ -23,6 +23,8 @@ router.get('/getAllReports', billingReportController.exportCSV);
 
 router.get('/customerDealers', billingReportController.exportCustomerCSVorJSON);
 
+router.get('/customerReports', billingReportController.exportContactProfiles);
+
 router.get('/customerDisconnectedDealers', billingReportController.exportCustomerReportsNotEffective);
 
 router.get('/customerDealerWiseCollection', billingReportController.exportCustomerDealerWiseCollection);
