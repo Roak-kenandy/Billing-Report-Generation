@@ -19,6 +19,7 @@ import DeviceStatistics from './components/loginReport/DeviceStatistics';
 import SubscribedDealerReports from './components/loginReport/SubscribedDealerReports';
 import SubscribedDisconnectedReports from './components/loginReport/SubscribedDisconnectedReport';
 import DealerWisecollection from './components/loginReport/DealerWiseCollection';
+import InvoiceReports from './components/loginReport/InvoiceReports';
 // import DeviceNames from './components/loginReport/DeviceNames';
 // import DynamicReportBuilder from './components/loginReport/DynamicReportBuilder';
 import CustomerReports from './components/loginReport/CustomerReports';
@@ -67,6 +68,7 @@ function App() {
         {/* <Route path="deviceNames" element={<DeviceNames />} /> */}
         {/* <Route path="dynamicReportBuilder" element={<DynamicReportBuilder />} /> */}
         <Route path="customerReports" element={<CustomerReports />} />
+        <Route path="invoiceReports" element={<InvoiceReports />} />
         {/* <Route path="rbac/permissions" element={<RbacPermissions />} /> */}
         </Route>
         </Route>
