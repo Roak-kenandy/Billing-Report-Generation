@@ -80,9 +80,13 @@ let mtvConnection;
 async function connectCRM() {
   try {
     await mongoose.connect(process.env.MONGO_URI, {
-      maxPoolSize: 50, // Adjust based on workload
-      connectTimeoutMS: 30000, // 30 seconds timeout
-      socketTimeoutMS: 60000, // 60 seconds socket timeout
+      maxPoolSize: 100, // Increase if handling many concurrent requests
+      connectTimeoutMS: 60000, // 60 seconds for initial connection
+      socketTimeoutMS: 120000, // 120 seconds for socket operations
+      serverSelectionTimeoutMS: 30000,
+      heartbeatFrequencyMS: 10000,
+      retryWrites: true,
+      retryReads: true,
     });
     console.log('Connected to CRM MongoDB Atlas (default connection)');
   } catch (err) {
