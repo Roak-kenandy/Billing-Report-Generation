@@ -52,6 +52,7 @@ const ReusableLhs = () => {
         { name: 'Bulk Uploads', path: '/bulkUploads', icon: <CloudUploadIcon /> },
         { name: 'Bulk Dealer Uploads', path: '/bulkDealerUploads', icon: <CloudUploadIcon /> },
         { name: 'Manual Journal Reports', path: '/manualJournal', icon: <BookIcon /> },
+        { name: 'Invoice Reports', path: '/invoiceReports', icon: <DescriptionIcon /> },
     ];
 
     const salesReportItems = [

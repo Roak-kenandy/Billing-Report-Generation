@@ -568,7 +568,20 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
               },
               else: ''
             }
-          }
+          },
+          Tags: {
+            $cond: {
+              if: { $isArray: '$tags' },
+              then: {
+                $map: {
+                  input: '$tags',
+                  as: 'tag',
+                  in: { $ifNull: ['$$tag.name', ''] },
+                },
+              },
+              else: [],
+            },
+          },
         },
       },
     ];
@@ -619,322 +632,391 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
   }
 };
 
-// const exportCustomerReports = async (search, startDate, endDate, atoll, island, format, page, limit) => {
-//   console.log(page, limit, format, 'page and limit and format')
-//   try {
-//     // Calculate timestamps for date filtering
-//     let startTimestamp, endTimestamp;
-//     if (startDate) {
-//       startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
-//     }
-//     if (endDate) {
-//       endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
-//     }
+const { Parser } = require('json2csv');
 
-//     // Match stage for filtering
-//     let matchStage = {
-//       'custom_fields.key': 'service_provider', // Filter for service_provider in custom_fields
-//     };
+const exportContactProfilesWithInvoice = async (search, startDate, endDate, atoll, island, page, limit, format) => {
+  try {
+    // Date filter
+    let startTimestamp, endTimestamp;
+    if (startDate) startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+    if (endDate) endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
 
-//     if (search) {
-//       matchStage.$text = { $search: search };
-//     }
+    // Match stage for Events
+    let eventMatch = { type: 'INVOICE_POSTED' };
+    if (startTimestamp) eventMatch['transaction.posted_date'] = { $gte: startTimestamp };
+    if (endTimestamp) eventMatch['transaction.posted_date'] = eventMatch['transaction.posted_date']
+      ? { $gte: startTimestamp, $lte: endTimestamp }
+      : { $lte: endTimestamp };
 
-//     if (atoll) {
-//       matchStage['location.province'] = atoll;
-//     }
+    // Base event query
+    const eventQueryBase = [
+      { $match: eventMatch },
+      {
+        $project: {
+          contact_id: 1,
+          'transaction.number': 1,
+          'transaction.reference_number': 1,
+          'transaction.posted_date': 1,
+          'transaction.issued_date': 1,
+          'transaction.due_date': 1,
+          'transaction.total_default_currency': 1,
+          'transaction.net_amount': 1,
+          'transaction.default_currency_discount_amount': 1,
+          'transaction.default_currency_tax_amount': 1,
+          'transaction.currency_code': 1,
+          'transaction.total_amount': 1,
+          'transaction.exchange_rate': 1,
+        },
+      },
+    ];
 
-//     if (island) {
-//       matchStage['location.city'] = island;
-//     }
+    // Add pagination for JSON, no pagination for CSV
+    const eventQuery = format === 'json'
+      ? [...eventQueryBase, { $skip: (page - 1) * limit }, { $limit: parseInt(limit) }]
+      : eventQueryBase;
 
-//     // Date filter for subscriptions (if applicable)
-//     let subscriptionDateFilter = {};
-//     if (startDate || endDate) {
-//       const elemMatchConditions = {};
-//       if (startDate) {
-//         elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
-//       }
-//       if (endDate) {
-//         elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
-//       }
-//       subscriptionDateFilter.services = { $elemMatch: elemMatchConditions };
-//     }
+    // Fetch Events
+    const eventsCursor = mongoose.connection.db
+      .collection('Events')
+      .aggregate(eventQuery, { maxTimeMS: 300000, allowDiskUse: true });
 
-//     // Aggregation pipeline for counting total items
-//     const countPipeline = [
-//       { $match: matchStage },
-//       {
-//         $lookup: {
-//           from: 'Subscriptions',
-//           localField: 'contact_id',
-//           foreignField: 'contact_id',
-//           as: 'subscriptionsData',
-//         },
-//       },
-//       { $match: subscriptionDateFilter },
-//       { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
-//       { $match: { 'subscriptionsData.services.state': 'EFFECTIVE' } },
-//       { $count: 'totalItems' },
-//     ];
+    // For JSON, collect events into an array
+    let events = [];
+    if (format === 'json') {
+      events = await eventsCursor.toArray();
+    }
 
-//     // Aggregation pipeline for paginated results
-//     const aggregationQuery = [
-//       { $match: matchStage },
-//       {
-//         $lookup: {
-//           from: 'Subscriptions',
-//           localField: 'contact_id',
-//           foreignField: 'contact_id',
-//           as: 'subscriptionsData',
-//         },
-//       },
-//       { $match: subscriptionDateFilter },
-//       { $unwind: { path: '$subscriptionsData', preserveNullAndEmptyArrays: true } },
-//       { $match: { 'subscriptionsData.services.state': 'EFFECTIVE' } },
-//       {
-//         $lookup: {
-//           from: 'Devices',
-//           localField: 'contact_id',
-//           foreignField: 'ownership.id',
-//           as: 'devicesData',
-//         },
-//       },
-//       {
-//         $lookup: {
-//           from: 'Orders',
-//           localField: 'contact_id',
-//           foreignField: 'contact_id',
-//           as: 'ordersData',
-//         },
-//       },
-//       {
-//         $lookup: {
-//           from: 'Journals',
-//           localField: 'contact_id',
-//           foreignField: 'contact_id',
-//           as: 'journalsData',
-//         },
-//       },
-//       {
-//         $project: {
-//           _id: 0,
-//           // id: '$id',
-//           'Account Number': '$account.number',
-//           'Contact Code': {
-//             $concat: ['"', { $toString: { $arrayElemAt: ['$journalsData.contact_code', 0] } }, '"'],
-//           },
-//           'Customer Name': '$profile.name',
-//           'Customer Type': '$profile.type',
-//           'Service Provider': {
-//             $arrayElemAt: [
-//               {
-//                 $filter: {
-//                   input: '$custom_fields',
-//                   as: 'field',
-//                   cond: { $eq: ['$$field.key', 'service_provider'] },
-//                 },
-//               },
-//               0,
-//             ],
-//           },
-//           'Customer Code': {
-//             $arrayElemAt: [
-//               {
-//                 $filter: {
-//                   input: '$custom_fields',
-//                   as: 'field',
-//                   cond: { $eq: ['$$field.key', 'customer_code'] },
-//                 },
-//               },
-//               0,
-//             ],
-//           },
-//           Mobile: '$phone',
-//           Ward: '$location.address_line1',
-//           Road: '$location.address_line2',
-//           Island: '$location.city',
-//           Atoll: '$location.province',
-//           'Business Name': '$business_name',
-//           'Sales Model': '$sales_model.name',
-//           'Payment Type': {
-//             $cond: {
-//               if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
-//               then: 'QuickPay',
-//               else: { $arrayElemAt: ['$ordersData.payment_method.type', 0] },
-//             },
-//           },
-//           'Account Balance': {
-//             $cond: {
-//               if: { $eq: [{ $type: '$account.balance' }, 'array'] },
-//               then: { $toDouble: { $arrayElemAt: ['$account.balance', 0] } },
-//               else: { $toDouble: { $ifNull: ['$account.balance', '0.0'] } },
-//             },
-//           },
-//           'Credit Limit': {
-//             $cond: {
-//               if: { $eq: [{ $type: '$classification.credit_limit' }, 'array'] },
-//               then: { $toDouble: { $arrayElemAt: ['$classification.credit_limit', 0] } },
-//               else: { $toDouble: { $ifNull: ['$classification.credit_limit', '0.0'] } },
-//             },
-//           },
-//           Currency: '$classification.currency',
-//           'Account Status': '$account.life_cycle_state',
-//           'Registration Date': {
-//             $dateToString: {
-//               format: '%d-%b-%Y',
-//               date: {
-//                 $toDate: {
-//                   $multiply: [
-//                     {
-//                       $cond: {
-//                         if: { $eq: [{ $type: '$profile.registration_date' }, 'array'] },
-//                         then: { $toLong: { $arrayElemAt: ['$profile.registration_date', 0] } },
-//                         else: { $toLong: { $ifNull: ['$profile.registration_date', 0] } },
-//                       },
-//                     },
-//                     1000,
-//                   ],
-//                 },
-//               },
-//             },
-//           },
-//           'Device Name': { $arrayElemAt: ['$devicesData.product.name', 0] },
-//           'Service Status': '$subscriptionsData.services.state',
-//           'Service Package': '$subscriptionsData.services.product.name',
-//           'Service Price': {
-//             $cond: {
-//               if: { $eq: [{ $type: '$subscriptionsData.services.price_terms.price' }, 'array'] },
-//               then: { $round: [{ $toDouble: { $arrayElemAt: ['$subscriptionsData.services.price_terms.price', 0] } }, 2] },
-//               else: { $round: [{ $toDouble: { $ifNull: ['$subscriptionsData.services.price_terms.price', '0.0'] } }, 2] },
-//             },
-//           },
-//           'Service Start Date': {
-//             $map: {
-//               input: '$subscriptionsData.services.service_terms.start_date',
-//               as: 'startDate',
-//               in: {
-//                 $dateToString: {
-//                   format: "%d %b %Y",
-//                   date: {
-//                     $toDate: { $multiply: ['$$startDate', 1000] }
-//                   },
-//                   timezone: "Indian/Maldives"
-//                 }
-//               }
-//             }
-//           },
-//           'Service End Date': {
-//             $map: {
-//               input: '$subscriptionsData.services.service_terms.end_date',
-//               as: 'endDate',
-//               in: {
-//                 $dateToString: {
-//                   format: "%d %b %Y",
-//                   date: {
-//                     $toDate: { $multiply: ['$$endDate', 1000] }
-//                   },
-//                   timezone: "Indian/Maldives"
-//                 }
-//               }
-//             }
-//           }
+    // Extract contact_ids
+    const contactIds = format === 'json'
+      ? events.map(event => event.contact_id)
+      : await eventsCursor.toArray().then(events => {
+        return events.map(event => event.contact_id);
+      });
 
+    // Match stage for ContactProfiles
+    let profileMatch = { contact_id: { $in: contactIds } };
+    if (search) profileMatch.$text = { $search: search };
+    if (atoll) profileMatch['location.province'] = atoll;
+    if (island) profileMatch['location.city'] = island;
 
+    // Aggregation for ContactProfiles
+    const profileQuery = [
+      { $match: profileMatch },
+      {
+        $lookup: {
+          from: 'Journals',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'joinedDataJournals',
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          contact_id: 1,
+          Name: {
+            $cond: {
+              if: {
+                $eq: [
+                  {
+                    $concat: [
+                      { $ifNull: ['$demographics.first_name', ''] },
+                      ' ',
+                      { $ifNull: ['$demographics.last_name', ''] },
+                    ]
+                  },
+                  ' '
+                ]
+              },
+              then: { $ifNull: [{ $arrayElemAt: ['$joinedDataJournals.contact_name', 0] }, ''] },
+              else: {
+                $concat: [
+                  { $ifNull: ['$demographics.first_name', ''] },
+                  ' ',
+                  { $ifNull: ['$demographics.last_name', ''] },
+                ]
+              }
+            }
+          },
+          'Customer Code': {
+            $ifNull: [
+              {
+                $toString: { $arrayElemAt: ['$joinedDataJournals.contact_code', 0] }
+              },
+              ''
+            ]
+          },
+          'Account Number': {
+            $ifNull: [{ $arrayElemAt: ['$joinedDataJournals.account_number', 0] }, ''],
+          },
+          Country: { $ifNull: ['$location.country', ''] },
+          'Account Classification': { $ifNull: ['$account.classification.name', ''] },
+          'Contact Sales Model': { $ifNull: ['$sales_model.name', ''] },
+          Tags: {
+            $ifNull: [
+              {
+                $reduce: {
+                  input: '$tags',
+                  initialValue: '',
+                  in: {
+                    $cond: {
+                      if: { $eq: ['$this', {}] },
+                      then: '$$value',
+                      else: {
+                        $concat: [
+                          '$$value',
+                          { $cond: { if: { $eq: ['$$value', ''] }, then: '', else: ',' } },
+                          '$$this.name'
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              ''
+            ]
+          },
+          'Address Name': { $ifNull: ['$location.address_name', ''] },
+          'Address Line1': { $ifNull: ['$location.address_line1', ''] },
+          'Address Line2': { $ifNull: ['$location.address_line2', ''] },
+          City: { $ifNull: ['$location.city', ''] },
+          'Service Provider': {
+            $let: {
+              vars: {
+                serviceProvider: {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: { $ifNull: ['$custom_fields', []] },
+                        as: 'field',
+                        cond: { $eq: ['$$field.key', 'service_provider'] }
+                      }
+                    },
+                    0
+                  ]
+                }
+              },
+              in: { $ifNull: ['$$serviceProvider.value_label', ''] }
+            }
+          },
+          'Invoiced Service': {
+            $ifNull: [
+              {
+                $reduce: {
+                  input: { $ifNull: ['$services', []] },
+                  initialValue: '',
+                  in: {
+                    $concat: [
+                      '$$value',
+                      { $cond: { if: { $eq: ['$$value', ''] }, then: '', else: ',' } },
+                      { $ifNull: ['$$this.product.name', ''] }
+                    ]
+                  }
+                }
+              },
+              ''
+            ]
+          }
+        },
+      },
+    ];
 
+    const profiles = await mongoose.connection.db
+      .collection('ContactProfiles')
+      .aggregate(profileQuery, { maxTimeMS: 300000, allowDiskUse: true })
+      .toArray();
 
-//         },
-//       },
-//     ];
+    // Count for pagination
+    const countQuery = [
+      { $match: eventMatch },
+      { $count: 'total' },
+    ];
+    const countResult = await mongoose.connection.db
+      .collection('Events')
+      .aggregate(countQuery, { maxTimeMS: 300000, allowDiskUse: true })
+      .toArray();
+    const total = countResult.length > 0 ? countResult[0].total : 0;
+    const totalPages = Math.ceil(total / limit);
 
-//     // Add pagination stages for JSON format
-//     let results;
-//     let pagination = null;
-//     if (format === 'json' && page && limit) {
-//       const pageNum = parseInt(page, 10) || 1;
-//       const limitNum = parseInt(limit, 10) || 10;
-//       const skipNum = (pageNum - 1) * limitNum;
+    // Prepare response
+    const response = {
+      results: format === 'json' ? [] : undefined,
+      pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages },
+      csv: undefined,
+    };
 
-//       // Get total count
-//       const countResult = await mongoose.connection.db
-//         .collection('ContactProfiles')
-//         .aggregate(countPipeline, { maxTimeMS: 600000, allowDiskUse: true })
-//         .toArray();
-//       const totalItems = countResult.length > 0 ? countResult[0].totalItems : 0;
-//       const totalPages = Math.ceil(totalItems / limitNum);
+    // Handle JSON output
+    if (format === 'json') {
+      response.results = events.map(event => {
+        const profile = profiles.find(p => p.contact_id === event.contact_id) || {};
+        // Helper function to safely extract transaction fields
+        const getTransactionField = (field, isDecimal = false) => {
+          if (!event.transaction || !event.transaction[field]) return '';
+          if (isDecimal) {
+            return event.transaction[field]?.$numberDecimal?.toString() ||
+              event.transaction[field]?.toString() ||
+              '';
+          }
+          return event.transaction[field]?.toString() || '';
+        };
 
-//       // Add skip and limit to the main query
-//       aggregationQuery.push(
-//         { $skip: skipNum },
-//         { $limit: limitNum }
-//       );
+        const result = {
+          Name: profile.Name || '',
+          'Customer Code': profile['Customer Code'] || '',
+          'Account Number': profile['Account Number'] || '',
+          Country: profile.Country || '',
+          'Account Classification': profile['Account Classification'] || '',
+          'Contact Sales Model': profile['Contact Sales Model'] || '',
+          Tags: profile.Tags || '',
+          'Address Name': profile['Address Name'] || '',
+          'Address Line1': profile['Address Line1'] || '',
+          'Address Line2': profile['Address Line2'] || '',
+          City: profile.City || '',
+          'Service Provider': profile['Service Provider'] || '',
+          'Invoiced Service': profile['Invoiced Service'] || '',
+          'Invoice Number': getTransactionField('number'),
+          'Invoice Reference Number': getTransactionField('reference_number'),
+          'Posted Date': event.transaction?.posted_date
+            ? new Date(event.transaction.posted_date * 1000).toLocaleString('en-GB', {
+              day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+            })
+            : '',
+          'Issued Date': event.transaction?.issued_date
+            ? new Date(event.transaction.issued_date * 1000).toLocaleString('en-GB', {
+              day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+            })
+            : '',
+          'Due Date': event.transaction?.due_date
+            ? new Date(event.transaction.due_date * 1000).toLocaleString('en-GB', {
+              day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+            })
+            : '',
+          'Total Default Currency': getTransactionField('total_default_currency', true),
+          'Total Net Amount': getTransactionField('net_amount', true),
+          'Total Discount': getTransactionField('default_currency_discount_amount', true),
+          'Total Tax': getTransactionField('default_currency_tax_amount', true),
+          Currency: getTransactionField('currency_code'),
+          'Total Amount': getTransactionField('total_amount', true),
+          'Exchange Rate': getTransactionField('exchange_rate', true),
+        };
+        return result;
+      });
+    }
 
-//       // Execute paginated query
-//       results = await mongoose.connection.db
-//         .collection('ContactProfiles')
-//         .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
-//         .toArray();
+    // Handle CSV output with streaming
+    if (format === 'csv') {
+      const fields = [
+        'Name',
+        'Customer Code',
+        'Account Number',
+        'Country',
+        'Account Classification',
+        'Contact Sales Model',
+        'Tags',
+        'Address Name',
+        'Address Line1',
+        'Address Line2',
+        'City',
+        'Service Provider',
+        'Invoiced Service',
+        'Invoice Number',
+        'Invoice Reference Number',
+        'Posted Date',
+        'Issued Date',
+        'Due Date',
+        'Total Default Currency',
+        'Total Net Amount',
+        'Total Discount',
+        'Total Tax',
+        'Currency',
+        'Total Amount',
+        'Exchange Rate',
+      ];
+      const parser = new Parser({ fields, header: true });
+      let csvContent = '';
 
-//       // Prepare pagination metadata
-//       pagination = {
-//         totalItems,
-//         totalPages,
-//         currentPage: pageNum,
-//         pageSize: limitNum,
-//       };
-//     } else {
-//       // Execute non-paginated query (for CSV or JSON without pagination)
-//       results = await mongoose.connection.db
-//         .collection('ContactProfiles')
-//         .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
-//         .toArray();
-//     }
+      // Write header
+      csvContent = parser.parse([]); // Generates the header row
 
-//     // Handle response format
-//     if (format === 'csv') {
-//       const fields = [
-//         // 'id',
-//         'Account Number',
-//         // 'Contact Code',
-//         'Customer Name',
-//         // 'Customer Type',
-//         'Service Provider.value_label',
-//         // 'Customer Code.value_label',
-//         'Mobile',
-//         'Island',
-//         'Atoll',
-//         'Ward',
-//         'Road',
-//         // 'Business Name',
-//         // 'Sales Model',
-//         // 'Payment Type',
-//         // 'Account Balance',
-//         // 'Credit Limit',
-//         // 'Currency',
-//         'Account Status',
-//         // 'Registration Date',
-//         'Device Name',
-//         'Service Status',
-//         'Service Package',
-//         // 'Service Price',
-//         'Service Start Date',
-//         // 'Service End Date',
-//       ];
-//       const csvData = parse(results, { fields });
-//       return { data: csvData, isCsv: true };
-//     }
+      const stream = mongoose.connection.db
+        .collection('Events')
+        .aggregate(eventQueryBase, { maxTimeMS: 300000, allowDiskUse: true })
+        .stream();
 
-//     // Return JSON with pagination metadata
-//     return {
-//       data: results,
-//       isCsv: false,
-//       pagination,
-//     };
-//   } catch (error) {
-//     console.error('Error exporting customer report:', error);
-//     throw new Error('Error exporting customer report');
-//   }
-// };
+      await new Promise((resolve, reject) => {
+        stream.on('data', (event) => {
+          const profile = profiles.find(p => p.contact_id === event.contact_id) || {};
+          // Helper function to safely extract transaction fields
+          const getTransactionField = (field, isDecimal = false) => {
+            if (!event.transaction || !event.transaction[field]) return '';
+            if (isDecimal) {
+              return event.transaction[field]?.$numberDecimal?.toString() ||
+                event.transaction[field]?.toString() ||
+                '';
+            }
+            return event.transaction[field]?.toString() || '';
+          };
+
+          const row = {
+            Name: profile.Name || '',
+            'Customer Code': profile['Customer Code'] || '',
+            'Account Number': profile['Account Number'] || '',
+            Country: profile.Country || '',
+            'Account Classification': profile['Account Classification'] || '',
+            'Contact Sales Model': profile['Contact Sales Model'] || '',
+            Tags: profile.Tags || '',
+            'Address Name': profile['Address Name'] || '',
+            'Address Line1': profile['Address Line1'] || '',
+            'Address Line2': profile['Address Line2'] || '',
+            City: profile.City || '',
+            'Service Provider': profile['Service Provider'] || '',
+            'Invoiced Service': profile['Invoiced Service'] || '',
+            'Invoice Number': getTransactionField('number'),
+            'Invoice Reference Number': getTransactionField('reference_number'),
+            'Posted Date': event.transaction?.posted_date
+              ? new Date(event.transaction.posted_date * 1000).toLocaleString('en-GB', {
+                day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+              })
+              : '',
+            'Issued Date': event.transaction?.issued_date
+              ? new Date(event.transaction.issued_date * 1000).toLocaleString('en-GB', {
+                day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+              })
+              : '',
+            'Due Date': event.transaction?.due_date
+              ? new Date(event.transaction.due_date * 1000).toLocaleString('en-GB', {
+                day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+              })
+              : '',
+            'Total Default Currency': getTransactionField('total_default_currency', true),
+            'Total Net Amount': getTransactionField('net_amount', true),
+            'Total Discount': getTransactionField('default_currency_discount_amount', true),
+            'Total Tax': getTransactionField('default_currency_tax_amount', true),
+            Currency: getTransactionField('currency_code'),
+            'Total Amount': getTransactionField('total_amount', true),
+            'Exchange Rate': getTransactionField('exchange_rate', true),
+          };
+          // Parse the row without header
+          const rowCsv = parser.parse([row]).split('\n')[1]; // Skip the header row, take only the data row
+          csvContent += `\n${rowCsv}`;
+        });
+        stream.on('end', () => {
+          response.csv = csvContent;
+          resolve();
+        });
+        stream.on('error', (err) => reject(err));
+      });
+    }
+
+    return response;
+  } catch (error) {
+    console.error('Error exporting contact profiles with invoice report:', {
+      error: error.message,
+      stack: error.stack,
+    });
+    throw new Error('Error exporting contact profiles with invoice report');
+  }
+};
 
 
 const exportCustomerReports = async (search, startDate, endDate, atoll, island, format, page, limit, serviceProvider) => {
@@ -2951,63 +3033,76 @@ const exportCustomerDealerWiseCollection = async (search, startDate, endDate, at
 };
 
 const exportCustomerCollection = async (
-  page,
-  limit,
-  search,
+  page = 1,
+  limit = 100,
   startDate,
   endDate,
   atoll,
-  island,) => {
+  island
+) => {
   try {
-    // Calculate timestamps
     let startTimestamp, endTimestamp;
-    if (startDate) {
-      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
-    }
-    if (endDate) {
-      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
-    }
+    if (startDate) startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+    if (endDate) endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
 
-    // Match stage
     let matchStage = {
       'related_entity.transaction_type': { $in: ['PAYMENT', 'MANUAL_JOURNAL'] },
     };
-    if (startTimestamp) {
-      matchStage.posted_date = { $gte: startTimestamp };
-    }
-    if (endTimestamp) {
-      matchStage.posted_date = matchStage.posted_date || {};
-      matchStage.posted_date.$lte = endTimestamp;
-    }
-    if (search) {
-      matchStage.$text = { $search: search };
-    }
+    if (startTimestamp) matchStage.posted_date = { $gte: startTimestamp };
+    if (endTimestamp) matchStage.posted_date = { ...matchStage.posted_date, $lte: endTimestamp };
 
-    // Aggregation pipeline
     const aggregationQuery = [
-      { $match: matchStage },
+      // { $match: matchStage },
+      {
+        $project: {
+          contact_id: 1,
+          posted_date: 1,
+          amount: 1,
+          submited_by_user_name: 1,
+          related_entity: 1,
+        },
+      },
       {
         $lookup: {
           from: 'ContactProfiles',
           localField: 'contact_id',
           foreignField: 'contact_id',
+          pipeline: [
+            {
+              $match: {
+                $and: [
+                  atoll ? { 'location.province': atoll } : {},
+                  island ? { 'location.city': island } : {},
+                ],
+              },
+            },
+            {
+              $project: {
+                'demographics.first_name': 1,
+                'demographics.last_name': 1,
+                phone: 1,
+                'location.province': 1,
+                'location.city': 1,
+                'location.address_line1': 1,
+                'location.address_line2': 1,
+                'location.address_name': 1,
+                'location.country': 1,
+                'custom_fields.value_label': 1,
+              },
+            },
+          ],
           as: 'joinedData',
         },
       },
       {
         $lookup: {
           from: 'Events',
-          let: { contact_id: '$contact_id' },
+          localField: 'contact_id',
+          foreignField: 'contact_id',
           pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ['$contact_id', '$$contact_id'] },
-                type: 'PAYMENT_POSTED',
-              },
-            },
+            { $match: { type: 'PAYMENT_POSTED' } },
             {
               $project: {
-                _id: 0,
                 transaction_number: '$transaction.number',
                 payment_method_type: '$payment_method.payment_method_type',
               },
@@ -3023,27 +3118,25 @@ const exportCustomerCollection = async (
             $dateToString: { format: '%d %b %Y', date: { $toDate: { $multiply: ['$posted_date', 1000] } } },
           },
           name: {
-            $cond: {
-              if: { $gt: [{ $size: '$joinedData' }, 0] },
-              then: {
+            $ifNull: [
+              {
                 $concat: [
                   { $arrayElemAt: ['$joinedData.demographics.first_name', 0] },
                   ' ',
                   { $arrayElemAt: ['$joinedData.demographics.last_name', 0] },
                 ],
               },
-              else: 'N/A',
-            },
+              'N/A',
+            ],
           },
-          phone: { $arrayElemAt: ['$joinedData.phone', 0] },
-          atoll: { $arrayElemAt: ['$joinedData.location.province', 0] },
-          island: { $arrayElemAt: ['$joinedData.location.city', 0] },
-          ward: { $arrayElemAt: ['$joinedData.location.address_line1', 0] },
-          road: { $arrayElemAt: ['$joinedData.location.address_line2', 0] },
+          phone: { $ifNull: [{ $arrayElemAt: ['$joinedData.phone', 0] }, 'N/A'] },
+          atoll: { $ifNull: [{ $arrayElemAt: ['$joinedData.location.province', 0] }, 'N/A'] },
+          island: { $ifNull: [{ $arrayElemAt: ['$joinedData.location.city', 0] }, 'N/A'] },
+          ward: { $ifNull: [{ $arrayElemAt: ['$joinedData.location.address_line1', 0] }, 'N/A'] },
+          road: { $ifNull: [{ $arrayElemAt: ['$joinedData.location.address_line2', 0] }, 'N/A'] },
           address: {
-            $cond: {
-              if: { $gt: [{ $size: '$joinedData' }, 0] },
-              then: {
+            $ifNull: [
+              {
                 $concat: [
                   { $arrayElemAt: ['$joinedData.location.address_line1', 0] },
                   ', ',
@@ -3058,31 +3151,44 @@ const exportCustomerCollection = async (
                   { $arrayElemAt: ['$joinedData.location.country', 0] },
                 ],
               },
-              else: 'N/A',
-            },
+              'N/A',
+            ],
           },
           account_number: 1,
           service_price: { $toDouble: '$amount' },
           submitted_by_user: '$submited_by_user_name',
-          dealer: { $arrayElemAt: ['$joinedData.custom_fields.value_label', 0] },
-          receipt_id: { $arrayElemAt: ['$eventData.transaction_number', 0] },
-          payment_type: { $arrayElemAt: ['$eventData.payment_method_type', 0] },
+          dealer: { $ifNull: [{ $arrayElemAt: ['$joinedData.custom_fields.value_label', 0] }, 'N/A'] },
+          receipt_id: { $ifNull: [{ $arrayElemAt: ['$eventData.transaction_number', 0] }, 'N/A'] },
+          payment_type: { $ifNull: [{ $arrayElemAt: ['$eventData.payment_method_type', 0] }, 'N/A'] },
         },
       },
-      { $limit: 100 }
+      { $skip: (parseInt(page) - 1) * parseInt(limit) },
+      { $limit: parseInt(limit) },
     ];
 
-    console.log('aggregationQuery:', aggregationQuery)
-
-    console.log('Starting asynchronous aggregation...');
-    const result = await mongoose.connection.db
+    const cursor = mongoose.connection.db
       .collection('Journals')
-      .aggregate(aggregationQuery, { maxTimeMS: 60000, allowDiskUse: true })
-      .batchSize(1000);
-    console.log(result, 'result having datas')
-    return result;
+      .aggregate(aggregationQuery, { maxTimeMS: 120000, allowDiskUse: true });
+    const results = [];
+    for await (const doc of cursor) {
+      results.push(doc);
+    }
+
+    return {
+      data: results,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: results.length,
+      },
+    };
   } catch (error) {
-    console.error('Error details:', error.name, error.message, error.stack);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      queryParams: { page, limit, startDate, endDate, atoll, island },
+    });
     throw new Error(`Error exporting report: ${error.message}`);
   }
 };
@@ -5385,5 +5491,6 @@ module.exports = {
   getDeviceNames,
   getVipTags,
   exportCustomerCollection,
-  exportContactProfiles
+  exportContactProfiles,
+  exportContactProfilesWithInvoice
 }

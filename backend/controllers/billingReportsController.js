@@ -49,6 +49,30 @@ const exportContactProfiles = async (req, res) => {
   }
 };
 
+const exportContactProfilesWithInvoiceController = async (req, res) => {
+  try {
+    const { search, startDate, endDate, atoll, island, page = 1, limit = 10, format = 'json' } = req.query;
+
+    const data = await billingReportService.exportContactProfilesWithInvoice(search, startDate, endDate, atoll, island, page, limit, format);
+
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=customer-invoice-reports.csv');
+      res.send(data.csv);
+    } else {
+      res.json({
+        data: data.results,
+        pagination: data.pagination,
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error processing request',
+      error: error.message,
+    });
+  }
+};
+
 const exportCustomerCSVorJSON = async (req, res) => {
   try {
     const { search, startDate, endDate, atoll, island, format, page, limit, serviceProvider } = req.query;
@@ -197,22 +221,45 @@ const exportCustomerDealerWiseCollection = async (req, res) => {
 
 const exportCustomerCollection = async (req, res) => {
   try {
-    const { search, startDate, endDate, atoll, island, format, page, limit } = req.query;
+    const { search, startDate, endDate, atoll, island, format = 'csv', page = 1, limit = 1000 } = req.query;
 
     const response = await billingReportService.exportCustomerCollection(
       page,
       limit,
-      search,
       startDate,
       endDate,
       atoll,
-      island,
+      island
     );
 
-    if (response.isCsv) {
+    console.log('Response:', response);
+
+    if (format === 'csv') {
+      // Assuming a CSV conversion utility is available
+      const csvData = response.data
+        .map(row =>
+          [
+            row.posted_date,
+            row.name,
+            row.phone,
+            row.atoll,
+            row.island,
+            row.ward,
+            row.road,
+            row.address,
+            row.account_number,
+            row.service_price,
+            row.submitted_by_user,
+            row.dealer,
+            row.receipt_id,
+            row.payment_type,
+          ].join(',')
+        )
+        .join('\n');
+      const csvHeader = 'Posted Date,Name,Phone,Atoll,Island,Ward,Road,Address,Account Number,Service Price,Submitted By,Dealer,Receipt ID,Payment Type\n';
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=customer_wise_collection.csv');
-      res.send(response.data);
+      res.send(csvHeader + csvData);
     } else {
       res.status(200).json({
         data: response.data,
@@ -639,5 +686,6 @@ module.exports = {
   getDeviceNames,
   getVipTags,
   exportCustomerCollection,
-  exportContactProfiles
+  exportContactProfiles,
+  exportContactProfilesWithInvoiceController
 }
