@@ -374,6 +374,8 @@ const CustomerReports = () => {
                                     'Island',
                                     'Service Provider',
                                     'Device Code',
+                                    'Tags',
+                                    'Device Name'
                                 ].map((header) => (
                                     <TableCell
                                         key={header}
@@ -429,6 +431,8 @@ const CustomerReports = () => {
                                             'Island',
                                             'Service Provider',
                                             'Device Code',
+                                            'Tags',
+                                            'Device Name'
                                         ].map((key) => (
                                             <TableCell
                                                 key={key}

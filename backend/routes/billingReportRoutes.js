@@ -69,6 +69,10 @@ router.delete('/users/:id', rbacController.deleteUser);
 //Bulk Upload Routes
 router.post('/upload-contacts', upload.single('file'), bulkUploadController.uploadContacts);
 
+router.post('/upload-services', upload.single('file'), bulkUploadController.uploadServiceBulk);
+
+router.post('/upload-address', upload.single('file'), bulkUploadController.uploadAddress);
+
 router.post('/upload-dealer-contacts', upload.single('file'), bulkUploadController.uploadDealerContacts);
 
 router.post('/create-bulk', bulkUploadController.createBulkOperation);
@@ -89,6 +93,11 @@ router.get('/devices/statistics/export', billingReportController.exportDeviceSta
 router.get('/devices/names', billingReportController.getDeviceNames);
 
 router.get('/vip/tags', billingReportController.getVipTags);
+
+router.post('/bulkService', bulkUploadController.updateAddress);
+
+router.post('/bulkAddress', bulkUploadController.updateContactAddress);
+
 
 // router.get('/fetchFutureReports', billingReportController.fetchFutureReports);
 

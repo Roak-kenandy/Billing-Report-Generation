@@ -141,39 +141,39 @@ const exportCustomerReportsNotEffective = async (req, res) => {
   }
 };
 
-const exportCustomerDealerWiseCollection = async (req, res) => {
-  try {
-    const { search, startDate, endDate, atoll, island, format, page, limit, serviceProvider } = req.query;
+// const exportCustomerDealerWiseCollection = async (req, res) => {
+//   try {
+//     const { search, startDate, endDate, atoll, island, format, page, limit, serviceProvider } = req.query;
 
-    const response = await billingReportService.exportCustomerDealerWiseCollection(
-      search,
-      startDate,
-      endDate,
-      atoll,
-      island,
-      format,
-      page,
-      limit,
-      serviceProvider
-    );
+//     const response = await billingReportService.exportCustomerDealerWiseCollection(
+//       search,
+//       startDate,
+//       endDate,
+//       atoll,
+//       island,
+//       format,
+//       page,
+//       limit,
+//       serviceProvider
+//     );
 
-    if (response.isCsv) {
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', 'attachment; filename=dealer_wise_collection.csv');
-      res.send(response.data);
-    } else {
-      res.status(200).json({
-        data: response.data,
-        pagination: response.pagination,
-      });
-    }
-  } catch (error) {
-    res.status(500).json({
-      message: 'Error exporting report',
-      error: error.message,
-    });
-  }
-};
+//     if (response.isCsv) {
+//       res.setHeader('Content-Type', 'text/csv');
+//       res.setHeader('Content-Disposition', 'attachment; filename=dealer_wise_collection.csv');
+//       res.send(response.data);
+//     } else {
+//       res.status(200).json({
+//         data: response.data,
+//         pagination: response.pagination,
+//       });
+//     }
+//   } catch (error) {
+//     res.status(500).json({
+//       message: 'Error exporting report',
+//       error: error.message,
+//     });
+//   }
+// };
 
 // const exportQueue = require('../queues/exportQueue');
 // const { v4: uuidv4 } = require('uuid');
@@ -270,6 +270,71 @@ const exportCustomerCollection = async (req, res) => {
     res.status(500).json({
       message: 'Error exporting report',
       error: error.message,
+    });
+  }
+};
+
+const exportCustomerDealerWiseCollection = async (req, res) => {
+  try {
+    const { search, startDate, endDate, atoll, island, format = 'csv', page = 1, limit = 1000 } = req.query;
+
+    const response = await billingReportService.exportCustomerDealerWiseCollection(
+      page,
+      limit,
+      startDate,
+      endDate,
+      atoll,
+      island,
+      format
+    );
+
+    if (!response || !response.data) {
+      return res.status(400).json({
+        message: 'Error exporting report',
+        error: 'No data returned from the service',
+      });
+    }
+
+    if (format === 'csv') {
+      const csvHeader = 'Posted Date,Service Provider,Account Number,Tags,Name,Customer Code,Country,Address Name,Atoll,Island,City,Reciept Number,Total Amount,Payment Method,Action,Submitted By\n';
+      const csvData = response.data
+        .map(row =>
+          [
+            row['Posted Date'] || '',
+            row['Service Provider'] || '',
+            row['Account Number'] || '',
+            row['Tags'] || '',
+            row['Name'] || '',
+            row['Customer Code'] || '',
+            row['Country'] || '',
+            row['Address Name'] || '',
+            row['Atoll'] || '',
+            row['Island'] || '',
+            row['City'] || '',
+            row['Reciept Number'] || '',
+            row['Total Amount'] || '',
+            row['Payment Method'] || '',
+            row['Action'] || '',
+            row['Submitted By'] || ''
+          ]
+            .map(field => `"${String(field).replace(/"/g, '""')}"`)
+            .join(',')
+        )
+        .join('\n');
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=customer_wise_collection.csv');
+      res.send(csvHeader + csvData);
+    } else {
+      res.status(200).json({
+        data: response.data,
+        pagination: response.pagination || {},
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error exporting report',
+      error: error.message || 'An unexpected error occurred',
     });
   }
 };
@@ -687,5 +752,5 @@ module.exports = {
   getVipTags,
   exportCustomerCollection,
   exportContactProfiles,
-  exportContactProfilesWithInvoiceController
+  exportContactProfilesWithInvoiceController,
 }
