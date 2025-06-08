@@ -132,11 +132,6 @@ const processBulkUpload = async (filePath) => {
     // Get native collection reference
     const collection = mongoose.connection.db.collection('Journals');
 
-
-    // const contacts = await collection.find(
-    //     { contact_code: { $in: contactCodes } },
-    //     { projection: { contact_id: 1,contact_code: 1, _id: 0 } }
-    // ).toArray();
     // Find contacts
     const contacts = await collection.find({ 
         contact_code: { $in: [...new Set(contactCodes)] } // Deduplicate codes
@@ -152,8 +147,108 @@ const processBulkUpload = async (filePath) => {
       }));
 
       return result;
-    // Return array of objects with contact_id property
-    // return contacts.map(contact => ({ contact_id: contact.contact_id, contact_code: contact.contact_code }));
+};
+
+const processServiceBulk = async (filePath) => {
+    // Read Excel file
+    const workbook = xlsx.readFile(filePath);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const data = xlsx.utils.sheet_to_json(worksheet);
+
+    const contactCodes = data.map(row => row['Contact Code'] ? String(row['Contact Code']).replace(/'/g, '').trim() : null).filter(Boolean);
+
+    // Get native collection references
+    const journalsCollection = mongoose.connection.db.collection('Journals');
+    const contactProfilesCollection = mongoose.connection.db.collection('ContactProfiles');
+
+    // Find contacts from Journals collection to get contact_id
+    const contacts = await journalsCollection.find({ 
+        contact_code: { $in: [...new Set(contactCodes)] } // Use cleaned codes
+    }).toArray();
+
+    // Create a map for quick lookup of Journals contacts (contact_code to contact_id)
+    const contactMap = new Map(contacts.map(c => [String(c.contact_code).trim(), c]));
+
+    // Extract contact_id values from Journals for ContactProfiles query
+    const contactIds = contacts.map(c => c.contact_id).filter(Boolean);
+
+    // Find contact profiles with custom_fields using contact_id
+    const contactProfiles = await contactProfilesCollection.find({ 
+        contact_id: { $in: [...new Set(contactIds)] } // Deduplicate contact_ids
+    }).toArray();
+
+    // Create a map for quick lookup of custom_fields from ContactProfiles (keyed by contact_id)
+    const customFieldsMap = new Map();
+    contactProfiles.forEach(profile => {
+        if (profile.custom_fields && Array.isArray(profile.custom_fields)) {
+            // Filter valid custom_fields entries with key, value, and value_label
+            const validCustomFields = profile.custom_fields.filter(field => 
+                field.key && field.value && field.value_label
+            );
+            if (validCustomFields.length > 0) {
+                customFieldsMap.set(profile.contact_id, validCustomFields);
+            }
+        }
+    });
+
+    // Map each Excel row to a contact, dynamically including all custom_fields as separate fields
+    const result = contactCodes.map(code => {
+        const contact = contactMap.get(code);
+        const resultObj = {
+            contact_id: contact?.contact_id,
+            contact_code: code // Use cleaned contact_code
+        };
+
+        // Get custom_fields for this contact_id
+        const customFields = contact && customFieldsMap.get(contact.contact_id) || [];
+
+        // Dynamically add key, value, value_label for each custom_field
+        customFields.forEach(field => {
+            // Use a sanitized version of the key to avoid invalid field names
+            const safeKey = field.key.replace(/[^a-zA-Z0-9_]/g, '_');
+            resultObj[`${safeKey}_key`] = field.key;
+            resultObj[`${safeKey}_value`] = field.value;
+            resultObj[`${safeKey}_value_label`] = field.value_label;
+        });
+
+        return resultObj;
+    });
+    console.log(result,'result of service bulk upload')
+    return result;
+};
+
+const processAddressBulk = async (filePath) => {
+    // Read Excel file
+    const workbook = xlsx.readFile(filePath);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const data = xlsx.utils.sheet_to_json(worksheet);
+
+    // Extract and clean contact codes
+    const contactCodes = data
+        .map(row => row['Contact Code'] ? String(row['Contact Code']).replace(/'/g, '').trim() : null)
+        .filter(Boolean);
+
+        console.log(contactCodes,'contact codes in address bulk upload')
+
+    // Get Journals collection reference
+    const journalsCollection = mongoose.connection.db.collection('Journals');
+
+    // Find contacts from Journals collection to get contact_id
+    const contacts = await journalsCollection.find({ 
+        contact_code: { $in: [...new Set(contactCodes)] } // Use deduplicated cleaned codes
+    }).toArray();
+
+    // Create a map for quick lookup of Journals contacts (contact_code to contact_id)
+    const contactMap = new Map(contacts.map(c => [String(c.contact_code).trim(), c]));
+
+    // Map each Excel contact code to a result object with contact_id and contact_code
+    const result = contactCodes.map(code => ({
+        contact_id: contactMap.get(code)?.contact_id || null,
+        contact_code: code
+    }));
+
+    console.log(result, 'result of service bulk upload');
+    return result;
 };
 
 const processDealerBulkUpload = async (filePath) => {
@@ -237,5 +332,7 @@ module.exports = {
     loginUser,
     forgotPassword,
     resetPassword,
-    processDealerBulkUpload
+    processDealerBulkUpload,
+    processServiceBulk,
+    processAddressBulk
 };
