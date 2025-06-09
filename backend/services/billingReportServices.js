@@ -466,7 +466,7 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
           'Registered Date': {
             $dateToString: {
               format: '%d-%b-%Y',
-              date: { $toDate: { $multiply: [{ $toLong: '$submited_date' }, 1000] } },
+              date: { $toDate: { $multiply: [{ $toLong: '$profile.registration_date' }, 1000] } },
             },
           },
           'Address Line 1': { $ifNull: ['$location.address_line1', ''] },
