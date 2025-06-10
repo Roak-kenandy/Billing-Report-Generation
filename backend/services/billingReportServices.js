@@ -593,11 +593,16 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
                 ],
               },
               then: {
-                $let: {
-                  vars: {
-                    device: { $arrayElemAt: ['$joinedDataDevices', 0] },
+                $reduce: {
+                  input: '$joinedDataDevices',
+                  initialValue: '',
+                  in: {
+                    $concat: [
+                      '$$value',
+                      { $cond: { if: { $eq: ['$$value', ''] }, then: '', else: ', ' } },
+                      { $ifNull: ['$$this.product.name', ''] },
+                    ],
                   },
-                  in: { $ifNull: ['$$device.product.name', ''] },
                 },
               },
               else: '',
@@ -2646,6 +2651,295 @@ const exportCustomerCollection = async (
   }
 };
 
+// const exportCustomerDealerWiseCollection = async (
+//   page,
+//   limit,
+//   startDate,
+//   endDate,
+//   atoll,
+//   island,
+//   format
+// ) => {
+//   try {
+//     // Date filter
+//     let startTimestamp, endTimestamp;
+//     if (startDate) startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+//     if (endDate) endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+
+//     // Match stage for Events
+//     let eventMatch = { type: { $in: ['PAYMENT_POSTED', 'TOP_UP_POSTED'] } };
+//     if (startTimestamp) eventMatch['transaction.posted_date'] = { $gte: startTimestamp };
+//     if (endTimestamp) eventMatch['transaction.posted_date'] = eventMatch['transaction.posted_date']
+//       ? { $gte: startTimestamp, $lte: endTimestamp }
+//       : { $lte: endTimestamp };
+
+//     // Base event query
+//     const eventQueryBase = [
+//       { $match: eventMatch },
+//       {
+//         $project: {
+//           contact_id: 1,
+//           'transaction.id': 1, // Include transaction.id for matching
+//           'transaction.number': 1,
+//           'transaction.posted_date': 1,
+//           'transaction.currency_code': 1,
+//           'transaction.total_amount': 1,
+//           'payment_method': 1,
+//           'submited_by_user_name': 1,
+//           'type': 1
+//         },
+//       },
+//     ];
+
+//     // Add pagination for JSON, no pagination for CSV
+//     const eventQuery = format === 'json'
+//       ? [...eventQueryBase, { $skip: (page - 1) * limit }, { $limit: parseInt(limit) }]
+//       : eventQueryBase;
+
+//     // Fetch Events
+//     const events = await mongoose.connection.db
+//       .collection('Events')
+//       .aggregate(eventQuery, { maxTimeMS: 300000, allowDiskUse: true })
+//       .toArray();
+
+//     // Extract contact_ids
+//     const contactIds = events.map(event => event.contact_id);
+
+//     // Early return if no contact IDs
+//     if (!contactIds.length) {
+//       return {
+//         data: [],
+//         pagination: { page: parseInt(page), limit: parseInt(limit), total: 0, totalPages: 0 },
+//       };
+//     }
+
+//     // Match stage for ContactProfiles
+//     let profileMatch = { contact_id: { $in: contactIds }, 'custom_fields.key': 'service_provider' };
+
+//     // Aggregation for ContactProfiles
+//     const profileQuery = [
+//       { $match: profileMatch },
+//       {
+//         $lookup: {
+//           from: 'Journals',
+//           localField: 'contact_id',
+//           foreignField: 'contact_id',
+//           as: 'joinedDataJournals',
+//           pipeline: [
+//             {
+//               $match: {
+//                 account_type: { $in: ['CREDIT', 'DEBIT'] } // Filter valid account types
+//               }
+//             },
+//             { $sort: { posted_date: -1 } }, // Sort by most recent
+//           ]
+//         },
+//       },
+//       {
+//         $project: {
+//           _id: 0,
+//           contact_id: 1,
+//           Name: {
+//             $cond: {
+//               if: {
+//                 $eq: [
+//                   {
+//                     $concat: [
+//                       { $ifNull: ['$demographics.first_name', ''] },
+//                       ' ',
+//                       { $ifNull: ['$demographics.last_name', ''] },
+//                     ]
+//                   },
+//                   ' '
+//                 ]
+//               },
+//               then: { $ifNull: [{ $arrayElemAt: ['$joinedDataJournals.contact_name', 0] }, ''] },
+//               else: {
+//                 $concat: [
+//                   { $ifNull: ['$demographics.first_name', ''] },
+//                   ' ',
+//                   { $ifNull: ['$demographics.last_name', ''] },
+//                 ]
+//               }
+//             }
+//           },
+//           'Customer Code': {
+//             $ifNull: [
+//               {
+//                 $toString: { $arrayElemAt: ['$joinedDataJournals.contact_code', 0] }
+//               },
+//               ''
+//             ]
+//           },
+//           'Account Number': {
+//             $ifNull: [{ $arrayElemAt: ['$joinedDataJournals.account_number', 0] }, ''],
+//           },
+//           Country: { $ifNull: ['$location.country', ''] },
+//           Tags: {
+//             $ifNull: [
+//               {
+//                 $reduce: {
+//                   input: '$tags',
+//                   initialValue: '',
+//                   in: {
+//                     $cond: {
+//                       if: { $eq: ['$this', {}] },
+//                       then: '$$value',
+//                       else: {
+//                         $concat: [
+//                           '$$value',
+//                           { $cond: { if: { $eq: ['$$value', ''] }, then: '', else: ',' } },
+//                           '$$this.name'
+//                         ]
+//                       }
+//                     }
+//                   }
+//                 }
+//               },
+//               ''
+//             ]
+//           },
+//           'Address Name': { $ifNull: ['$location.address_name', ''] },
+//           'Atoll': { $ifNull: ['$location.address_line1', ''] },
+//           'Island': { $ifNull: ['$location.address_line2', ''] },
+//           City: { $ifNull: ['$location.city', ''] },
+//           'Service Provider': {
+//             $let: {
+//               vars: {
+//                 serviceProvider: {
+//                   $arrayElemAt: [
+//                     {
+//                       $filter: {
+//                         input: { $ifNull: ['$custom_fields', []] },
+//                         as: 'field',
+//                         cond: { $eq: ['$$field.key', 'service_provider'] }
+//                       }
+//                     },
+//                     0
+//                   ]
+//                 }
+//               },
+//               in: { $ifNull: ['$$serviceProvider.value_label', ''] }
+//             }
+//           },
+//           'joinedDataJournals.account_type': 1,
+//           'joinedDataJournals.related_entity.id': 1, // Include related_entity.id for matching
+//         },
+//       },
+//     ];
+
+//     const profiles = await mongoose.connection.db
+//       .collection('ContactProfiles')
+//       .aggregate(profileQuery, { maxTimeMS: 300000, allowDiskUse: true })
+//       .toArray();
+
+//     // Count for pagination
+//     const countQuery = [
+//       { $match: eventMatch },
+//       { $count: 'total' },
+//     ];
+//     const countResult = await mongoose.connection.db
+//       .collection('Events')
+//       .aggregate(countQuery, { maxTimeMS: 300000, allowDiskUse: true })
+//       .toArray();
+//     const total = countResult.length > 0 ? countResult[0].total : 0;
+//     const totalPages = Math.ceil(total / limit);
+
+//     // Prepare data array
+//     let data = events.map(event => {
+//       const profile = profiles.find(p => p.contact_id === event.contact_id) || {};
+//       // Helper function to safely extract transaction fields
+//       const getTransactionField = (field, isDecimal = false) => {
+//         if (!event.transaction || !event.transaction[field]) return '';
+//         if (isDecimal) {
+//           return event.transaction[field]?.$numberDecimal?.toString() ||
+//             event.transaction[field]?.toString() ||
+//             '';
+//         }
+//         return event.transaction[field]?.toString() || '';
+//       };
+
+//       // Transform payment method based on payment_method_type
+//       let paymentMethod = '';
+//       if (event.payment_method) {
+//         const paymentType = event.payment_method.payment_method_type;
+//         paymentMethod = paymentType === 'ELECTRONIC_TRANSFER' ? 'QUICK PAY' :
+//           paymentType === 'CRM_WALLET' ? 'CASH' :
+//             paymentType === 'CHEQUE' ? 'CHEQUE' :
+//               paymentType === 'CASH' ? 'CASH' : '';
+//       }
+
+//       const submittedName = event.submited_by_user_name || '';
+
+//       let action = '';
+//       if (event.type === 'TOP_UP_POSTED') {
+//         action = 'Top Up';
+//       } else if (profile.joinedDataJournals && profile.joinedDataJournals.length > 0) {
+//         // Find journal entry where related_entity.id matches event.transaction.id
+//         const journalEntry = profile.joinedDataJournals.find(j => 
+//           j.related_entity?.id === event.transaction?.id && j.account_type
+//         );
+//         if (journalEntry && journalEntry.account_type) {
+//           action = journalEntry.account_type.toUpperCase() === 'CREDIT' ? 'Add' :
+//                    journalEntry.account_type.toUpperCase() === 'DEBIT' ? 'Deduct' : '';
+//         }
+//       }
+
+//       const receiptNumber = getTransactionField('number');
+
+//       return {
+//         Name: profile.Name || '',
+//         'Customer Code': profile['Customer Code'] ? `'${profile['Customer Code']}` : '',
+//         'Account Number': profile['Account Number'] || '',
+//         Country: profile.Country || '',
+//         Tags: profile.Tags || '',
+//         'Address Name': profile['Address Name'] || '',
+//         'Atoll': profile['Atoll'] || '',
+//         'Island': profile['Island'] || '',
+//         City: profile.City || '',
+//         'Service Provider': profile['Service Provider'] || '',
+//         'Reciept Number': receiptNumber ? `'${receiptNumber}` : '',
+//         'Posted Date': event.transaction?.posted_date
+//           ? new Date(event.transaction.posted_date * 1000).toLocaleString('en-GB', {
+//             day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+//           })
+//           : '',
+//         'Total Amount': getTransactionField('total_amount', true),
+//         'Payment Method': paymentMethod,
+//         'Action': action,
+//         'Submitted By': submittedName,
+//       };
+//     });
+
+//     console.log(totalPages,'all total pages required')
+
+//     console.log(data.length, 'rows fetched');
+
+//     // Filter out rows where Service Provider is empty or undefined
+//     data = data.filter(row => row['Service Provider'] && row['Service Provider'].trim() !== '');
+
+//     // Adjust total and totalPages based on filtered data
+//     const filteredTotal = data.length;
+//     console.log('Filtered Total:', filteredTotal);
+//     const filteredTotalPages = format === 'json' ? Math.ceil(filteredTotal / limit) : totalPages;
+//     // Prepare response
+//     return {
+//       data,
+//       pagination: {
+//         page: parseInt(page),
+//         limit: parseInt(limit),
+//         total: format === 'json' ? filteredTotal : total,
+//         totalPages: filteredTotalPages
+//       },
+//     };
+//   } catch (error) {
+//     console.error('Error exporting contact profiles with invoice report:', {
+//       error: error.message,
+//       stack: error.stack,
+//     });
+//     throw new Error('Error exporting contact profiles with invoice report');
+//   }
+// };
 
 const exportCustomerDealerWiseCollection = async (
   page,
@@ -2662,63 +2956,111 @@ const exportCustomerDealerWiseCollection = async (
     if (startDate) startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
     if (endDate) endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
 
-    // Match stage for Events
-    let eventMatch = { type: { $in: ['PAYMENT_POSTED', 'TOP_UP_POSTED'] } };
-    if (startTimestamp) eventMatch['transaction.posted_date'] = { $gte: startTimestamp };
-    if (endTimestamp) eventMatch['transaction.posted_date'] = eventMatch['transaction.posted_date']
-      ? { $gte: startTimestamp, $lte: endTimestamp }
-      : { $lte: endTimestamp };
-
-    // Base event query
-    const eventQueryBase = [
-      { $match: eventMatch },
-      {
-        $project: {
-          contact_id: 1,
-          'transaction.number': 1,
-          'transaction.posted_date': 1,
-          'transaction.currency_code': 1,
-          'transaction.total_amount': 1,
-          'payment_method': 1,
-          'submited_by_user_name': 1
+    // STEP 1: Get contact_ids that have service_provider (do this first to reduce dataset)
+    const validContactIds = await mongoose.connection.db
+      .collection('ContactProfiles')
+      .find(
+        { 
+          'custom_fields.key': 'service_provider',
+          'custom_fields.value_label': { $exists: true, $ne: '', $ne: null }
         },
-      },
-    ];
-
-    // Add pagination for JSON, no pagination for CSV
-    const eventQuery = format === 'json'
-      ? [...eventQueryBase, { $skip: (page - 1) * limit }, { $limit: parseInt(limit) }]
-      : eventQueryBase;
-
-    // Fetch Events
-    const events = await mongoose.connection.db
-      .collection('Events')
-      .aggregate(eventQuery, { maxTimeMS: 300000, allowDiskUse: true })
+        { 
+          projection: { contact_id: 1 },
+          maxTimeMS: 60000 
+        }
+      )
       .toArray();
 
-    // Extract contact_ids
-    const contactIds = events.map(event => event.contact_id);
+    const validContactIdSet = new Set(validContactIds.map(c => c.contact_id));
 
-    // Early return if no contact IDs
-    if (!contactIds.length) {
+    if (validContactIdSet.size === 0) {
       return {
         data: [],
         pagination: { page: parseInt(page), limit: parseInt(limit), total: 0, totalPages: 0 },
       };
     }
 
-    // Match stage for ContactProfiles
-    let profileMatch = { contact_id: { $in: contactIds }, 'custom_fields.key': 'service_provider' };
+    // STEP 2: Build event match with contact filter
+    let eventMatch = { 
+      type: { $in: ['PAYMENT_POSTED', 'TOP_UP_POSTED'] },
+      contact_id: { $in: Array.from(validContactIdSet) } // Pre-filter by valid contacts
+    };
+    
+    if (startTimestamp) eventMatch['transaction.posted_date'] = { $gte: startTimestamp };
+    if (endTimestamp) eventMatch['transaction.posted_date'] = eventMatch['transaction.posted_date']
+      ? { $gte: startTimestamp, $lte: endTimestamp }
+      : { $lte: endTimestamp };
 
-    // Aggregation for ContactProfiles
+    // STEP 3: Get total count for pagination
+    const totalCount = await mongoose.connection.db
+      .collection('Events')
+      .countDocuments(eventMatch, { maxTimeMS: 60000 });
+    
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // STEP 4: Get events with pagination (only for JSON)
+    const eventQuery = [
+      { $match: eventMatch },
+      {
+        $project: {
+          contact_id: 1,
+          'transaction.id': 1,
+          'transaction.number': 1,
+          'transaction.posted_date': 1,
+          'transaction.currency_code': 1,
+          'transaction.total_amount': 1,
+          'payment_method': 1,
+          'submited_by_user_name': 1,
+          'type': 1
+        },
+      }
+    ];
+
+    // Add pagination only for JSON
+    if (format === 'json') {
+      eventQuery.push(
+        { $skip: (page - 1) * limit },
+        { $limit: parseInt(limit) }
+      );
+    }
+
+    const events = await mongoose.connection.db
+      .collection('Events')
+      .aggregate(eventQuery, { maxTimeMS: 60000, allowDiskUse: true })
+      .toArray();
+
+    if (events.length === 0) {
+      return {
+        data: [],
+        pagination: { page: parseInt(page), limit: parseInt(limit), total: totalCount, totalPages },
+      };
+    }
+
+    // STEP 5: Get contact profiles for these events
+    const eventContactIds = [...new Set(events.map(e => e.contact_id))];
+    
     const profileQuery = [
-      { $match: profileMatch },
+      { 
+        $match: { 
+          contact_id: { $in: eventContactIds },
+          'custom_fields.key': 'service_provider'
+        } 
+      },
       {
         $lookup: {
           from: 'Journals',
           localField: 'contact_id',
           foreignField: 'contact_id',
           as: 'joinedDataJournals',
+          pipeline: [
+            {
+              $match: {
+                account_type: { $in: ['CREDIT', 'DEBIT'] }
+              }
+            },
+            { $sort: { posted_date: -1 } }
+            // Removed $limit: 10 to ensure all relevant journal entries are retrieved
+          ]
         },
       },
       {
@@ -2730,22 +3072,30 @@ const exportCustomerDealerWiseCollection = async (
               if: {
                 $eq: [
                   {
+                    $trim: {
+                      input: {
+                        $concat: [
+                          { $ifNull: ['$demographics.first_name', ''] },
+                          ' ',
+                          { $ifNull: ['$demographics.last_name', ''] },
+                        ]
+                      }
+                    }
+                  },
+                  ''
+                ]
+              },
+              then: { $ifNull: [{ $arrayElemAt: ['$joinedDataJournals.contact_name', 0] }, ''] },
+              else: {
+                $trim: {
+                  input: {
                     $concat: [
                       { $ifNull: ['$demographics.first_name', ''] },
                       ' ',
                       { $ifNull: ['$demographics.last_name', ''] },
                     ]
-                  },
-                  ' '
-                ]
-              },
-              then: { $ifNull: [{ $arrayElemAt: ['$joinedDataJournals.contact_name', 0] }, ''] },
-              else: {
-                $concat: [
-                  { $ifNull: ['$demographics.first_name', ''] },
-                  ' ',
-                  { $ifNull: ['$demographics.last_name', ''] },
-                ]
+                  }
+                }
               }
             }
           },
@@ -2809,30 +3159,20 @@ const exportCustomerDealerWiseCollection = async (
             }
           },
           'joinedDataJournals.account_type': 1,
+          'joinedDataJournals.related_entity.id': 1,
         },
       },
     ];
 
     const profiles = await mongoose.connection.db
       .collection('ContactProfiles')
-      .aggregate(profileQuery, { maxTimeMS: 300000, allowDiskUse: true })
+      .aggregate(profileQuery, { maxTimeMS: 60000, allowDiskUse: true })
       .toArray();
 
-    // Count for pagination
-    const countQuery = [
-      { $match: eventMatch },
-      { $count: 'total' },
-    ];
-    const countResult = await mongoose.connection.db
-      .collection('Events')
-      .aggregate(countQuery, { maxTimeMS: 300000, allowDiskUse: true })
-      .toArray();
-    const total = countResult.length > 0 ? countResult[0].total : 0;
-    const totalPages = Math.ceil(total / limit);
-
-    // Prepare data array
-    let data = events.map(event => {
+    // STEP 6: Transform data
+    const data = events.map(event => {
       const profile = profiles.find(p => p.contact_id === event.contact_id) || {};
+      
       // Helper function to safely extract transaction fields
       const getTransactionField = (field, isDecimal = false) => {
         if (!event.transaction || !event.transaction[field]) return '';
@@ -2856,12 +3196,25 @@ const exportCustomerDealerWiseCollection = async (
 
       const submittedName = event.submited_by_user_name || '';
 
-      // Determine Action based on account_type from Journals
+      // Improved action determination logic
       let action = '';
-      if (profile.joinedDataJournals) {
-        const journalEntry = profile.joinedDataJournals.find(j => j.account_type);
-        if (journalEntry && journalEntry.account_type) {
-          action = journalEntry.account_type === 'CREDIT' ? 'Add' : journalEntry.account_type === 'DEBIT' ? 'Deduct' : '';
+      if (event.type === 'TOP_UP_POSTED') {
+        action = 'Top Up';
+      } else if (event.type === 'PAYMENT_POSTED') {
+        if (profile.joinedDataJournals && profile.joinedDataJournals.length > 0) {
+          const journalEntry = profile.joinedDataJournals.find(j => 
+            j.related_entity?.id === event.transaction?.id && j.account_type
+          );
+          if (journalEntry && journalEntry.account_type) {
+            action = journalEntry.account_type.toUpperCase() === 'CREDIT' ? 'Add' :
+                     journalEntry.account_type.toUpperCase() === 'DEBIT' ? 'Deduct' : '';
+          } else {
+            // Fallback for PAYMENT_POSTED when no matching journal entry is found
+            action = 'Payment';
+          }
+        } else {
+          // Fallback when no journal entries are available
+          action = 'Payment';
         }
       }
 
@@ -2891,23 +3244,16 @@ const exportCustomerDealerWiseCollection = async (
       };
     });
 
-    // Filter out rows where Service Provider is empty or undefined
-    data = data.filter(row => row['Service Provider'] && row['Service Provider'].trim() !== '');
-
-    // Adjust total and totalPages based on filtered data
-    const filteredTotal = data.length;
-    const filteredTotalPages = format === 'json' ? Math.ceil(filteredTotal / limit) : totalPages;
-
-    // Prepare response
     return {
       data,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total: format === 'json' ? filteredTotal : total,
-        totalPages: filteredTotalPages
+        total: totalCount,
+        totalPages: totalPages
       },
     };
+
   } catch (error) {
     console.error('Error exporting contact profiles with invoice report:', {
       error: error.message,
@@ -2916,6 +3262,7 @@ const exportCustomerDealerWiseCollection = async (
     throw new Error('Error exporting contact profiles with invoice report');
   }
 };
+
 
 const exportDealerReports = async (startDate, endDate, dealerName) => {
 
