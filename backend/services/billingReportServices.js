@@ -2948,7 +2948,8 @@ const exportCustomerDealerWiseCollection = async (
   endDate,
   atoll,
   island,
-  format
+  format,
+  serviceProvider
 ) => {
   try {
     // Date filter
@@ -2957,13 +2958,20 @@ const exportCustomerDealerWiseCollection = async (
     if (endDate) endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
 
     // STEP 1: Get contact_ids that have service_provider (do this first to reduce dataset)
+    const serviceProviderMatch = {
+      'custom_fields.key': 'service_provider',
+      'custom_fields.value_label': { $exists: true, $ne: '', $ne: null }
+    };
+
+    // Add service provider filter if provided
+    if (serviceProvider && serviceProvider.trim() !== '') {
+      serviceProviderMatch['custom_fields.value_label'] = serviceProvider;
+    }
+
     const validContactIds = await mongoose.connection.db
       .collection('ContactProfiles')
       .find(
-        { 
-          'custom_fields.key': 'service_provider',
-          'custom_fields.value_label': { $exists: true, $ne: '', $ne: null }
-        },
+        serviceProviderMatch,
         { 
           projection: { contact_id: 1 },
           maxTimeMS: 60000 
@@ -3039,13 +3047,19 @@ const exportCustomerDealerWiseCollection = async (
     // STEP 5: Get contact profiles for these events
     const eventContactIds = [...new Set(events.map(e => e.contact_id))];
     
+    // Build profile match query with service provider filter
+    const profileMatchQuery = { 
+      contact_id: { $in: eventContactIds },
+      'custom_fields.key': 'service_provider',
+    };
+
+    // Add service provider filter to profile query as well (for consistency)
+    if (serviceProvider && serviceProvider.trim() !== '') {
+      profileMatchQuery['custom_fields.value_label'] = serviceProvider;
+    }
+    
     const profileQuery = [
-      { 
-        $match: { 
-          contact_id: { $in: eventContactIds },
-          'custom_fields.key': 'service_provider'
-        } 
-      },
+      { $match: profileMatchQuery },
       {
         $lookup: {
           from: 'Journals',

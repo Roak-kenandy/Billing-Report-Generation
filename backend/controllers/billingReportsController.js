@@ -276,7 +276,8 @@ const exportCustomerCollection = async (req, res) => {
 
 const exportCustomerDealerWiseCollection = async (req, res) => {
   try {
-    const { search, startDate, endDate, atoll, island, format = 'csv', page = 1, limit = 1000 } = req.query;
+    const { search, startDate, endDate, atoll, island, format = 'csv', serviceProvider, page = 1, limit = 1000 } = req.query;
+
 
     const response = await billingReportService.exportCustomerDealerWiseCollection(
       page,
@@ -285,7 +286,8 @@ const exportCustomerDealerWiseCollection = async (req, res) => {
       endDate,
       atoll,
       island,
-      format
+      format,
+      serviceProvider
     );
 
     if (!response || !response.data) {
