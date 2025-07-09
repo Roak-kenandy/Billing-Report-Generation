@@ -661,17 +661,32 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
 
 const exportContactProfilesWithInvoice = async (search, startDate, endDate, atoll, island, page, limit, format) => {
   try {
+    // Validate input dates
+    if (startDate && isNaN(new Date(startDate).getTime())) {
+      throw new Error('Invalid startDate format');
+    }
+    if (endDate && isNaN(new Date(endDate).getTime())) {
+      throw new Error('Invalid endDate format');
+    }
+
     // Date filter
     let startTimestamp, endTimestamp;
-    if (startDate) startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
-    if (endDate) endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+    if (startDate) {
+      const start = new Date(startDate);
+      startTimestamp = Math.floor(start.setUTCHours(0, 0, 0, 0) / 1000);
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      endTimestamp = Math.floor(end.setUTCHours(23, 59, 59, 999) / 1000);
+    }
 
     // Match stage for Events
     let eventMatch = { type: 'INVOICE_POSTED' };
-    if (startTimestamp) eventMatch['transaction.posted_date'] = { $gte: startTimestamp };
-    if (endTimestamp) eventMatch['transaction.posted_date'] = eventMatch['transaction.posted_date']
-      ? { $gte: startTimestamp, $lte: endTimestamp }
-      : { $lte: endTimestamp };
+    if (startTimestamp || endTimestamp) {
+      eventMatch['transaction.posted_date'] = {};
+      if (startTimestamp) eventMatch['transaction.posted_date'].$gte = startTimestamp;
+      if (endTimestamp) eventMatch['transaction.posted_date'].$lte = endTimestamp;
+    }
 
     // Base event query
     const eventQueryBase = [
@@ -714,9 +729,7 @@ const exportContactProfilesWithInvoice = async (search, startDate, endDate, atol
     // Extract contact_ids
     const contactIds = format === 'json'
       ? events.map(event => event.contact_id)
-      : await eventsCursor.toArray().then(events => {
-        return events.map(event => event.contact_id);
-      });
+      : await eventsCursor.toArray().then(events => events.map(event => event.contact_id));
 
     // Match stage for ContactProfiles
     let profileMatch = { contact_id: { $in: contactIds } };
@@ -981,15 +994,6 @@ const exportContactProfilesWithInvoice = async (search, startDate, endDate, atol
             }
             return event.transaction[field]?.toString() || '';
           };
-
-          // const getInvoiceNumber = (field) => {
-          //   if (!event.transaction || !event.transaction[field]) return '';
-          //   const value = event.transaction[field];
-          //   // Ensure the value is treated as a string, even for large numbers
-          //   const stringValue = String(value);
-          //   const stringPassingValue = `"${stringValue}"`;
-          //   return stringPassingValue || '';
-          // };
 
           const row = {
             Name: profile.Name || '',
