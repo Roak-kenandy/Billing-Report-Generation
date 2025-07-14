@@ -41,6 +41,7 @@ const BillingReports = () => {
     const [appliedAtoll, setAppliedAtoll] = useState('');
     const [appliedIsland, setAppliedIsland] = useState('');
     const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    // const API_URL = 'http://localhost:3003/billing-reports';
 
     useEffect(() => {
         const fetchAtolls = async () => {

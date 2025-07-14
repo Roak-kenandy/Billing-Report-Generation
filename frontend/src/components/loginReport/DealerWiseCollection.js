@@ -36,38 +36,50 @@ const DealerWiseCollection = () => {
   const [endDate, setEndDate] = useState(null);
   const [appliedStartDate, setAppliedStartDate] = useState('');
   const [appliedEndDate, setAppliedEndDate] = useState('');
-  const isSmallScreen = useMediaQuery('(max-width:600px)');
   const [atolls, setAtolls] = useState([]);
   const [selectedAtoll, setSelectedAtoll] = useState('');
   const [selectedIsland, setSelectedIsland] = useState('');
   const [appliedAtoll, setAppliedAtoll] = useState('');
   const [appliedIsland, setAppliedIsland] = useState('');
+  const [spIsland, setSpIsland] = useState('');
+  const [isInitialized, setIsInitialized] = useState(false); // Add initialization flag
+  const isSmallScreen = useMediaQuery('(max-width:600px)');
 
-  // Initialize serviceProvider state with extracted value
+  // Initialize serviceProvider and extract island from spRole
   const roles = JSON.parse(localStorage.getItem('userRoles')) || [];
   const spRole = roles.find(role => role.startsWith('Service Provider'));
-  const initialServiceProvider = spRole && spRole.includes(':') ? spRole.split(':')[1].trim() : '';
-  const [serviceProvider, setServiceProvider] = useState(initialServiceProvider);
+  const initialServiceProvider = spRole && spRole.includes(':') ? spRole.split(':')[1].trim().replace(/, Island$/, '') : '';
+  const [serviceProvider] = useState(initialServiceProvider);
+
+  const extractIslandFromSpRole = (spRole) => {
+    if (!spRole) return '';
+    const match = spRole.match(/Island:\s*([A-Za-z\s]+)/);
+    return match ? match[1].trim() : '';
+  };
+
+  // Initialize spIsland immediately and set initialization flag
+  useEffect(() => {
+    const extractedIsland = extractIslandFromSpRole(spRole);
+    setSpIsland(extractedIsland);
+    setIsInitialized(true); // Mark as initialized
+    console.log('Service Provider State:', serviceProvider);
+    console.log('Extracted Island:', extractedIsland);
+  }, [spRole, serviceProvider]);
 
   const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
-    // const API_URL = 'http://localhost:3003/billing-reports';
+  // const API_URL = 'http://localhost:3003/billing-reports';
   const isFetchingRef = useRef(false);
-
-  // Log serviceProvider for debugging
-  useEffect(() => {
-    console.log('Service Provider State:', serviceProvider);
-  }, [serviceProvider]);
 
   // Memoize fetchReports
   const fetchReports = useCallback(
-    async (page, limit, search = '', start = '', end = '', atoll = '', island = '', sp = '') => {
+    async (page, limit, search = '', start = '', end = '', atoll = '', island = '', sp = '', spIslandValue = '') => {
       if (isFetchingRef.current) {
         console.log('Skipping fetch: already in progress');
         return;
       }
       isFetchingRef.current = true;
 
-      console.log('Fetching reports with payload:', { page, limit, search, start, end, atoll, island, sp });
+      console.log('Fetching reports with payload:', { page, limit, search, start, end, atoll, island, sp, spIslandValue });
       setLoading(true);
       try {
         const safePage = page || 1;
@@ -78,7 +90,10 @@ const DealerWiseCollection = () => {
         if (end) url += `&endDate=${encodeURIComponent(end)}`;
         if (atoll) url += `&atoll=${encodeURIComponent(atoll)}`;
         if (island) url += `&island=${encodeURIComponent(island)}`;
-        if (sp) url += `&serviceProvider=${encodeURIComponent(sp)}`;
+        if (sp) {
+          url += `&serviceProvider=${encodeURIComponent(sp)}`;
+          if (spIslandValue) url += `&spIsland=${encodeURIComponent(spIslandValue)}`;
+        }
 
         console.log('Constructed URL:', url); // Debug URL
 
@@ -111,6 +126,45 @@ const DealerWiseCollection = () => {
     [API_URL]
   );
 
+  // Only fetch reports after initialization is complete
+  useEffect(() => {
+    if (!isInitialized) return; // Don't fetch until spIsland is properly set
+
+    const atollName = appliedAtoll
+      ? atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name || ''
+      : '';
+    const islandName = appliedIsland
+      ? atolls
+          .find(a => a.atolls_id === appliedAtoll)
+          ?.islands.find(i => i.islands_id === appliedIsland)?.islands_name || ''
+      : '';
+    
+    fetchReports(
+      pagination.page,
+      pagination.limit,
+      searchTerm,
+      appliedStartDate,
+      appliedEndDate,
+      atollName,
+      islandName,
+      serviceProvider,
+      spIsland
+    );
+  }, [
+    fetchReports,
+    pagination.page,
+    pagination.limit,
+    searchTerm,
+    appliedStartDate,
+    appliedEndDate,
+    appliedAtoll,
+    appliedIsland,
+    atolls,
+    serviceProvider,
+    spIsland,
+    isInitialized, // Add isInitialized to dependency array
+  ]);
+
   const handleFilter = () => {
     setAppliedStartDate(startDate ? startDate.toISOString().split('T')[0] : '');
     setAppliedEndDate(endDate ? endDate.toISOString().split('T')[0] : '');
@@ -131,38 +185,6 @@ const DealerWiseCollection = () => {
     setSearchTerm('');
     setPagination(prev => ({ ...prev, page: 1 }));
   };
-
-  useEffect(() => {
-    const atollName = appliedAtoll
-      ? atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name || ''
-      : '';
-    const islandName = appliedIsland
-      ? atolls
-          .find(a => a.atolls_id === appliedAtoll)
-          ?.islands.find(i => i.islands_id === appliedIsland)?.islands_name || ''
-      : '';
-    fetchReports(
-      pagination.page,
-      pagination.limit,
-      searchTerm,
-      appliedStartDate,
-      appliedEndDate,
-      atollName,
-      islandName,
-      serviceProvider
-    );
-  }, [
-    fetchReports,
-    pagination.page,
-    pagination.limit,
-    searchTerm,
-    appliedStartDate,
-    appliedEndDate,
-    appliedAtoll,
-    appliedIsland,
-    atolls,
-    serviceProvider,
-  ]);
 
   const handlePageChange = (event, value) => {
     setPagination(prev => {
@@ -193,7 +215,10 @@ const DealerWiseCollection = () => {
         const selectedIslandName = selectedAtollData?.islands.find(i => i.islands_id === appliedIsland)?.islands_name;
         if (selectedIslandName) url += `&island=${encodeURIComponent(selectedIslandName)}`;
       }
-      if (serviceProvider) url += `&serviceProvider=${encodeURIComponent(serviceProvider)}`;
+      if (serviceProvider) {
+        url += `&serviceProvider=${encodeURIComponent(serviceProvider)}`;
+        if (spIsland) url += `&spIsland=${encodeURIComponent(spIsland)}`;
+      }
 
       console.log('CSV Download URL:', url); // Debug URL
 
@@ -218,41 +243,22 @@ const DealerWiseCollection = () => {
 
   // Map backend field names to frontend display keys
   const fieldMap = {
-    // 'Posted Date': 'Posted Date',
-    // 'User Name': 'Submitted By',
-    // 'Decoder No': 'Decoder No.',
-    // 'Receipt ID': 'Receipt ID',
-    // 'Account Number': 'Account Number',
-    // 'Customer Name': 'Customer Name',
-    // Mobile: 'Mobile',
-    // Island: 'Island',
-    // Atoll: 'Atoll',
-    // 'Tag Area': 'Area',
-    // Ward: 'Ward',
-    // Road: 'Road',
-    // Address: 'Address',
-    // 'Payment Type': 'Payment Type',
-    // 'Payment Action': 'Payment Action',
-    // 'Service Price': 'Service Price',
-    // 'GST': 'GST',
-    // 'Amount': 'Amount',
-    // 'Service Provider': 'Dealer',
     "Posted Date": "Posted Date",
-  "Service Provider": "Service Provider",
-  "Account Number": "Account Number",
-  "Tags": "Tags",
-  "Name": "Name",
-  "Customer Code": "Customer Code",
-  "Country": "Country",
-  "Address Name": "Address Name",
-  "Atoll": "Atoll",
-  "Island": "Island",
-  "City": "City",
-  "Reciept Number": "Reciept Number",
-  "Total Amount": "Total Amount",
-  "Payment Method": "Payment Method",
-  "Action": "Action",
-  "Submitted By": "Submitted By"
+    "Service Provider": "Service Provider",
+    "Account Number": "Account Number",
+    "Tags": "Tags",
+    "Name": "Name",
+    "Customer Code": "Customer Code",
+    "Country": "Country",
+    "Address Name": "Address Name",
+    "Atoll": "Atoll",
+    "Island": "Island",
+    "City": "City",
+    "Reciept Number": "Reciept Number",
+    "Total Amount": "Total Amount",
+    "Payment Method": "Payment Method",
+    "Action": "Action",
+    "Submitted By": "Submitted By"
   };
 
   // Fields that may have multiple values
@@ -326,6 +332,16 @@ const DealerWiseCollection = () => {
                 },
               },
             }}
+          />
+          <TextField
+            label="Search"
+            value={searchTerm}
+            onChange={handleSearch}
+            sx={{
+              width: isSmallScreen ? '100%' : 180,
+              '& .MuiOutlinedInput-root': { borderRadius: 2, backgroundColor: '#f1f5f9' },
+            }}
+            InputLabelProps={{ shrink: true }}
           />
           <Button
             variant="contained"

@@ -27,6 +27,8 @@ router.get('/customerReports', billingReportController.exportContactProfiles);
 
 router.get('/invoiceReports', billingReportController.exportContactProfilesWithInvoiceController);
 
+router.get('/hdcReports', billingReportController.exportContactProfilesWithHdc);
+
 router.get('/customerDisconnectedDealers', billingReportController.exportCustomerReportsNotEffective);
 
 router.get('/customerDealerWiseCollection', billingReportController.exportCustomerDealerWiseCollection);

@@ -24,11 +24,14 @@ const RbacRoles = () => {
     const [users, setUsers] = useState([]);
     const [newRole, setNewRole] = useState('');
     const [serviceProviderName, setServiceProviderName] = useState('');
+    const [islandName, setIslandName] = useState('');
     const [roleToRemove, setRoleToRemove] = useState('');
     const [selectedUser, setSelectedUser] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [openModal, setOpenModal] = useState(false);
+    // const API_URL = 'http://localhost:3003';
+        const API_URL = 'https://mdnrpt.medianet.mv';
 
     useEffect(() => {
         fetchUsers();
@@ -38,7 +41,7 @@ const RbacRoles = () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch('https://mdnrpt.medianet.mv/billing-reports/users');
+            const response = await fetch(`${API_URL}/billing-reports/users`);
             if (!response.ok) throw new Error('Failed to fetch users');
             const data = await response.json();
             setUsers(data);
@@ -55,10 +58,10 @@ const RbacRoles = () => {
         try {
             let roleToAdd = newRole;
             if (newRole === 'Service Provider' && serviceProviderName) {
-                roleToAdd = `Service Provider: ${serviceProviderName}`;
+                roleToAdd = `Service Provider: ${serviceProviderName}${islandName ? `, Island: ${islandName}` : ''}`;
             }
             const updatedRoles = [...new Set([...selectedUser.roles, roleToAdd])];
-            const response = await fetch(`https://mdnrpt.medianet.mv/billing-reports/users/${selectedUser._id}/roles`, {
+            const response = await fetch(`${API_URL}/billing-reports/users/${selectedUser._id}/roles`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ roles: updatedRoles }),
@@ -66,10 +69,11 @@ const RbacRoles = () => {
             if (!response.ok) throw new Error('Failed to add role');
             setNewRole('');
             setServiceProviderName('');
+            setIslandName('');
             fetchUsers();
             setOpenModal(false);
         } catch (err) {
-            setError(err.messagephysic)
+            setError(err.message);
             setLoading(false);
         }
     };
@@ -79,7 +83,7 @@ const RbacRoles = () => {
         setLoading(true);
         try {
             const updatedRoles = selectedUser.roles.filter(role => role !== roleToRemove);
-            const response = await fetch(`https://mdnrpt.medianet.mv/billing-reports/users/${selectedUser._id}/roles`, {
+            const response = await fetch(`${API_URL}/billing-reports/users/${selectedUser._id}/roles`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ roles: updatedRoles }),
@@ -98,7 +102,7 @@ const RbacRoles = () => {
     const handleDeleteUser = async (id) => {
         setLoading(true);
         try {
-            const response = await fetch(`https://mdnrpt.medianet.mv/billing-reports/users/${id}`, {
+            const response = await fetch(`${API_URL}/billing-reports/users/${id}`, {
                 method: 'DELETE',
             });
             if (!response.ok) throw new Error('Failed to delete user');
@@ -114,6 +118,7 @@ const RbacRoles = () => {
         setSelectedUser(user);
         setNewRole('');
         setServiceProviderName('');
+        setIslandName('');
         setRoleToRemove('');
         setOpenModal(true);
     };
@@ -122,6 +127,7 @@ const RbacRoles = () => {
         setOpenModal(false);
         setSelectedUser(null);
         setServiceProviderName('');
+        setIslandName('');
     };
 
     return (
@@ -220,19 +226,28 @@ const RbacRoles = () => {
                                 <MenuItem value="Service Provider">Service Provider</MenuItem>
                             </Select>
                             {newRole === 'Service Provider' && (
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    label="Service Provider Name (Optional)"
-                                    value={serviceProviderName}
-                                    onChange={(e) => setServiceProviderName(e.target.value)}
-                                    sx={{ mt: 2 }}
-                                />
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        label="Service Provider Name"
+                                        value={serviceProviderName}
+                                        onChange={(e) => setServiceProviderName(e.target.value)}
+                                        required
+                                    />
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        label="Island Name (Optional)"
+                                        value={islandName}
+                                        onChange={(e) => setIslandName(e.target.value)}
+                                    />
+                                </Box>
                             )}
                             <Button
                                 variant="contained"
                                 onClick={handleAddRole}
-                                disabled={loading || !newRole}
+                                disabled={loading || !newRole || (newRole === 'Service Provider' && !serviceProviderName)}
                                 sx={{ mt: 2, backgroundColor: '#2563eb', '&:hover': { backgroundColor: '#1d4ed8' } }}
                             >
                                 Add Role

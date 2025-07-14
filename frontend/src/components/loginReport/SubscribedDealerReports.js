@@ -36,39 +36,53 @@ const SubscribedDealerReports = () => {
   const [endDate, setEndDate] = useState(null);
   const [appliedStartDate, setAppliedStartDate] = useState('');
   const [appliedEndDate, setAppliedEndDate] = useState('');
-  const isSmallScreen = useMediaQuery('(max-width:600px)');
   const [atolls, setAtolls] = useState([]);
   const [selectedAtoll, setSelectedAtoll] = useState('');
   const [selectedIsland, setSelectedIsland] = useState('');
   const [appliedAtoll, setAppliedAtoll] = useState('');
   const [appliedIsland, setAppliedIsland] = useState('');
+  const [spIsland, setSpIsland] = useState('');
+  const [isInitialized, setIsInitialized] = useState(false);
+  const isSmallScreen = useMediaQuery('(max-width:600px)');
 
-  // Initialize serviceProvider state with extracted value
+  // Initialize serviceProvider and extract island from spRole
   const roles = JSON.parse(localStorage.getItem('userRoles')) || [];
   const spRole = roles.find(role => role.startsWith('Service Provider'));
-  const initialServiceProvider = spRole && spRole.includes(':') ? spRole.split(':')[1].trim() : '';
-  const [serviceProvider, setServiceProvider] = useState(initialServiceProvider);
+  console.log(spRole, 'sprolessss');
+
+  const initialServiceProvider = spRole && spRole.includes(':')
+    ? spRole.split(':')[1].trim().replace(/, Island$/, '')
+    : '';
+
+  const [serviceProvider] = useState(initialServiceProvider);
+
+  const extractIslandFromSpRole = (spRole) => {
+    if (!spRole) return '';
+    const match = spRole.match(/Island:\s*([A-Za-z\s]+)/);
+    return match ? match[1].trim() : '';
+  };
+
+  // Initialize spIsland immediately and set initialization flag
+  useEffect(() => {
+    const extractedIsland = extractIslandFromSpRole(spRole);
+    setSpIsland(extractedIsland);
+    setIsInitialized(true);
+  }, [spRole]);
 
   // const API_URL = 'http://localhost:3003/billing-reports';
-  const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+      const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
   const isFetchingRef = useRef(false);
-
-  // Log serviceProvider for debugging
-  useEffect(() => {
-    console.log('Service Provider State:', serviceProvider);
-  }, [serviceProvider]);
 
   // Memoize fetchReports
   const fetchReports = useCallback(
-    async (page, limit, search = '', start = '', end = '', atoll = '', island = '', sp = '') => {
+    async (page, limit, search = '', start = '', end = '', atoll = '', island = '', sp = '', spIslandValue = '') => {
       if (isFetchingRef.current) {
         console.log('Skipping fetch: already in progress');
         return;
       }
       isFetchingRef.current = true;
-
-      console.log('Fetching reports with payload:', { page, limit, search, start, end, atoll, island, sp });
       setLoading(true);
+
       try {
         const safePage = page || 1;
         const safeLimit = limit || 10;
@@ -78,14 +92,15 @@ const SubscribedDealerReports = () => {
         if (end) url += `&endDate=${encodeURIComponent(end)}`;
         if (atoll) url += `&atoll=${encodeURIComponent(atoll)}`;
         if (island) url += `&island=${encodeURIComponent(island)}`;
-        if (sp) url += `&serviceProvider=${encodeURIComponent(sp)}`;
+        if (sp) {
+          url += `&serviceProvider=${encodeURIComponent(sp)}`;
+          if (spIslandValue) url += `&spIsland=${encodeURIComponent(spIslandValue)}`;
+        }
 
         console.log('Constructed URL:', url); // Debug URL
 
         const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
         console.log('Backend response:', data);
 
@@ -111,6 +126,62 @@ const SubscribedDealerReports = () => {
     [API_URL]
   );
 
+  // Fetch atolls data
+  useEffect(() => {
+    const fetchAtolls = async () => {
+      try {
+        const response = await fetch(`${API_URL}/atolls`);
+        if (response.ok) {
+          const data = await response.json();
+          setAtolls(data.data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching atolls:', error);
+      }
+    };
+
+    fetchAtolls();
+  }, [API_URL]);
+
+  // Updated useEffect to wait for initialization before fetching
+  useEffect(() => {
+    if (!isInitialized) return; // Don't fetch until spIsland is initialized
+
+    const atollName = appliedAtoll
+      ? atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name || ''
+      : '';
+    const islandName = appliedIsland
+      ? atolls
+          .find(a => a.atolls_id === appliedAtoll)
+          ?.islands.find(i => i.islands_id === appliedIsland)?.islands_name || ''
+      : '';
+    
+    fetchReports(
+      pagination.page,
+      pagination.limit,
+      searchTerm,
+      appliedStartDate,
+      appliedEndDate,
+      atollName,
+      islandName,
+      serviceProvider,
+      spIsland
+    );
+  }, [
+    fetchReports,
+    pagination.page,
+    pagination.limit,
+    searchTerm,
+    appliedStartDate,
+    appliedEndDate,
+    appliedAtoll,
+    appliedIsland,
+    atolls,
+    serviceProvider,
+    spIsland,
+    isInitialized, // Added to dependency array
+  ]);
+
   const handleFilter = () => {
     setAppliedStartDate(startDate ? startDate.toISOString().split('T')[0] : '');
     setAppliedEndDate(endDate ? endDate.toISOString().split('T')[0] : '');
@@ -131,38 +202,6 @@ const SubscribedDealerReports = () => {
     setSearchTerm('');
     setPagination(prev => ({ ...prev, page: 1 }));
   };
-
-  useEffect(() => {
-    const atollName = appliedAtoll
-      ? atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name || ''
-      : '';
-    const islandName = appliedIsland
-      ? atolls
-          .find(a => a.atolls_id === appliedAtoll)
-          ?.islands.find(i => i.islands_id === appliedIsland)?.islands_name || ''
-      : '';
-    fetchReports(
-      pagination.page,
-      pagination.limit,
-      searchTerm,
-      appliedStartDate,
-      appliedEndDate,
-      atollName,
-      islandName,
-      serviceProvider
-    );
-  }, [
-    fetchReports,
-    pagination.page,
-    pagination.limit,
-    searchTerm,
-    appliedStartDate,
-    appliedEndDate,
-    appliedAtoll,
-    appliedIsland,
-    atolls,
-    serviceProvider,
-  ]);
 
   const handlePageChange = (event, value) => {
     setPagination(prev => {
@@ -193,7 +232,12 @@ const SubscribedDealerReports = () => {
         const selectedIslandName = selectedAtollData?.islands.find(i => i.islands_id === appliedIsland)?.islands_name;
         if (selectedIslandName) url += `&island=${encodeURIComponent(selectedIslandName)}`;
       }
-      if (serviceProvider) url += `&serviceProvider=${encodeURIComponent(serviceProvider)}`;
+      if (serviceProvider) {
+        url += `&serviceProvider=${encodeURIComponent(serviceProvider)}`;
+        if (spIsland) url += `&spIsland=${encodeURIComponent(spIsland)}`;
+      }
+
+      console.log('CSV Download URL:', url); // Debug URL
 
       const response = await fetch(url);
       if (!response.ok) throw new Error('Export failed');
@@ -214,7 +258,6 @@ const SubscribedDealerReports = () => {
     }
   };
 
-  // Map backend field names to frontend display keys
   const fieldMap = {
     'Account Number': 'Account Number',
     'Customer Name': 'Customer Name',
@@ -232,10 +275,8 @@ const SubscribedDealerReports = () => {
     'Service End Date': 'End Date',
   };
 
-  // Fields that may have multiple values
   const multiValueFields = ['Service Status', 'Service Package', 'Service End Date'];
 
-  // Format date to "dd MMM yyyy"
   const formatDate = (dateStr) => {
     try {
       return format(new Date(dateStr), 'dd MMM yyyy');
@@ -244,32 +285,19 @@ const SubscribedDealerReports = () => {
     }
   };
 
+  // Get available islands for selected atoll
+  const availableIslands = selectedAtoll 
+    ? atolls.find(a => a.atolls_id === selectedAtoll)?.islands || []
+    : [];
+
   return (
-    <Box
-      sx={{
-        p: 3,
-        display: 'flex',
-        flexDirection: 'column',
-        height: 'calc(100vh - 37px)',
-        overflow: 'hidden',
-        background: '#f9fafb',
-      }}
-    >
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 37px)', overflow: 'hidden', background: '#f9fafb' }}>
       <LocalizationProvider dateAdapter={AdapterDateFns}>
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 2,
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            mb: 3,
-            p: 2,
-            backgroundColor: '#ffffff',
-            borderRadius: 2,
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
-            '& > *': { minWidth: isSmallScreen ? '100%' : 'auto' },
-          }}
-        >
+        <Box sx={{
+          display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: 3, p: 2,
+          backgroundColor: '#ffffff', borderRadius: 2, boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
+          '& > *': { minWidth: isSmallScreen ? '100%' : 'auto' }
+        }}>
           <DatePicker
             label="Start Date"
             value={startDate}
@@ -279,10 +307,7 @@ const SubscribedDealerReports = () => {
                 InputLabelProps: { shrink: true },
                 sx: {
                   width: isSmallScreen ? '100%' : 180,
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                    backgroundColor: '#f1f5f9',
-                  },
+                  '& .MuiOutlinedInput-root': { borderRadius: 2, backgroundColor: '#f1f5f9' },
                 },
               },
             }}
@@ -296,117 +321,47 @@ const SubscribedDealerReports = () => {
                 InputLabelProps: { shrink: true },
                 sx: {
                   width: isSmallScreen ? '100%' : 180,
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                    backgroundColor: '#f1f5f9',
-                  },
+                  '& .MuiOutlinedInput-root': { borderRadius: 2, backgroundColor: '#f1f5f9' },
                 },
               },
             }}
           />
-          <Button
-            variant="contained"
-            onClick={handleFilter}
-            startIcon={<FilterAltIcon />}
-            sx={{
-              width: isSmallScreen ? '100%' : 'auto',
-              height: 48,
-              borderRadius: 2,
-              backgroundColor: '#3b82f6',
-              textTransform: 'none',
-              fontWeight: 500,
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                backgroundColor: '#2563eb',
-                transform: 'translateY(-2px)',
-              },
-            }}
-          >
-            Filter
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={handleClearFilter}
-            startIcon={<ClearIcon />}
-            sx={{
-              width: isSmallScreen ? '100%' : 'auto',
-              height: 48,
-              borderRadius: 2,
-              borderColor: '#e2e8f0',
-              color: '#64748b',
-              textTransform: 'none',
-              fontWeight: 500,
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                borderColor: '#3b82f6',
-                color: '#3b82f6',
-                transform: 'translateY(-2px)',
-              },
-            }}
-          >
-            Clear Filters
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={!isSmallScreen && <GetApp />}
-            onClick={handleDownloadCSV}
-            disabled={isDownloading}
-            sx={{
-              width: isSmallScreen ? '100%' : 'auto',
-              height: 48,
-              borderRadius: 2,
-              backgroundColor: '#22c55e',
-              textTransform: 'none',
-              fontWeight: 500,
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                backgroundColor: '#16a34a',
-                transform: 'translateY(-2px)',
-              },
-            }}
-          >
+          <Button variant="contained" onClick={handleFilter} startIcon={<FilterAltIcon />} sx={{
+            width: isSmallScreen ? '100%' : 'auto', height: 48, borderRadius: 2, backgroundColor: '#3b82f6',
+            textTransform: 'none', fontWeight: 500, transition: 'all 0.3s ease',
+            '&:hover': { backgroundColor: '#2563eb', transform: 'translateY(-2px)' },
+          }}>Filter</Button>
+          <Button variant="outlined" onClick={handleClearFilter} startIcon={<ClearIcon />} sx={{
+            width: isSmallScreen ? '100%' : 'auto', height: 48, borderRadius: 2,
+            borderColor: '#e2e8f0', color: '#64748b', textTransform: 'none', fontWeight: 500,
+            transition: 'all 0.3s ease',
+            '&:hover': { borderColor: '#3b82f6', color: '#3b82f6', transform: 'translateY(-2px)' },
+          }}>Clear Filters</Button>
+          <Button variant="contained" onClick={handleDownloadCSV} startIcon={!isSmallScreen && <GetApp />} disabled={isDownloading} sx={{
+            width: isSmallScreen ? '100%' : 'auto', height: 48, borderRadius: 2,
+            backgroundColor: '#22c55e', textTransform: 'none', fontWeight: 500,
+            transition: 'all 0.3s ease',
+            '&:hover': { backgroundColor: '#16a34a', transform: 'translateY(-2px)' },
+          }}>
             {isDownloading ? 'Exporting...' : isSmallScreen ? <GetApp /> : 'Download'}
           </Button>
         </Box>
       </LocalizationProvider>
 
-      <Box
-        sx={{
-          flex: 1,
-          overflow: 'hidden',
-          borderRadius: 2,
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
-          backgroundColor: '#ffffff',
-        }}
-      >
-        <TableContainer
-          component={Paper}
-          sx={{
-            height: '100%',
-            overflow: 'auto',
-            borderRadius: 2,
-            '&::-webkit-scrollbar': { height: 6, width: 6 },
-            '&::-webkit-scrollbar-thumb': { backgroundColor: '#94a3b8', borderRadius: 3 },
-          }}
-        >
+      <Box sx={{ flex: 1, overflow: 'hidden', borderRadius: 2, boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)', backgroundColor: '#ffffff' }}>
+        <TableContainer component={Paper} sx={{
+          height: '100%', overflow: 'auto', borderRadius: 2,
+          '&::-webkit-scrollbar': { height: 6, width: 6 },
+          '&::-webkit-scrollbar-thumb': { backgroundColor: '#94a3b8', borderRadius: 3 },
+        }}>
           <Table stickyHeader sx={{ minWidth: isSmallScreen ? 'auto' : 1600 }}>
             <TableHead>
               <TableRow>
                 {Object.values(fieldMap).map((header) => (
-                  <TableCell
-                    key={header}
-                    sx={{
-                      fontWeight: 600,
-                      background: 'linear-gradient(90deg, #1e3a8a, #1e40af)',
-                      color: '#ffffff',
-                      whiteSpace: 'nowrap',
-                      py: 1.5,
-                      px: 2,
-                      borderBottom: 'none',
-                    }}
-                  >
-                    {header}
-                  </TableCell>
+                  <TableCell key={header} sx={{
+                    fontWeight: 600, background: 'linear-gradient(90deg, #1e3a8a, #1e40af)',
+                    color: '#ffffff', whiteSpace: 'nowrap', py: 1.5, px: 2, borderBottom: 'none',
+                  }}>{header}</TableCell>
                 ))}
               </TableRow>
             </TableHead>
@@ -423,46 +378,36 @@ const SubscribedDealerReports = () => {
                 ))
               ) : reports.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={Object.keys(fieldMap).length}
-                    sx={{ textAlign: 'center', py: 4, color: '#64748b' }}
-                  >
+                  <TableCell colSpan={Object.keys(fieldMap).length} sx={{ textAlign: 'center', py: 4, color: '#64748b' }}>
                     No data available
                   </TableCell>
                 </TableRow>
               ) : (
                 reports.map((report) => (
-                  <TableRow
-                    key={report.id}
-                    hover
-                    sx={{
-                      '&:last-child td': { borderBottom: 0 },
-                      transition: 'background-color 0.2s ease',
-                      '&:hover': { backgroundColor: '#f1f5f9' },
-                    }}
-                  >
+                  <TableRow key={report.id} hover sx={{
+                    '&:last-child td': { borderBottom: 0 },
+                    transition: 'background-color 0.2s ease',
+                    '&:hover': { backgroundColor: '#f1f5f9' },
+                  }}>
                     {Object.keys(fieldMap).map((backendKey) => {
                       let displayValue = report[backendKey] || '-';
 
                       if (multiValueFields.includes(backendKey)) {
                         if (Array.isArray(displayValue)) {
                           displayValue = displayValue
-                            .map((val) =>
-                              backendKey.includes('Date') ? formatDate(val) : val
-                            )
+                            .map((val) => backendKey.includes('Date') ? formatDate(val) : val)
                             .join(', ');
                         } else if (typeof displayValue === 'string' && displayValue.includes(',')) {
                           displayValue = displayValue
                             .split(',')
-                            .map((val) =>
-                              backendKey.includes('Date') ? formatDate(val.trim()) : val.trim()
-                            )
+                            .map((val) => backendKey.includes('Date') ? formatDate(val.trim()) : val.trim())
                             .join(', ');
                         } else if (backendKey.includes('Date') && displayValue !== '-') {
                           displayValue = formatDate(displayValue);
                         }
                       }
 
+                      // Handle Service Provider object format
                       if (backendKey === 'Service Provider' || backendKey === 'Customer Code') {
                         displayValue =
                           displayValue && typeof displayValue === 'object'
@@ -473,26 +418,13 @@ const SubscribedDealerReports = () => {
                       }
 
                       return (
-                        <TableCell
-                          key={backendKey}
-                          sx={{
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            maxWidth: 200,
-                            py: 2,
-                            px: 2,
-                            color:
-                              backendKey === 'Service Status' && displayValue.includes('NOT_EFFECTIVE')
-                                ? '#ef4444'
-                                : backendKey === 'Service Status' && displayValue.includes('EFFECTIVE')
-                                ? '#22c55e'
-                                : '#475569',
-                            fontWeight: ['Customer Name'].includes(backendKey) ? 500 : 400,
-                          }}
-                        >
-                          {displayValue}
-                        </TableCell>
+                        <TableCell key={backendKey} sx={{
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 200, py: 2, px: 2,
+                          color: backendKey === 'Service Status' && displayValue.includes('NOT_EFFECTIVE') ? '#ef4444'
+                            : backendKey === 'Service Status' && displayValue.includes('EFFECTIVE') ? '#22c55e'
+                              : '#475569',
+                          fontWeight: ['Customer Name'].includes(backendKey) ? 500 : 400,
+                        }}>{displayValue}</TableCell>
                       );
                     })}
                   </TableRow>

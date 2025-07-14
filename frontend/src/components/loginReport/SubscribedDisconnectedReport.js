@@ -36,37 +36,48 @@ const SubscribedDisconnectedReports = () => {
   const [endDate, setEndDate] = useState(null);
   const [appliedStartDate, setAppliedStartDate] = useState('');
   const [appliedEndDate, setAppliedEndDate] = useState('');
-  const isSmallScreen = useMediaQuery('(max-width:600px)');
   const [atolls, setAtolls] = useState([]);
   const [selectedAtoll, setSelectedAtoll] = useState('');
   const [selectedIsland, setSelectedIsland] = useState('');
   const [appliedAtoll, setAppliedAtoll] = useState('');
   const [appliedIsland, setAppliedIsland] = useState('');
+  const [spIsland, setSpIsland] = useState('');
+  const [isInitialized, setIsInitialized] = useState(false);
+  const isSmallScreen = useMediaQuery('(max-width:600px)');
 
-  // Initialize serviceProvider state with extracted value
+  // Initialize serviceProvider and extract island from spRole
   const roles = JSON.parse(localStorage.getItem('userRoles')) || [];
   const spRole = roles.find(role => role.startsWith('Service Provider'));
-  const initialServiceProvider = spRole && spRole.includes(':') ? spRole.split(':')[1].trim() : '';
-  const [serviceProvider, setServiceProvider] = useState(initialServiceProvider);
+  const initialServiceProvider = spRole && spRole.includes(':') ? spRole.split(':')[1].trim().replace(/, Island$/, '') : '';
+  const [serviceProvider] = useState(initialServiceProvider);
 
-  // const API_URL = 'http://localhost:3003/billing-reports';
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
-  const isFetchingRef = useRef(false);
+  const extractIslandFromSpRole = (spRole) => {
+    if (!spRole) return '';
+    const match = spRole.match(/Island:\s*([A-Za-z\s]+)/);
+    return match ? match[1].trim() : '';
+  };
 
-  // Log serviceProvider for debugging
+  // Initialize spIsland immediately and set initialization flag
   useEffect(() => {
-  }, [serviceProvider]);
+    const extractedIsland = extractIslandFromSpRole(spRole);
+    setSpIsland(extractedIsland);
+    setIsInitialized(true);
+  }, [spRole]);
+
+  const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+  // const API_URL = 'http://localhost:3003/billing-reports';
+  const isFetchingRef = useRef(false);
 
   // Memoize fetchReports
   const fetchReports = useCallback(
-    async (page, limit, search = '', start = '', end = '', atoll = '', island = '', sp = '') => {
+    async (page, limit, search = '', start = '', end = '', atoll = '', island = '', sp = '', spIslandValue = '') => {
       if (isFetchingRef.current) {
         console.log('Skipping fetch: already in progress');
         return;
       }
       isFetchingRef.current = true;
-
       setLoading(true);
+
       try {
         const safePage = page || 1;
         const safeLimit = limit || 10;
@@ -76,7 +87,10 @@ const SubscribedDisconnectedReports = () => {
         if (end) url += `&endDate=${encodeURIComponent(end)}`;
         if (atoll) url += `&atoll=${encodeURIComponent(atoll)}`;
         if (island) url += `&island=${encodeURIComponent(island)}`;
-        if (sp) url += `&serviceProvider=${encodeURIComponent(sp)}`;
+        if (sp) {
+          url += `&serviceProvider=${encodeURIComponent(sp)}`;
+          if (spIslandValue) url += `&spIsland=${encodeURIComponent(spIslandValue)}`;
+        }
 
         console.log('Constructed URL:', url); // Debug URL
 
@@ -109,6 +123,45 @@ const SubscribedDisconnectedReports = () => {
     [API_URL]
   );
 
+  // Updated useEffect to wait for initialization before fetching
+  useEffect(() => {
+    if (!isInitialized) return; // Don't fetch until spIsland is initialized
+
+    const atollName = appliedAtoll
+      ? atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name || ''
+      : '';
+    const islandName = appliedIsland
+      ? atolls
+          .find(a => a.atolls_id === appliedAtoll)
+          ?.islands.find(i => i.islands_id === appliedIsland)?.islands_name || ''
+      : '';
+    
+    fetchReports(
+      pagination.page,
+      pagination.limit,
+      searchTerm,
+      appliedStartDate,
+      appliedEndDate,
+      atollName,
+      islandName,
+      serviceProvider,
+      spIsland
+    );
+  }, [
+    fetchReports,
+    pagination.page,
+    pagination.limit,
+    searchTerm,
+    appliedStartDate,
+    appliedEndDate,
+    appliedAtoll,
+    appliedIsland,
+    atolls,
+    serviceProvider,
+    spIsland,
+    isInitialized, // Added to dependency array
+  ]);
+
   const handleFilter = () => {
     setAppliedStartDate(startDate ? startDate.toISOString().split('T')[0] : '');
     setAppliedEndDate(endDate ? endDate.toISOString().split('T')[0] : '');
@@ -129,38 +182,6 @@ const SubscribedDisconnectedReports = () => {
     setSearchTerm('');
     setPagination(prev => ({ ...prev, page: 1 }));
   };
-
-  useEffect(() => {
-    const atollName = appliedAtoll
-      ? atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name || ''
-      : '';
-    const islandName = appliedIsland
-      ? atolls
-          .find(a => a.atolls_id === appliedAtoll)
-          ?.islands.find(i => i.islands_id === appliedIsland)?.islands_name || ''
-      : '';
-    fetchReports(
-      pagination.page,
-      pagination.limit,
-      searchTerm,
-      appliedStartDate,
-      appliedEndDate,
-      atollName,
-      islandName,
-      serviceProvider
-    );
-  }, [
-    fetchReports,
-    pagination.page,
-    pagination.limit,
-    searchTerm,
-    appliedStartDate,
-    appliedEndDate,
-    appliedAtoll,
-    appliedIsland,
-    atolls,
-    serviceProvider,
-  ]);
 
   const handlePageChange = (event, value) => {
     setPagination(prev => {
@@ -191,7 +212,10 @@ const SubscribedDisconnectedReports = () => {
         const selectedIslandName = selectedAtollData?.islands.find(i => i.islands_id === appliedIsland)?.islands_name;
         if (selectedIslandName) url += `&island=${encodeURIComponent(selectedIslandName)}`;
       }
-      if (serviceProvider) url += `&serviceProvider=${encodeURIComponent(serviceProvider)}`;
+      if (serviceProvider) {
+        url += `&serviceProvider=${encodeURIComponent(serviceProvider)}`;
+        if (spIsland) url += `&spIsland=${encodeURIComponent(spIsland)}`;
+      }
 
       console.log('CSV Download URL:', url); // Debug URL
 
@@ -302,6 +326,16 @@ const SubscribedDisconnectedReports = () => {
                 },
               },
             }}
+          />
+          <TextField
+            label="Search"
+            value={searchTerm}
+            onChange={handleSearch}
+            sx={{
+              width: isSmallScreen ? '100%' : 180,
+              '& .MuiOutlinedInput-root': { borderRadius: 2, backgroundColor: '#f1f5f9' },
+            }}
+            InputLabelProps={{ shrink: true }}
           />
           <Button
             variant="contained"
