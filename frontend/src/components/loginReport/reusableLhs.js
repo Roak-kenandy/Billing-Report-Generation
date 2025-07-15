@@ -54,6 +54,7 @@ const ReusableLhs = () => {
         { name: 'Manual Journal Reports', path: '/manualJournal', icon: <BookIcon /> },
         { name: 'Invoice Reports', path: '/invoiceReports', icon: <DescriptionIcon /> },
         { name: 'HDC Reports', path: '/hdcReports', icon: <DescriptionIcon /> },
+        { name: 'Service Provider Bulk', path: '/bulkService', icon: <CloudUploadIcon />}
     ];
 
     const salesReportItems = [

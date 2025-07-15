@@ -89,4 +89,30 @@ const getAllBulkOperations = async (page, limit, type) => {
     }
 };
 
-export { uploadFile, createOperationRecord, getAllBulkOperations, uploadDealerFile };
+const uploadServiceBulk = async (file) => {
+    const formData = new FormData();
+
+    try {
+        // Append the file to FormData with the correct field name
+        formData.append('file', file);
+
+        const response = await axios.post(
+            `${baseUrl}/upload-services`,
+            formData,
+            {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            }
+        );
+
+        console.log('Upload successful:', response.data);
+        return response.data;
+
+    } catch (error) {
+        console.error('Upload failed:', error.response?.data || error.message);
+        throw error;
+    }
+};
+
+export { uploadFile, createOperationRecord, getAllBulkOperations, uploadDealerFile, uploadServiceBulk };
