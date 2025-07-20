@@ -23,7 +23,8 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { format } from 'date-fns';
 
 // Use environment variable for API URL with fallback for development
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3003/billing-reports';
+// const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3003/billing-reports';
+const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
 
 const InvoiceReports = () => {
   const [reports, setReports] = useState([]);
