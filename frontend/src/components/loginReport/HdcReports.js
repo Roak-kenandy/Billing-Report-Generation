@@ -265,52 +265,6 @@ const HdcReports = () => {
             }}
           />
           
-          <FormControl sx={{ width: isSmallScreen ? '100%' : 180 }}>
-            <InputLabel id="atoll-select-label">Atoll</InputLabel>
-            <Select
-              labelId="atoll-select-label"
-              value={selectedAtoll}
-              label="Atoll"
-              onChange={(e) => setSelectedAtoll(e.target.value)}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                  backgroundColor: '#f1f5f9',
-                },
-              }}
-            >
-              <MenuItem value="">All Atolls</MenuItem>
-              {atolls.map(atoll => (
-                <MenuItem key={atoll.atolls_id} value={atoll.atolls_id}>
-                  {atoll.atolls_name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          
-          <FormControl sx={{ width: isSmallScreen ? '100%' : 180 }}>
-            <InputLabel id="island-select-label">Island</InputLabel>
-            <Select
-              labelId="island-select-label"
-              value={selectedIsland}
-              label="Island"
-              onChange={(e) => setSelectedIsland(e.target.value)}
-              disabled={!selectedAtoll}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                  backgroundColor: '#f1f5f9',
-                },
-              }}
-            >
-              <MenuItem value="">All Islands</MenuItem>
-              {islands.map(island => (
-                <MenuItem key={island.islands_id} value={island.islands_id}>
-                  {island.islands_name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
           
           <Button
             variant="contained"
