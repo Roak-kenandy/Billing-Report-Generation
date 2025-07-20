@@ -1057,7 +1057,467 @@ const exportContactProfilesWithInvoice = async (search, startDate, endDate, atol
 };
 
 
-const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, island, page, limit, format) => {
+// const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, island, page, limit, format) => {
+//   try {
+//     // Validate and convert dates to UTC timestamps
+//     let startTimestamp, endTimestamp;
+//     if (startDate) {
+//       const start = new Date(startDate);
+//       start.setUTCHours(0, 0, 0, 0);
+//       startTimestamp = Math.floor(start.getTime() / 1000);
+//     }
+    
+//     if (endDate) {
+//       const end = new Date(endDate);
+//       end.setUTCHours(23, 59, 59, 999);
+//       endTimestamp = Math.floor(end.getTime() / 1000);
+//     }
+
+//     // First: Get HDC contact profiles that match criteria
+//     let profileMatch = {
+//       'custom_fields': {
+//         $elemMatch: {
+//           key: 'service_provider',
+//           value_label: 'HDC'
+//         }
+//       }
+//     };
+//     if (search) profileMatch.$text = { $search: search };
+//     if (atoll) profileMatch['location.province'] = atoll;
+//     if (island) profileMatch['location.city'] = island;
+
+//     const hdcProfiles = await mongoose.connection.db
+//       .collection('ContactProfiles')
+//       .find(profileMatch, { projection: { contact_id: 1 } })
+//       .toArray();
+
+//     const hdcContactIds = hdcProfiles.map(profile => profile.contact_id);
+
+//     // Return empty if no HDC contacts found
+//     if (hdcContactIds.length === 0) {
+//       return {
+//         results: [],
+//         pagination: { page: parseInt(page), limit: parseInt(limit), total: 0, totalPages: 0 },
+//         csv: undefined,
+//       };
+//     }
+
+//     // Get contact IDs with VIP or Employee sales model
+//     const excludedSalesModelContactIds = await mongoose.connection.db
+//       .collection('ContactProfiles')
+//       .distinct('contact_id', {
+//         contact_id: { $in: hdcContactIds },
+//         'sales_model.name': { $in: ['VIP', 'Employees'] }
+//       });
+
+//     // Combine all excluded contact IDs
+//     const excludedContactIds = [...new Set([...excludedSalesModelContactIds])];
+    
+//     // Define excluded hardware amounts in Decimal128 format
+//     const excludedAmounts = [
+//       new mongoose.Types.Decimal128('150'),
+//       new mongoose.Types.Decimal128('250'),
+//       new mongoose.Types.Decimal128('300'),
+//       new mongoose.Types.Decimal128('999'),
+//       new mongoose.Types.Decimal128('212'),
+//       new mongoose.Types.Decimal128('0')
+//     ];
+
+//     // Build match conditions
+//     let eventMatchConditions = [
+//       { type: { $in: ['INVOICE_POSTED', 'PAYMENT_POSTED'] } },
+//       { 
+//         contact_id: {
+//           $in: hdcContactIds,
+//           $nin: excludedContactIds  // Exclude VIP/Employee contacts
+//         } 
+//       }
+//     ];
+
+//     // Date filter condition
+//     if (startTimestamp || endTimestamp) {
+//       let dateCondition = { 'transaction.posted_date': {} };
+//       if (startTimestamp) dateCondition['transaction.posted_date'].$gte = startTimestamp;
+//       if (endTimestamp) dateCondition['transaction.posted_date'].$lte = endTimestamp;
+//       eventMatchConditions.push(dateCondition);
+//     }
+
+//     // Apply hardware exclusion ONLY to INVOICE_POSTED events
+//     eventMatchConditions.push({
+//       $or: [
+//         // Include all PAYMENT_POSTED events
+//         { type: 'PAYMENT_POSTED' },
+//         // For invoices, apply hardware amount exclusion
+//         {
+//           type: 'INVOICE_POSTED',
+//           $or: [
+//             { 'transaction.total_default_currency': { $exists: false } },
+//             { 'transaction.total_default_currency': { $nin: excludedAmounts } }
+//           ]
+//         }
+//       ]
+//     });
+
+//     // Final event match condition
+//     const eventMatch = { $and: eventMatchConditions };
+
+//     // Helper function to resolve nested object paths
+//     const resolvePath = (obj, path) => {
+//       if (!obj) return null;
+//       return path.split('.').reduce((o, key) => (o && o[key] !== undefined ? o[key] : null), obj);
+//     };
+
+//     // Base event query
+//     const eventQueryBase = [
+//       { $match: eventMatch },
+//       {
+//         $project: {
+//           contact_id: 1,
+//           'transaction.number': 1,
+//           'transaction.reference_number': 1,
+//           'transaction.posted_date': 1,
+//           'transaction.issued_date': 1,
+//           'transaction.due_date': 1,
+//           'transaction.total_default_currency': 1,
+//           'transaction.net_amount': 1,
+//           'transaction.default_currency_discount_amount': 1,
+//           'transaction.default_currency_tax_amount': 1,
+//           'transaction.currency_code': 1,
+//           'transaction.total_amount': 1,
+//           'transaction.exchange_rate': 1,
+//           'payment_method.payment_method_type': 1
+//         },
+//       },
+//     ];
+
+//     // Add pagination for JSON, no pagination for CSV
+//     const eventQuery = format === 'json'
+//       ? [...eventQueryBase, { $skip: (page - 1) * limit }, { $limit: parseInt(limit) }]
+//       : eventQueryBase;
+
+//     // Fetch Events
+//     const eventsCursor = mongoose.connection.db
+//       .collection('Events')
+//       .aggregate(eventQuery, { maxTimeMS: 300000, allowDiskUse: true });
+
+//     // For JSON, collect events into an array
+//     let events = [];
+//     if (format === 'json') {
+//       events = await eventsCursor.toArray();
+//     }
+
+//     // Extract contact_ids from events
+//     const eventContactIds = format === 'json'
+//       ? events.map(event => event.contact_id)
+//       : await eventsCursor.toArray().then(events => events.map(event => event.contact_id));
+
+//     // Get full profiles for these contact IDs
+//     const profileQuery = [
+//       { $match: { contact_id: { $in: eventContactIds } } },
+//       {
+//         $lookup: {
+//           from: 'Journals',
+//           localField: 'contact_id',
+//           foreignField: 'contact_id',
+//           as: 'joinedDataJournals',
+//         },
+//       },
+//       {
+//         $project: {
+//           _id: 0,
+//           contact_id: 1,
+//           Name: {
+//             $cond: {
+//               if: {
+//                 $eq: [
+//                   {
+//                     $concat: [
+//                       { $ifNull: ['$demographics.first_name', ''] },
+//                       ' ',
+//                       { $ifNull: ['$demographics.last_name', ''] },
+//                     ]
+//                   },
+//                   ' '
+//                 ]
+//               },
+//               then: { $ifNull: [{ $arrayElemAt: ['$joinedDataJournals.contact_name', 0] }, ''] },
+//               else: {
+//                 $concat: [
+//                   { $ifNull: ['$demographics.first_name', ''] },
+//                   ' ',
+//                   { $ifNull: ['$demographics.last_name', ''] },
+//                 ]
+//               }
+//             }
+//           },
+//           'Customer Code': {
+//             $ifNull: [
+//               {
+//                 $toString: { $arrayElemAt: ['$joinedDataJournals.contact_code', 0] }
+//               },
+//               ''
+//             ]
+//           },
+//           'Account Number': {
+//             $ifNull: [{ $arrayElemAt: ['$joinedDataJournals.account_number', 0] }, ''],
+//           },
+//           Country: { $ifNull: ['$location.country', ''] },
+//           'Account Classification': { $ifNull: ['$account.classification.name', ''] },
+//           'Contact Sales Model': { $ifNull: ['$sales_model.name', ''] },
+//           Tags: {
+//             $ifNull: [
+//               {
+//                 $reduce: {
+//                   input: '$tags',
+//                   initialValue: '',
+//                   in: {
+//                     $cond: {
+//                       if: { $eq: ['$this', {}] },
+//                       then: '$$value',
+//                       else: {
+//                         $concat: [
+//                           '$$value',
+//                           { $cond: { if: { $eq: ['$$value', ''] }, then: '', else: ',' } },
+//                           '$$this.name'
+//                         ]
+//                       }
+//                     }
+//                   }
+//                 }
+//               },
+//               ''
+//             ]
+//           },
+//           'Address Name': { $ifNull: ['$location.address_name', ''] },
+//           'Address Line1': { $ifNull: ['$location.address_line1', ''] },
+//           'Address Line2': { $ifNull: ['$location.address_line2', ''] },
+//           City: { $ifNull: ['$location.city', ''] },
+//           'Service Provider': {
+//             $let: {
+//               vars: {
+//                 serviceProvider: {
+//                   $arrayElemAt: [
+//                     {
+//                       $filter: {
+//                         input: { $ifNull: ['$custom_fields', []] },
+//                         as: 'field',
+//                         cond: { $eq: ['$$field.key', 'service_provider'] }
+//                       }
+//                     },
+//                     0
+//                   ]
+//                 }
+//               },
+//               in: { $ifNull: ['$$serviceProvider.value_label', ''] }
+//             }
+//           },
+//           'Invoiced Service': {
+//             $ifNull: [
+//               {
+//                 $reduce: {
+//                   input: { $ifNull: ['$services', []] },
+//                   initialValue: '',
+//                   in: {
+//                     $concat: [
+//                       '$$value',
+//                       { $cond: { if: { $eq: ['$$value', ''] }, then: '', else: ',' } },
+//                       { $ifNull: ['$$this.product.name', ''] }
+//                     ]
+//                   }
+//                 }
+//               },
+//               ''
+//             ]
+//           }
+//         },
+//       },
+//     ];
+
+//     const profiles = await mongoose.connection.db
+//       .collection('ContactProfiles')
+//       .aggregate(profileQuery, { maxTimeMS: 300000, allowDiskUse: true })
+//       .toArray();
+
+//     // Count total events for HDC contacts
+//     const total = await mongoose.connection.db
+//       .collection('Events')
+//       .countDocuments(eventMatch);
+//     const totalPages = Math.ceil(total / limit);
+
+//     // Prepare response
+//     const response = {
+//       results: format === 'json' ? [] : undefined,
+//       pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages },
+//       csv: undefined,
+//     };
+
+//     // Helper function to format dates in UTC
+//     const formatUTCDate = (timestampInSeconds) => {
+//       if (!timestampInSeconds) return '';
+//       const date = new Date(timestampInSeconds * 1000);
+//       return date.toLocaleString('en-GB', {
+//         day: '2-digit',
+//         month: 'short',
+//         year: 'numeric',
+//         hour: '2-digit',
+//         minute: '2-digit',
+//         second: '2-digit',
+//         timeZone: 'UTC'
+//       });
+//     };
+
+//     // Handle JSON output
+//     if (format === 'json') {
+//       response.results = events.map(event => {
+//         const profile = profiles.find(p => p.contact_id === event.contact_id) || {};
+//         // Helper function to safely extract transaction fields
+//         const getTransactionField = (path, isDecimal = false) => {
+//           const value = resolvePath(event, path);
+//           if (value === null || value === undefined) return '';
+//           if (isDecimal) {
+//             return value?.$numberDecimal?.toString() || value?.toString() || '';
+//           }
+//           return value?.toString() || '';
+//         };
+
+//         const result = {
+//           Name: profile.Name || '',
+//           'Customer Code': profile['Customer Code'] || '',
+//           'Account Number': profile['Account Number'] || '',
+//           Country: profile.Country || '',
+//           'Account Classification': profile['Account Classification'] || '',
+//           'Contact Sales Model': profile['Contact Sales Model'] || '',
+//           Tags: profile.Tags || '',
+//           'Address Name': profile['Address Name'] || '',
+//           'Address Line1': profile['Address Line1'] || '',
+//           'Address Line2': profile['Address Line2'] || '',
+//           City: profile.City || '',
+//           'Service Provider': profile['Service Provider'] || '',
+//           'Invoiced Service': profile['Invoiced Service'] || '',
+//           'Invoice Number': getTransactionField('transaction.number'),
+//           'Invoice Reference Number': getTransactionField('transaction.reference_number'),
+//           'Posted Date': formatUTCDate(event.transaction?.posted_date),
+//           'Issued Date': formatUTCDate(event.transaction?.issued_date),
+//           'Due Date': formatUTCDate(event.transaction?.due_date),
+//           'Payment Method': getTransactionField('payment_method.payment_method_type'),
+//           'Total Default Currency': getTransactionField('transaction.total_default_currency', true),
+//           'Total Net Amount': getTransactionField('transaction.net_amount', true),
+//           'Total Discount': getTransactionField('transaction.default_currency_discount_amount', true),
+//           'Total Tax': getTransactionField('transaction.default_currency_tax_amount', true),
+//           Currency: getTransactionField('transaction.currency_code'),
+//           'Total Amount': getTransactionField('transaction.total_amount', true),
+//           'Exchange Rate': getTransactionField('transaction.exchange_rate', true),
+//         };
+//         return result;
+//       });
+//     }
+
+//     // Handle CSV output with streaming
+//     if (format === 'csv') {
+//       const fields = [
+//         'Name',
+//         'Customer Code',
+//         'Account Number',
+//         'Country',
+//         'Account Classification',
+//         'Contact Sales Model',
+//         'Tags',
+//         'Address Name',
+//         'Address Line1',
+//         'Address Line2',
+//         'City',
+//         'Service Provider',
+//         'Invoiced Service',
+//         'Invoice Number',
+//         'Invoice Reference Number',
+//         'Posted Date',
+//         'Issued Date',
+//         'Due Date',
+//         'Payment Method',
+//         'Total Default Currency',
+//         'Total Net Amount',
+//         'Total Discount',
+//         'Total Tax',
+//         'Currency',
+//         'Total Amount',
+//         'Exchange Rate',
+//       ];
+//       const parser = new Parser({ fields, header: true });
+//       let csvContent = '';
+
+//       // Write header
+//       csvContent = parser.parse([]); // Generates the header row
+
+//       const stream = mongoose.connection.db
+//         .collection('Events')
+//         .aggregate(eventQueryBase, { maxTimeMS: 300000, allowDiskUse: true })
+//         .stream();
+
+//       await new Promise((resolve, reject) => {
+//         stream.on('data', (event) => {
+//           const profile = profiles.find(p => p.contact_id === event.contact_id) || {};
+//           // Helper function to safely extract transaction fields
+//           const getTransactionField = (path, isDecimal = false) => {
+//             const value = resolvePath(event, path);
+//             if (value === null || value === undefined) return '';
+//             if (isDecimal) {
+//               return value?.$numberDecimal?.toString() || value?.toString() || '';
+//             }
+//             return value?.toString() || '';
+//           };
+
+//           const row = {
+//             Name: profile.Name || '',
+//             'Customer Code': profile['Customer Code'] || '',
+//             'Account Number': profile['Account Number'] || '',
+//             Country: profile.Country || '',
+//             'Account Classification': profile['Account Classification'] || '',
+//             'Contact Sales Model': profile['Contact Sales Model'] || '',
+//             Tags: profile.Tags || '',
+//             'Address Name': profile['Address Name'] || '',
+//             'Address Line1': profile['Address Line1'] || '',
+//             'Address Line2': profile['Address Line2'] || '',
+//             City: profile.City || '',
+//             'Service Provider': profile['Service Provider'] || '',
+//             'Invoiced Service': profile['Invoiced Service'] || '',
+//             'Invoice Number': getTransactionField('transaction.number'),
+//             'Invoice Reference Number': getTransactionField('transaction.reference_number'),
+//             'Posted Date': formatUTCDate(event.transaction?.posted_date),
+//             'Issued Date': formatUTCDate(event.transaction?.issued_date),
+//             'Due Date': formatUTCDate(event.transaction?.due_date),
+//             'Payment Method': getTransactionField('payment_method.payment_method_type'),
+//             'Total Default Currency': getTransactionField('transaction.total_default_currency', true),
+//             'Total Net Amount': getTransactionField('transaction.net_amount', true),
+//             'Total Discount': getTransactionField('transaction.default_currency_discount_amount', true),
+//             'Total Tax': getTransactionField('transaction.default_currency_tax_amount', true),
+//             Currency: getTransactionField('transaction.currency_code'),
+//             'Total Amount': getTransactionField('transaction.total_amount', true),
+//             'Exchange Rate': getTransactionField('transaction.exchange_rate', true),
+//           };
+//           // Parse the row without header
+//           const rowCsv = parser.parse([row]).split('\n')[1]; // Skip the header row, take only the data row
+//           csvContent += `\n${rowCsv}`;
+//         });
+//         stream.on('end', () => {
+//           response.csv = csvContent;
+//           resolve();
+//         });
+//         stream.on('error', (err) => reject(err));
+//       });
+//     }
+
+//     return response;
+//   } catch (error) {
+//     console.error('Error exporting contact profiles with invoice report:', {
+//       error: error.message,
+//       stack: error.stack,
+//     });
+//     throw new Error('Error exporting contact profiles with invoice report');
+//   }
+// };
+
+
+const exportContactProfilesWithHdc = async (startDate, endDate, page, limit, format) => {
   try {
     // Validate and convert dates to UTC timestamps
     let startTimestamp, endTimestamp;
@@ -1075,16 +1535,13 @@ const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, i
 
     // First: Get HDC contact profiles that match criteria
     let profileMatch = {
-      'custom_fields': {
+      custom_fields: {
         $elemMatch: {
           key: 'service_provider',
           value_label: 'HDC'
         }
       }
     };
-    if (search) profileMatch.$text = { $search: search };
-    if (atoll) profileMatch['location.province'] = atoll;
-    if (island) profileMatch['location.city'] = island;
 
     const hdcProfiles = await mongoose.connection.db
       .collection('ContactProfiles')
@@ -1102,14 +1559,6 @@ const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, i
       };
     }
 
-    // Get contact IDs with "PREMIUM HD HOTEL" service
-    const hotelContactIds = await mongoose.connection.db
-      .collection('ContactProfiles')
-      .distinct('contact_id', {
-        contact_id: { $in: hdcContactIds },
-        'services.product.name': 'PREMIUM HD HOTEL'
-      });
-
     // Get contact IDs with VIP or Employee sales model
     const excludedSalesModelContactIds = await mongoose.connection.db
       .collection('ContactProfiles')
@@ -1119,7 +1568,7 @@ const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, i
       });
 
     // Combine all excluded contact IDs
-    const excludedContactIds = [...new Set([...hotelContactIds, ...excludedSalesModelContactIds])];
+    const excludedContactIds = [...new Set([...excludedSalesModelContactIds])];
     
     // Define excluded hardware amounts in Decimal128 format
     const excludedAmounts = [
@@ -1127,6 +1576,7 @@ const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, i
       new mongoose.Types.Decimal128('250'),
       new mongoose.Types.Decimal128('300'),
       new mongoose.Types.Decimal128('999'),
+      new mongoose.Types.Decimal128('212'),
       new mongoose.Types.Decimal128('0')
     ];
 
@@ -1136,7 +1586,7 @@ const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, i
       { 
         contact_id: {
           $in: hdcContactIds,
-          $nin: excludedContactIds  // Exclude hotel and VIP/Employee contacts
+          $nin: excludedContactIds  // Exclude VIP/Employee contacts
         } 
       }
     ];
@@ -1168,55 +1618,191 @@ const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, i
     // Final event match condition
     const eventMatch = { $and: eventMatchConditions };
 
-    // Helper function to resolve nested object paths
-    const resolvePath = (obj, path) => {
-      if (!obj) return null;
-      return path.split('.').reduce((o, key) => (o && o[key] !== undefined ? o[key] : null), obj);
-    };
-
-    // Base event query
-    const eventQueryBase = [
+    // Aggregation pipeline to consolidate payment methods by Customer Code and month
+    const consolidatedEventQuery = [
       { $match: eventMatch },
       {
-        $project: {
-          contact_id: 1,
-          'transaction.number': 1,
-          'transaction.reference_number': 1,
-          'transaction.posted_date': 1,
-          'transaction.issued_date': 1,
-          'transaction.due_date': 1,
-          'transaction.total_default_currency': 1,
-          'transaction.net_amount': 1,
-          'transaction.default_currency_discount_amount': 1,
-          'transaction.default_currency_tax_amount': 1,
-          'transaction.currency_code': 1,
-          'transaction.total_amount': 1,
-          'transaction.exchange_rate': 1,
-          'payment_method.payment_method_type': 1
-        },
+        $addFields: {
+          monthYear: {
+            $dateToString: {
+              format: "%Y-%m",
+              date: { $toDate: { $multiply: ["$transaction.posted_date", 1000] } }
+            }
+          }
+        }
       },
+      {
+        $group: {
+          _id: {
+            contact_id: "$contact_id",
+            monthYear: "$monthYear"
+          },
+          // Collect all payment methods for this contact/month
+          paymentMethods: {
+            $addToSet: {
+              $cond: [
+                { $ne: ["$payment_method.payment_method_type", null] },
+                "$payment_method.payment_method_type",
+                "$$REMOVE"
+              ]
+            }
+          },
+          // Keep transaction data from first record
+          transaction: { $first: "$transaction" },
+          // Sum totalDefaultCurrency only for INVOICE_POSTED events
+          totalDefaultCurrency: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$type", "INVOICE_POSTED"] },
+                    { $ne: ["$transaction.total_default_currency", null] },
+                    { $ne: ["$transaction.total_default_currency", ""] }
+                  ]
+                },
+                "$transaction.total_default_currency",
+                new mongoose.Types.Decimal128("0")
+              ]
+            }
+          },
+          // Keep other amounts from first record
+          totalNetAmount: { $first: "$transaction.net_amount" },
+          totalDiscountAmount: { $first: "$transaction.default_currency_discount_amount" },
+          totalTaxAmount: { $first: "$transaction.default_currency_tax_amount" },
+          totalAmount: { $first: "$transaction.total_amount" },
+          // Take first invoice number only
+          invoiceNumber: { $first: "$transaction.number" },
+          // Collect all reference numbers
+          referenceNumbers: {
+            $addToSet: {
+              $cond: [
+                { $ne: ["$transaction.reference_number", null] },
+                "$transaction.reference_number",
+                "$$REMOVE"
+              ]
+            }
+          }
+        }
+      },
+      // Add integer part of totalDefaultCurrency for filtering
+      {
+        $addFields: {
+          totalDefaultCurrencyInteger: {
+            $toInt: {
+              $trunc: {
+                $toDouble: "$totalDefaultCurrency"
+              }
+            }
+          }
+        }
+      },
+      // Filter out rows where integer part of totalDefaultCurrency matches excluded amounts
+      {
+        $match: {
+          totalDefaultCurrencyInteger: {
+            $nin: [150, 250, 300, 999, 212, 0]
+          }
+        }
+      },
+      {
+        $project: {
+          contact_id: "$_id.contact_id",
+          monthYear: "$_id.monthYear",
+          paymentMethods: 1,
+          transaction: 1,
+          totalDefaultCurrency: 1,
+          totalNetAmount: 1,
+          totalDiscountAmount: 1,
+          totalTaxAmount: 1,
+          totalAmount: 1,
+          invoiceNumber: 1,
+          referenceNumbers: 1,
+          _id: 0
+        }
+      }
     ];
 
     // Add pagination for JSON, no pagination for CSV
     const eventQuery = format === 'json'
-      ? [...eventQueryBase, { $skip: (page - 1) * limit }, { $limit: parseInt(limit) }]
-      : eventQueryBase;
+      ? [...consolidatedEventQuery, { $skip: (page - 1) * limit }, { $limit: parseInt(limit) }]
+      : consolidatedEventQuery;
 
-    // Fetch Events
-    const eventsCursor = mongoose.connection.db
+    // Fetch consolidated events
+    const events = await mongoose.connection.db
       .collection('Events')
-      .aggregate(eventQuery, { maxTimeMS: 300000, allowDiskUse: true });
-
-    // For JSON, collect events into an array
-    let events = [];
-    if (format === 'json') {
-      events = await eventsCursor.toArray();
-    }
+      .aggregate(eventQuery, { maxTimeMS: 300000, allowDiskUse: true })
+      .toArray();
 
     // Extract contact_ids from events
-    const eventContactIds = format === 'json'
-      ? events.map(event => event.contact_id)
-      : await eventsCursor.toArray().then(events => events.map(event => event.contact_id));
+    const eventContactIds = events.map(event => event.contact_id);
+
+    // Fetch credit notes from Journals collection
+    const creditNoteQuery = [
+      {
+        $match: {
+          contact_id: { $in: eventContactIds },
+          'related_entity.transaction_type': 'CREDIT_NOTE'
+        }
+      },
+      {
+        $addFields: {
+          monthYear: {
+            $dateToString: {
+              format: "%Y-%m",
+              date: { $toDate: { $multiply: ["$posted_date", 1000] } }
+            }
+          }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            contact_id: "$contact_id",
+            monthYear: "$monthYear"
+          },
+          totalCreditNoteAmount: {
+            $sum: {
+              $cond: [
+                { $ne: ["$amount", null] },
+                "$amount",
+                new mongoose.Types.Decimal128("0")
+              ]
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          contact_id: "$_id.contact_id",
+          monthYear: "$_id.monthYear",
+          totalCreditNoteAmount: 1,
+          _id: 0
+        }
+      }
+    ];
+
+    // Apply date filter to credit notes if specified
+    if (startTimestamp || endTimestamp) {
+      let dateCondition = { 'posted_date': {} };
+      if (startTimestamp) dateCondition['posted_date'].$gte = startTimestamp;
+      if (endTimestamp) dateCondition['posted_date'].$lte = endTimestamp;
+      creditNoteQuery[0].$match = {
+        ...creditNoteQuery[0].$match,
+        ...dateCondition
+      };
+    }
+
+    const creditNotes = await mongoose.connection.db
+      .collection('Journals')
+      .aggregate(creditNoteQuery, { maxTimeMS: 300000, allowDiskUse: true })
+      .toArray();
+
+    // Create a lookup map for credit notes by contact_id and monthYear
+    const creditNoteMap = {};
+    creditNotes.forEach(cn => {
+      const key = `${cn.contact_id}-${cn.monthYear}`;
+      creditNoteMap[key] = cn.totalCreditNoteAmount;
+    });
 
     // Get full profiles for these contact IDs
     const profileQuery = [
@@ -1268,7 +1854,6 @@ const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, i
           'Account Number': {
             $ifNull: [{ $arrayElemAt: ['$joinedDataJournals.account_number', 0] }, ''],
           },
-          Country: { $ifNull: ['$location.country', ''] },
           'Account Classification': { $ifNull: ['$account.classification.name', ''] },
           'Contact Sales Model': { $ifNull: ['$sales_model.name', ''] },
           Tags: {
@@ -1345,10 +1930,16 @@ const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, i
       .aggregate(profileQuery, { maxTimeMS: 300000, allowDiskUse: true })
       .toArray();
 
-    // Count total events for HDC contacts
-    const total = await mongoose.connection.db
+    // Count total consolidated events
+    const totalConsolidated = await mongoose.connection.db
       .collection('Events')
-      .countDocuments(eventMatch);
+      .aggregate([
+        ...consolidatedEventQuery,
+        { $count: "total" }
+      ])
+      .toArray();
+
+    const total = totalConsolidated.length > 0 ? totalConsolidated[0].total : 0;
     const totalPages = Math.ceil(total / limit);
 
     // Prepare response
@@ -1373,59 +1964,107 @@ const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, i
       });
     };
 
+    // Helper function to safely add decimal values
+    const addDecimalValues = (value1, value2) => {
+      const val1 = value1 || new mongoose.Types.Decimal128("0");
+      const val2 = value2 || new mongoose.Types.Decimal128("0");
+      
+      // Convert to numbers for calculation
+      const num1 = parseFloat(val1.$numberDecimal || val1.toString());
+      const num2 = parseFloat(val2.$numberDecimal || val2.toString());
+      
+      return new mongoose.Types.Decimal128((num1 + num2).toString());
+    };
+
+    // Helper function to process consolidated event data
+    const processEventData = (event) => {
+      const profile = profiles.find(p => p.contact_id === event.contact_id) || {};
+      
+      // Get credit note amount for this contact and month
+      const creditNoteKey = `${event.contact_id}-${event.monthYear}`;
+      const creditNoteAmount = creditNoteMap[creditNoteKey] || new mongoose.Types.Decimal128("0");
+      
+      // Set Total Default Currency to Total Amount
+      let totalDefaultCurrency = event.totalAmount || new mongoose.Types.Decimal128("0");
+      
+      // Apply multiplication by 15.42 if Contact Sales Model is City Hotels and Currency is USD
+      if (profile['Contact Sales Model'] === 'City Hotels' && event.transaction?.currency_code === 'USD') {
+        const totalValue = parseFloat(totalDefaultCurrency.$numberDecimal || totalDefaultCurrency.toString());
+        totalDefaultCurrency = new mongoose.Types.Decimal128((totalValue * 15.42).toString());
+      }
+      
+      // Calculate total with credit notes
+      const totalWithCreditNotes = addDecimalValues(totalDefaultCurrency, creditNoteAmount);
+      
+      // Cap Total Default Currency at 864
+      const cappedTotal = parseFloat(totalWithCreditNotes.$numberDecimal || totalWithCreditNotes.toString()) > 864
+        ? new mongoose.Types.Decimal128("864")
+        : totalWithCreditNotes;
+      
+      // Calculate Total Net Amount = Total Default Currency / 1.08
+      const totalNetAmount = new mongoose.Types.Decimal128(
+        (parseFloat(cappedTotal.$numberDecimal || cappedTotal.toString()) / 1.08).toFixed(2)
+      );
+      
+      // Calculate Total Tax = Total Default Currency × (0.08 / 1.08)
+      const totalTaxAmount = new mongoose.Types.Decimal128(
+        (parseFloat(cappedTotal.$numberDecimal || cappedTotal.toString()) * (0.08 / 1.08)).toFixed(2)
+      );
+      
+      // Helper function to safely extract and format decimal values
+      const formatDecimalValue = (value) => {
+        if (!value) return '';
+        if (value.$numberDecimal) return value.$numberDecimal.toString();
+        return value.toString();
+      };
+      
+      // Process payment methods to replace ELECTRONIC_TRANSFER with Quick Pay
+      const processedPaymentMethods = event.paymentMethods 
+        ? event.paymentMethods.map(pm => pm === 'ELECTRONIC_TRANSFER' ? 'Quick Pay' : pm)
+        : [];
+
+      return {
+        Name: profile.Name || '',
+        'Customer Code': profile['Customer Code'] || '',
+        'Account Number': profile['Account Number'] || '',
+        Country: profile.Country || '',
+        'Account Classification': profile['Account Classification'] || '',
+        'Contact Sales Model': profile['Contact Sales Model'] || '',
+        Tags: profile.Tags || '',
+        'Address Name': profile['Address Name'] || '',
+        'Address Line1': profile['Address Line1'] || '',
+        'Address Line2': profile['Address Line2'] || '',
+        City: profile.City || '',
+        'Service Provider': profile['Service Provider'] || '',
+        'Invoiced Service': profile['Invoiced Service'] || '',
+        'Invoice Number': event.invoiceNumber || '',
+        'Reference Numbers': event.referenceNumbers ? event.referenceNumbers.join(', ') : '',
+        'Posted Date': formatUTCDate(event.transaction?.posted_date),
+        'Issued Date': formatUTCDate(event.transaction?.issued_date),
+        'Due Date': formatUTCDate(event.transaction?.due_date),
+        'Payment Methods': processedPaymentMethods.filter(pm => pm).join(', '),
+        'Total Default Currency': formatDecimalValue(cappedTotal),
+        'Credit Note Amount': formatDecimalValue(creditNoteAmount),
+        'Total Net Amount': formatDecimalValue(totalNetAmount),
+        'Total Discount': formatDecimalValue(event.totalDiscountAmount),
+        'Total Tax': formatDecimalValue(totalTaxAmount),
+        Currency: event.transaction?.currency_code || '',
+        'Total Amount': formatDecimalValue(event.totalAmount),
+        'Exchange Rate': event.transaction?.exchange_rate?.toString() || '',
+      };
+    };
+
     // Handle JSON output
     if (format === 'json') {
-      response.results = events.map(event => {
-        const profile = profiles.find(p => p.contact_id === event.contact_id) || {};
-        // Helper function to safely extract transaction fields
-        const getTransactionField = (path, isDecimal = false) => {
-          const value = resolvePath(event, path);
-          if (value === null || value === undefined) return '';
-          if (isDecimal) {
-            return value?.$numberDecimal?.toString() || value?.toString() || '';
-          }
-          return value?.toString() || '';
-        };
-
-        const result = {
-          Name: profile.Name || '',
-          'Customer Code': profile['Customer Code'] || '',
-          'Account Number': profile['Account Number'] || '',
-          Country: profile.Country || '',
-          'Account Classification': profile['Account Classification'] || '',
-          'Contact Sales Model': profile['Contact Sales Model'] || '',
-          Tags: profile.Tags || '',
-          'Address Name': profile['Address Name'] || '',
-          'Address Line1': profile['Address Line1'] || '',
-          'Address Line2': profile['Address Line2'] || '',
-          City: profile.City || '',
-          'Service Provider': profile['Service Provider'] || '',
-          'Invoiced Service': profile['Invoiced Service'] || '',
-          'Invoice Number': getTransactionField('transaction.number'),
-          'Invoice Reference Number': getTransactionField('transaction.reference_number'),
-          'Posted Date': formatUTCDate(event.transaction?.posted_date),
-          'Issued Date': formatUTCDate(event.transaction?.issued_date),
-          'Due Date': formatUTCDate(event.transaction?.due_date),
-          'Payment Method': getTransactionField('payment_method.payment_method_type'),
-          'Total Default Currency': getTransactionField('transaction.total_default_currency', true),
-          'Total Net Amount': getTransactionField('transaction.net_amount', true),
-          'Total Discount': getTransactionField('transaction.default_currency_discount_amount', true),
-          'Total Tax': getTransactionField('transaction.default_currency_tax_amount', true),
-          Currency: getTransactionField('transaction.currency_code'),
-          'Total Amount': getTransactionField('transaction.total_amount', true),
-          'Exchange Rate': getTransactionField('transaction.exchange_rate', true),
-        };
-        return result;
-      });
+      response.results = events.map(processEventData);
     }
 
-    // Handle CSV output with streaming
+    // Handle CSV output
     if (format === 'csv') {
       const fields = [
         'Name',
         'Customer Code',
         'Account Number',
-        'Country',
         'Account Classification',
         'Contact Sales Model',
         'Tags',
@@ -1436,11 +2075,11 @@ const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, i
         'Service Provider',
         'Invoiced Service',
         'Invoice Number',
-        'Invoice Reference Number',
+        'Reference Numbers',
         'Posted Date',
         'Issued Date',
         'Due Date',
-        'Payment Method',
+        'Payment Methods',
         'Total Default Currency',
         'Total Net Amount',
         'Total Discount',
@@ -1449,68 +2088,10 @@ const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, i
         'Total Amount',
         'Exchange Rate',
       ];
+      
       const parser = new Parser({ fields, header: true });
-      let csvContent = '';
-
-      // Write header
-      csvContent = parser.parse([]); // Generates the header row
-
-      const stream = mongoose.connection.db
-        .collection('Events')
-        .aggregate(eventQueryBase, { maxTimeMS: 300000, allowDiskUse: true })
-        .stream();
-
-      await new Promise((resolve, reject) => {
-        stream.on('data', (event) => {
-          const profile = profiles.find(p => p.contact_id === event.contact_id) || {};
-          // Helper function to safely extract transaction fields
-          const getTransactionField = (path, isDecimal = false) => {
-            const value = resolvePath(event, path);
-            if (value === null || value === undefined) return '';
-            if (isDecimal) {
-              return value?.$numberDecimal?.toString() || value?.toString() || '';
-            }
-            return value?.toString() || '';
-          };
-
-          const row = {
-            Name: profile.Name || '',
-            'Customer Code': profile['Customer Code'] || '',
-            'Account Number': profile['Account Number'] || '',
-            Country: profile.Country || '',
-            'Account Classification': profile['Account Classification'] || '',
-            'Contact Sales Model': profile['Contact Sales Model'] || '',
-            Tags: profile.Tags || '',
-            'Address Name': profile['Address Name'] || '',
-            'Address Line1': profile['Address Line1'] || '',
-            'Address Line2': profile['Address Line2'] || '',
-            City: profile.City || '',
-            'Service Provider': profile['Service Provider'] || '',
-            'Invoiced Service': profile['Invoiced Service'] || '',
-            'Invoice Number': getTransactionField('transaction.number'),
-            'Invoice Reference Number': getTransactionField('transaction.reference_number'),
-            'Posted Date': formatUTCDate(event.transaction?.posted_date),
-            'Issued Date': formatUTCDate(event.transaction?.issued_date),
-            'Due Date': formatUTCDate(event.transaction?.due_date),
-            'Payment Method': getTransactionField('payment_method.payment_method_type'),
-            'Total Default Currency': getTransactionField('transaction.total_default_currency', true),
-            'Total Net Amount': getTransactionField('transaction.net_amount', true),
-            'Total Discount': getTransactionField('transaction.default_currency_discount_amount', true),
-            'Total Tax': getTransactionField('transaction.default_currency_tax_amount', true),
-            Currency: getTransactionField('transaction.currency_code'),
-            'Total Amount': getTransactionField('transaction.total_amount', true),
-            'Exchange Rate': getTransactionField('transaction.exchange_rate', true),
-          };
-          // Parse the row without header
-          const rowCsv = parser.parse([row]).split('\n')[1]; // Skip the header row, take only the data row
-          csvContent += `\n${rowCsv}`;
-        });
-        stream.on('end', () => {
-          response.csv = csvContent;
-          resolve();
-        });
-        stream.on('error', (err) => reject(err));
-      });
+      const csvData = events.map(processEventData);
+      response.csv = parser.parse(csvData);
     }
 
     return response;
@@ -1522,6 +2103,7 @@ const exportContactProfilesWithHdc = async (search, startDate, endDate, atoll, i
     throw new Error('Error exporting contact profiles with invoice report');
   }
 };
+
 
 const exportCustomerReports = async (search, startDate, endDate, atoll, island, format, page, limit, serviceProvider, spIsland) => {
   try {
@@ -4860,7 +5442,6 @@ const getDealerNames = async () => {
 const getMtvUserReports = async (page, limit, startDate, endDate) => {
   try {
     let dateFilter = {};
-
     // Convert MM/DD/YYYY to Date object
     const parseDate = (dateStr, isEnd = false) => {
       if (typeof dateStr === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
@@ -4874,7 +5455,7 @@ const getMtvUserReports = async (page, limit, startDate, endDate) => {
       date.setHours(isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0, isEnd ? 999 : 0);
       return date;
     };
-
+    
     if (startDate && endDate) {
       const startUTC = parseDate(startDate);
       const endUTC = parseDate(endDate, true);
@@ -4886,7 +5467,7 @@ const getMtvUserReports = async (page, limit, startDate, endDate) => {
       const endUTC = parseDate(endDate, true);
       dateFilter.createdAt = { $lte: endUTC };
     }
-
+    
     // Build the aggregation pipeline
     const aggregationPipeline = [
       { $match: dateFilter },
@@ -4899,6 +5480,7 @@ const getMtvUserReports = async (page, limit, startDate, endDate) => {
           'Country Code': '$countryCode',
           'Referral Code': '$referralCode',
           'Referral Type': '$referralType',
+          'Register Type': '$registerType',
           Date: {
             $dateToString: {
               format: '%d-%b-%Y',
@@ -4909,20 +5491,20 @@ const getMtvUserReports = async (page, limit, startDate, endDate) => {
         },
       },
     ];
-
+    
     // Conditionally add pagination stages
     const isPaginated = page !== undefined && limit !== undefined;
     if (isPaginated) {
       const skip = (page - 1) * limit;
       aggregationPipeline.splice(2, 0, { $skip: skip }, { $limit: limit });
     }
-
+    
     const mtvDb = getMTVConnection();
     const results = await mtvDb
       .collection('MTVUsers')
       .aggregate(aggregationPipeline)
       .toArray();
-
+    
     // Calculate total count for pagination (only needed if paginated)
     let pagination = {};
     if (isPaginated) {
@@ -4936,7 +5518,7 @@ const getMtvUserReports = async (page, limit, startDate, endDate) => {
         totalPages: Math.ceil(total / limit),
       };
     }
-
+    
     return {
       message: 'User Reports Data',
       data: results,

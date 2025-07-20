@@ -78,28 +78,7 @@ const HdcReports = () => {
     'Payment Method'
   ];
 
-  useEffect(() => {
-    const fetchAtolls = async () => {
-      try {
-        const response = await fetch(`${API_URL}/getAtolls`);
-        const data = await response.json();
-        setAtolls(data.data);
-      } catch (err) {
-        console.error('Error fetching atolls:', err);
-      }
-    };
-    fetchAtolls();
-  }, []);
 
-  useEffect(() => {
-    if (selectedAtoll) {
-      const selectedAtollData = atolls.find(a => a.atolls_id === selectedAtoll);
-      setIslands(selectedAtollData?.islands || []);
-    } else {
-      setIslands([]);
-      setSelectedIsland('');
-    }
-  }, [selectedAtoll, atolls]);
 
   const formatDateToUTC = (date) => {
     if (!date || isNaN(new Date(date).getTime())) return '';

@@ -75,9 +75,9 @@ const exportContactProfilesWithInvoiceController = async (req, res) => {
 
 const exportContactProfilesWithHdc = async (req, res) => {
   try {
-    const { search, startDate, endDate, atoll, island, page = 1, limit = 10, format = 'json' } = req.query;
+    const { startDate, endDate, page = 1, limit = 10, format = 'json' } = req.query;
 
-    const data = await billingReportService.exportContactProfilesWithHdc(search, startDate, endDate, atoll, island, page, limit, format);
+    const data = await billingReportService.exportContactProfilesWithHdc(startDate, endDate, page, limit, format);
 
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
