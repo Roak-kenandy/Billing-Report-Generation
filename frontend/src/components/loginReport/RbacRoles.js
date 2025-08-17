@@ -223,6 +223,7 @@ const RbacRoles = () => {
                                 <MenuItem value="Finance">Finance</MenuItem>
                                 <MenuItem value="Sales">Sales</MenuItem>
                                 <MenuItem value="Admin">Admin</MenuItem>
+                                <MenuItem value="HDC">HDC</MenuItem>
                                 <MenuItem value="Service Provider">Service Provider</MenuItem>
                             </Select>
                             {newRole === 'Service Provider' && (

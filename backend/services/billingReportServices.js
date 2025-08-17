@@ -658,6 +658,165 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
   }
 };
 
+const exportHdcContactProfiles = async (startDate, endDate, page, limit, format) => {
+  try {
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+
+    // Calculate timestamps for date filtering (convert to seconds)
+    let startTimestamp, endTimestamp;
+    if (startDate) {
+      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+    }
+    if (endDate) {
+      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+    }
+
+    // Date filter for profile.registration_date
+    let dateFilter = {};
+    if (startDate) {
+      dateFilter['profile.registration_date'] = { $gte: startTimestamp };
+    }
+    if (endDate) {
+      dateFilter['profile.registration_date'] = dateFilter['profile.registration_date']
+        ? { $gte: startTimestamp, $lte: endTimestamp }
+        : { $lte: endTimestamp };
+    }
+
+    // Match stage for search, atoll, island, and new conditions
+    let matchStage = {
+      ...dateFilter,
+      'tags.name': 'Medianet TV',
+      'custom_fields.value_label': 'HDC',
+    };
+
+    // Prepare aggregation query
+    const aggregationQuery = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'Devices',
+          localField: 'contact_id',
+          foreignField: 'ownership.id',
+          as: 'joinedDataDevices',
+        },
+      },
+      {
+        $lookup: {
+          from: 'Journals',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'joinedDataJournals',
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          Name: {
+            $concat: [
+              { $ifNull: ['$demographics.first_name', ''] },
+              ' ',
+              { $ifNull: ['$demographics.last_name', ''] },
+            ],
+          },
+          Phone: {
+            $cond: {
+              if: { $isArray: '$phone' },
+              then: { $arrayElemAt: ['$phone', 0] },
+              else: { $ifNull: ['$phone', ''] },
+            },
+          },
+          'Registered Date': {
+            $dateToString: {
+              format: '%d-%b-%Y',
+              date: { $toDate: { $multiply: ['$profile.registration_date', 1000] } },
+            },
+          },
+          'Address Line 1': { $ifNull: ['$location.address_line1', ''] },
+          'Address Line 2': { $ifNull: ['$location.address_line2', ''] },
+          'Address Name': { $ifNull: ['$location.address_name', ''] },
+          City: { $ifNull: ['$location.city', ''] },
+          Country: {
+            $cond: {
+              if: { $eq: ['$location.country', 'MDV'] },
+              then: 'Maldives',
+              else: { $ifNull: ['$location.country', ''] },
+            },
+          },
+          Province: { $ifNull: ['$location.province', ''] },
+          'Contact Code': {
+            $cond: {
+              if: {
+                $and: [
+                  { $isArray: '$joinedDataJournals' },
+                  { $gt: [{ $size: '$joinedDataJournals' }, 0] },
+                ],
+              },
+              then: {
+                $ifNull: [
+                  {
+                    $concat: [
+                      "'",
+                      { $toString: { $arrayElemAt: ['$joinedDataJournals.contact_code', 0] } },
+                    ],
+                  },
+                  '',
+                ],
+              },
+              else: '',
+            },
+          },
+          'Sales Model': { $ifNull: ['$sales_model.name', ''] },
+        },
+      },
+    ];
+
+    // Calculate total count for pagination
+    const countPipeline = [{ $match: matchStage }, { $count: 'total' }];
+    const countResult = await mongoose.connection.db
+      .collection('ContactProfiles')
+      .aggregate(countPipeline, { maxTimeMS: 600000, allowDiskUse: true })
+      .toArray();
+    const total = countResult.length > 0 ? countResult[0].total : 0;
+    const totalPages = Math.ceil(total / limitNum);
+
+    // Add pagination to the aggregation query for JSON format
+    if (format === 'json') {
+      aggregationQuery.push(
+        { $skip: (pageNum - 1) * limitNum },
+        { $limit: limitNum }
+      );
+    }
+
+    // Perform aggregation to fetch the data
+    const results = await mongoose.connection.db
+      .collection('ContactProfiles')
+      .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+      .toArray();
+
+    // Initialize response object
+    const response = {
+      results,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages,
+      },
+    };
+
+    // Only generate CSV if requested
+    if (format === 'csv') {
+      response.csv = parse(results);
+    }
+
+    return response;
+  } catch (error) {
+    console.error('Error exporting contact profiles report:', error);
+    throw new Error('Error exporting contact profiles report');
+  }
+};
+
 
 const exportContactProfilesWithInvoice = async (search, startDate, endDate, atoll, island, page, limit, format) => {
   try {
@@ -1066,7 +1225,7 @@ const exportContactProfilesWithInvoice = async (search, startDate, endDate, atol
 //       start.setUTCHours(0, 0, 0, 0);
 //       startTimestamp = Math.floor(start.getTime() / 1000);
 //     }
-    
+
 //     if (endDate) {
 //       const end = new Date(endDate);
 //       end.setUTCHours(23, 59, 59, 999);
@@ -1112,7 +1271,7 @@ const exportContactProfilesWithInvoice = async (search, startDate, endDate, atol
 
 //     // Combine all excluded contact IDs
 //     const excludedContactIds = [...new Set([...excludedSalesModelContactIds])];
-    
+
 //     // Define excluded hardware amounts in Decimal128 format
 //     const excludedAmounts = [
 //       new mongoose.Types.Decimal128('150'),
@@ -1526,7 +1685,7 @@ const exportContactProfilesWithHdc = async (startDate, endDate, page, limit, for
       start.setUTCHours(0, 0, 0, 0);
       startTimestamp = Math.floor(start.getTime() / 1000);
     }
-    
+
     if (endDate) {
       const end = new Date(endDate);
       end.setUTCHours(23, 59, 59, 999);
@@ -1569,7 +1728,7 @@ const exportContactProfilesWithHdc = async (startDate, endDate, page, limit, for
 
     // Combine all excluded contact IDs
     const excludedContactIds = [...new Set([...excludedSalesModelContactIds])];
-    
+
     // Define excluded hardware amounts in Decimal128 format
     const excludedAmounts = [
       new mongoose.Types.Decimal128('150'),
@@ -1583,11 +1742,11 @@ const exportContactProfilesWithHdc = async (startDate, endDate, page, limit, for
     // Build match conditions
     let eventMatchConditions = [
       { type: { $in: ['INVOICE_POSTED', 'PAYMENT_POSTED'] } },
-      { 
+      {
         contact_id: {
           $in: hdcContactIds,
           $nin: excludedContactIds  // Exclude VIP/Employee contacts
-        } 
+        }
       }
     ];
 
@@ -1968,58 +2127,58 @@ const exportContactProfilesWithHdc = async (startDate, endDate, page, limit, for
     const addDecimalValues = (value1, value2) => {
       const val1 = value1 || new mongoose.Types.Decimal128("0");
       const val2 = value2 || new mongoose.Types.Decimal128("0");
-      
+
       // Convert to numbers for calculation
       const num1 = parseFloat(val1.$numberDecimal || val1.toString());
       const num2 = parseFloat(val2.$numberDecimal || val2.toString());
-      
+
       return new mongoose.Types.Decimal128((num1 + num2).toString());
     };
 
     // Helper function to process consolidated event data
     const processEventData = (event) => {
       const profile = profiles.find(p => p.contact_id === event.contact_id) || {};
-      
+
       // Get credit note amount for this contact and month
       const creditNoteKey = `${event.contact_id}-${event.monthYear}`;
       const creditNoteAmount = creditNoteMap[creditNoteKey] || new mongoose.Types.Decimal128("0");
-      
+
       // Set Total Default Currency to Total Amount
       let totalDefaultCurrency = event.totalAmount || new mongoose.Types.Decimal128("0");
-      
+
       // Apply multiplication by 15.42 if Contact Sales Model is City Hotels and Currency is USD
       if (profile['Contact Sales Model'] === 'City Hotels' && event.transaction?.currency_code === 'USD') {
         const totalValue = parseFloat(totalDefaultCurrency.$numberDecimal || totalDefaultCurrency.toString());
         totalDefaultCurrency = new mongoose.Types.Decimal128((totalValue * 15.42).toString());
       }
-      
+
       // Calculate total with credit notes
       const totalWithCreditNotes = addDecimalValues(totalDefaultCurrency, creditNoteAmount);
-      
+
       // Cap Total Default Currency at 864
       const cappedTotal = parseFloat(totalWithCreditNotes.$numberDecimal || totalWithCreditNotes.toString()) > 864
         ? new mongoose.Types.Decimal128("864")
         : totalWithCreditNotes;
-      
+
       // Calculate Total Net Amount = Total Default Currency / 1.08
       const totalNetAmount = new mongoose.Types.Decimal128(
         (parseFloat(cappedTotal.$numberDecimal || cappedTotal.toString()) / 1.08).toFixed(2)
       );
-      
+
       // Calculate Total Tax = Total Default Currency × (0.08 / 1.08)
       const totalTaxAmount = new mongoose.Types.Decimal128(
         (parseFloat(cappedTotal.$numberDecimal || cappedTotal.toString()) * (0.08 / 1.08)).toFixed(2)
       );
-      
+
       // Helper function to safely extract and format decimal values
       const formatDecimalValue = (value) => {
         if (!value) return '';
         if (value.$numberDecimal) return value.$numberDecimal.toString();
         return value.toString();
       };
-      
+
       // Process payment methods to replace ELECTRONIC_TRANSFER with Quick Pay
-      const processedPaymentMethods = event.paymentMethods 
+      const processedPaymentMethods = event.paymentMethods
         ? event.paymentMethods.map(pm => pm === 'ELECTRONIC_TRANSFER' ? 'Quick Pay' : pm)
         : [];
 
@@ -2088,7 +2247,605 @@ const exportContactProfilesWithHdc = async (startDate, endDate, page, limit, for
         'Total Amount',
         'Exchange Rate',
       ];
-      
+
+      const parser = new Parser({ fields, header: true });
+      const csvData = events.map(processEventData);
+      response.csv = parser.parse(csvData);
+    }
+
+    return response;
+  } catch (error) {
+    console.error('Error exporting contact profiles with invoice report:', {
+      error: error.message,
+      stack: error.stack,
+    });
+    throw new Error('Error exporting contact profiles with invoice report');
+  }
+};
+
+const exportContactProfilesWithHdcClient = async (startDate, endDate, page, limit, format) => {
+  try {
+    // Validate and convert dates to UTC timestamps
+    let startTimestamp, endTimestamp;
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setUTCHours(0, 0, 0, 0);
+      startTimestamp = Math.floor(start.getTime() / 1000);
+    }
+
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setUTCHours(23, 59, 59, 999);
+      endTimestamp = Math.floor(end.getTime() / 1000);
+    }
+
+    // First: Get HDC contact profiles that match criteria
+    let profileMatch = {
+      $and: [
+        {
+          custom_fields: {
+            $elemMatch: {
+              key: 'service_provider',
+              value_label: 'HDC'
+            }
+          }
+        },
+        {
+          tags: {
+            $elemMatch: {
+              name: 'Medianet TV'
+            }
+          }
+        }
+      ]
+    };
+
+    const hdcProfiles = await mongoose.connection.db
+      .collection('ContactProfiles')
+      .find(profileMatch, { projection: { contact_id: 1 } })
+      .toArray();
+
+    const hdcContactIds = hdcProfiles.map(profile => profile.contact_id);
+
+    // Return empty if no HDC contacts found
+    if (hdcContactIds.length === 0) {
+      return {
+        results: [],
+        pagination: { page: parseInt(page), limit: parseInt(limit), total: 0, totalPages: 0 },
+        csv: undefined,
+      };
+    }
+
+    // Get contact IDs with VIP or Employee sales model
+    const excludedSalesModelContactIds = await mongoose.connection.db
+      .collection('ContactProfiles')
+      .distinct('contact_id', {
+        contact_id: { $in: hdcContactIds },
+        'sales_model.name': { $in: ['VIP', 'Employees'] }
+      });
+
+    // Combine all excluded contact IDs
+    const excludedContactIds = [...new Set([...excludedSalesModelContactIds])];
+
+    // Define excluded hardware amounts in Decimal128 format
+    const excludedAmounts = [
+      new mongoose.Types.Decimal128('150'),
+      new mongoose.Types.Decimal128('250'),
+      new mongoose.Types.Decimal128('300'),
+      new mongoose.Types.Decimal128('999'),
+      new mongoose.Types.Decimal128('212'),
+      new mongoose.Types.Decimal128('0')
+    ];
+
+    // Build match conditions
+    let eventMatchConditions = [
+      { type: { $in: ['INVOICE_POSTED', 'PAYMENT_POSTED'] } },
+      {
+        contact_id: {
+          $in: hdcContactIds,
+          $nin: excludedContactIds  // Exclude VIP/Employee contacts
+        }
+      }
+    ];
+
+    // Date filter condition
+    if (startTimestamp || endTimestamp) {
+      let dateCondition = { 'transaction.posted_date': {} };
+      if (startTimestamp) dateCondition['transaction.posted_date'].$gte = startTimestamp;
+      if (endTimestamp) dateCondition['transaction.posted_date'].$lte = endTimestamp;
+      eventMatchConditions.push(dateCondition);
+    }
+
+    // Apply hardware exclusion ONLY to INVOICE_POSTED events
+    eventMatchConditions.push({
+      $or: [
+        // Include all PAYMENT_POSTED events
+        { type: 'PAYMENT_POSTED' },
+        // For invoices, apply hardware amount exclusion
+        {
+          type: 'INVOICE_POSTED',
+          $or: [
+            { 'transaction.total_default_currency': { $exists: false } },
+            { 'transaction.total_default_currency': { $nin: excludedAmounts } }
+          ]
+        }
+      ]
+    });
+
+    // Final event match condition
+    const eventMatch = { $and: eventMatchConditions };
+
+    // Aggregation pipeline to consolidate payment methods by Customer Code and month
+    const consolidatedEventQuery = [
+      { $match: eventMatch },
+      {
+        $addFields: {
+          monthYear: {
+            $dateToString: {
+              format: "%Y-%m",
+              date: { $toDate: { $multiply: ["$transaction.posted_date", 1000] } }
+            }
+          }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            contact_id: "$contact_id",
+            monthYear: "$monthYear"
+          },
+          // Collect all payment methods for this contact/month
+          paymentMethods: {
+            $addToSet: {
+              $cond: [
+                { $ne: ["$payment_method.payment_method_type", null] },
+                "$payment_method.payment_method_type",
+                "$$REMOVE"
+              ]
+            }
+          },
+          // Keep transaction data from first record
+          transaction: { $first: "$transaction" },
+          // Sum totalDefaultCurrency only for INVOICE_POSTED events
+          totalDefaultCurrency: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$type", "INVOICE_POSTED"] },
+                    { $ne: ["$transaction.total_default_currency", null] },
+                    { $ne: ["$transaction.total_default_currency", ""] }
+                  ]
+                },
+                "$transaction.total_default_currency",
+                new mongoose.Types.Decimal128("0")
+              ]
+            }
+          },
+          // Keep other amounts from first record
+          totalNetAmount: { $first: "$transaction.net_amount" },
+          totalDiscountAmount: { $first: "$transaction.default_currency_discount_amount" },
+          totalTaxAmount: { $first: "$transaction.default_currency_tax_amount" },
+          totalAmount: { $first: "$transaction.total_amount" },
+          // Take first invoice number only
+          invoiceNumber: { $first: "$transaction.number" },
+          // Collect all reference numbers
+          referenceNumbers: {
+            $addToSet: {
+              $cond: [
+                { $ne: ["$transaction.reference_number", null] },
+                "$transaction.reference_number",
+                "$$REMOVE"
+              ]
+            }
+          }
+        }
+      },
+      // Add integer part of totalDefaultCurrency for filtering
+      {
+        $addFields: {
+          totalDefaultCurrencyInteger: {
+            $toInt: {
+              $trunc: {
+                $toDouble: "$totalDefaultCurrency"
+              }
+            }
+          }
+        }
+      },
+      // Filter out rows where integer part of totalDefaultCurrency matches excluded amounts
+      {
+        $match: {
+          totalDefaultCurrencyInteger: {
+            $nin: [150, 250, 300, 999, 212, 0]
+          }
+        }
+      },
+      {
+        $project: {
+          contact_id: "$_id.contact_id",
+          monthYear: "$_id.monthYear",
+          paymentMethods: 1,
+          transaction: 1,
+          totalDefaultCurrency: 1,
+          totalNetAmount: 1,
+          totalDiscountAmount: 1,
+          totalTaxAmount: 1,
+          totalAmount: 1,
+          invoiceNumber: 1,
+          referenceNumbers: 1,
+          _id: 0
+        }
+      }
+    ];
+
+    // Add pagination for JSON, no pagination for CSV
+    const eventQuery = format === 'json'
+      ? [...consolidatedEventQuery, { $skip: (page - 1) * limit }, { $limit: parseInt(limit) }]
+      : consolidatedEventQuery;
+
+    // Fetch consolidated events
+    const events = await mongoose.connection.db
+      .collection('Events')
+      .aggregate(eventQuery, { maxTimeMS: 300000, allowDiskUse: true })
+      .toArray();
+
+    // Extract contact_ids from events
+    const eventContactIds = events.map(event => event.contact_id);
+
+    // Fetch credit notes from Journals collection
+    const creditNoteQuery = [
+      {
+        $match: {
+          contact_id: { $in: eventContactIds },
+          'related_entity.transaction_type': 'CREDIT_NOTE'
+        }
+      },
+      {
+        $addFields: {
+          monthYear: {
+            $dateToString: {
+              format: "%Y-%m",
+              date: { $toDate: { $multiply: ["$posted_date", 1000] } }
+            }
+          }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            contact_id: "$contact_id",
+            monthYear: "$monthYear"
+          },
+          totalCreditNoteAmount: {
+            $sum: {
+              $cond: [
+                { $ne: ["$amount", null] },
+                "$amount",
+                new mongoose.Types.Decimal128("0")
+              ]
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          contact_id: "$_id.contact_id",
+          monthYear: "$_id.monthYear",
+          totalCreditNoteAmount: 1,
+          _id: 0
+        }
+      }
+    ];
+
+    // Apply date filter to credit notes if specified
+    if (startTimestamp || endTimestamp) {
+      let dateCondition = { 'posted_date': {} };
+      if (startTimestamp) dateCondition['posted_date'].$gte = startTimestamp;
+      if (endTimestamp) dateCondition['posted_date'].$lte = endTimestamp;
+      creditNoteQuery[0].$match = {
+        ...creditNoteQuery[0].$match,
+        ...dateCondition
+      };
+    }
+
+    const creditNotes = await mongoose.connection.db
+      .collection('Journals')
+      .aggregate(creditNoteQuery, { maxTimeMS: 300000, allowDiskUse: true })
+      .toArray();
+
+    // Create a lookup map for credit notes by contact_id and monthYear
+    const creditNoteMap = {};
+    creditNotes.forEach(cn => {
+      const key = `${cn.contact_id}-${cn.monthYear}`;
+      creditNoteMap[key] = cn.totalCreditNoteAmount;
+    });
+
+    // Get full profiles for these contact IDs
+    const profileQuery = [
+      { $match: { contact_id: { $in: eventContactIds } } },
+      {
+        $lookup: {
+          from: 'Journals',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'joinedDataJournals',
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          contact_id: 1,
+          Name: {
+            $cond: {
+              if: {
+                $eq: [
+                  {
+                    $concat: [
+                      { $ifNull: ['$demographics.first_name', ''] },
+                      ' ',
+                      { $ifNull: ['$demographics.last_name', ''] },
+                    ]
+                  },
+                  ' '
+                ]
+              },
+              then: { $ifNull: [{ $arrayElemAt: ['$joinedDataJournals.contact_name', 0] }, ''] },
+              else: {
+                $concat: [
+                  { $ifNull: ['$demographics.first_name', ''] },
+                  ' ',
+                  { $ifNull: ['$demographics.last_name', ''] },
+                ]
+              }
+            }
+          },
+          'Customer Code': {
+            $ifNull: [
+              {
+                $toString: { $arrayElemAt: ['$joinedDataJournals.contact_code', 0] }
+              },
+              ''
+            ]
+          },
+          'Account Number': {
+            $ifNull: [{ $arrayElemAt: ['$joinedDataJournals.account_number', 0] }, ''],
+          },
+          'Account Classification': { $ifNull: ['$account.classification.name', ''] },
+          'Contact Sales Model': { $ifNull: ['$sales_model.name', ''] },
+          Tags: {
+            $ifNull: [
+              {
+                $reduce: {
+                  input: '$tags',
+                  initialValue: '',
+                  in: {
+                    $cond: {
+                      if: { $eq: ['$this', {}] },
+                      then: '$$value',
+                      else: {
+                        $concat: [
+                          '$$value',
+                          { $cond: { if: { $eq: ['$$value', ''] }, then: '', else: ',' } },
+                          '$$this.name'
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              ''
+            ]
+          },
+          'Address Name': { $ifNull: ['$location.address_name', ''] },
+          'Address Line1': { $ifNull: ['$location.address_line1', ''] },
+          'Address Line2': { $ifNull: ['$location.address_line2', ''] },
+          City: { $ifNull: ['$location.city', ''] },
+          'Service Provider': {
+            $let: {
+              vars: {
+                serviceProvider: {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: { $ifNull: ['$custom_fields', []] },
+                        as: 'field',
+                        cond: { $eq: ['$$field.key', 'service_provider'] }
+                      }
+                    },
+                    0
+                  ]
+                }
+              },
+              in: { $ifNull: ['$$serviceProvider.value_label', ''] }
+            }
+          },
+          'Invoiced Service': {
+            $ifNull: [
+              {
+                $reduce: {
+                  input: { $ifNull: ['$services', []] },
+                  initialValue: '',
+                  in: {
+                    $concat: [
+                      '$$value',
+                      { $cond: { if: { $eq: ['$$value', ''] }, then: '', else: ',' } },
+                      { $ifNull: ['$$this.product.name', ''] }
+                    ]
+                  }
+                }
+              },
+              ''
+            ]
+          }
+        },
+      },
+    ];
+
+    const profiles = await mongoose.connection.db
+      .collection('ContactProfiles')
+      .aggregate(profileQuery, { maxTimeMS: 300000, allowDiskUse: true })
+      .toArray();
+
+    // Count total consolidated events
+    const totalConsolidated = await mongoose.connection.db
+      .collection('Events')
+      .aggregate([
+        ...consolidatedEventQuery,
+        { $count: "total" }
+      ])
+      .toArray();
+
+    const total = totalConsolidated.length > 0 ? totalConsolidated[0].total : 0;
+    const totalPages = Math.ceil(total / limit);
+
+    // Prepare response
+    const response = {
+      results: format === 'json' ? [] : undefined,
+      pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages },
+      csv: undefined,
+    };
+
+    // Helper function to format dates in UTC
+    const formatUTCDate = (timestampInSeconds) => {
+      if (!timestampInSeconds) return '';
+      const date = new Date(timestampInSeconds * 1000);
+      return date.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZone: 'UTC'
+      });
+    };
+
+    // Helper function to safely add decimal values
+    const addDecimalValues = (value1, value2) => {
+      const val1 = value1 || new mongoose.Types.Decimal128("0");
+      const val2 = value2 || new mongoose.Types.Decimal128("0");
+
+      // Convert to numbers for calculation
+      const num1 = parseFloat(val1.$numberDecimal || val1.toString());
+      const num2 = parseFloat(val2.$numberDecimal || val2.toString());
+
+      return new mongoose.Types.Decimal128((num1 + num2).toString());
+    };
+
+    // Helper function to process consolidated event data
+    const processEventData = (event) => {
+      const profile = profiles.find(p => p.contact_id === event.contact_id) || {};
+
+      // Get credit note amount for this contact and month
+      const creditNoteKey = `${event.contact_id}-${event.monthYear}`;
+      const creditNoteAmount = creditNoteMap[creditNoteKey] || new mongoose.Types.Decimal128("0");
+
+      // Set Total Default Currency to Total Amount
+      let totalDefaultCurrency = event.totalAmount || new mongoose.Types.Decimal128("0");
+
+      // Apply multiplication by 15.42 if Contact Sales Model is City Hotels and Currency is USD
+      if (profile['Contact Sales Model'] === 'City Hotels' && event.transaction?.currency_code === 'USD') {
+        const totalValue = parseFloat(totalDefaultCurrency.$numberDecimal || totalDefaultCurrency.toString());
+        totalDefaultCurrency = new mongoose.Types.Decimal128((totalValue * 15.42).toString());
+      }
+
+      // Calculate total with credit notes
+      const totalWithCreditNotes = addDecimalValues(totalDefaultCurrency, creditNoteAmount);
+
+      // Cap Total Default Currency at 864
+      const cappedTotal = parseFloat(totalWithCreditNotes.$numberDecimal || totalWithCreditNotes.toString()) > 864
+        ? new mongoose.Types.Decimal128("864")
+        : totalWithCreditNotes;
+
+      // Calculate Total Net Amount = Total Default Currency / 1.08
+      const totalNetAmount = new mongoose.Types.Decimal128(
+        (parseFloat(cappedTotal.$numberDecimal || cappedTotal.toString()) / 1.08).toFixed(2)
+      );
+
+      // Calculate Total Tax = Total Default Currency × (0.08 / 1.08)
+      const totalTaxAmount = new mongoose.Types.Decimal128(
+        (parseFloat(cappedTotal.$numberDecimal || cappedTotal.toString()) * (0.08 / 1.08)).toFixed(2)
+      );
+
+      // Helper function to safely extract and format decimal values
+      const formatDecimalValue = (value) => {
+        if (!value) return '';
+        if (value.$numberDecimal) return value.$numberDecimal.toString();
+        return value.toString();
+      };
+
+      // Process payment methods to replace ELECTRONIC_TRANSFER with Quick Pay
+      const processedPaymentMethods = event.paymentMethods
+        ? event.paymentMethods.map(pm => pm === 'ELECTRONIC_TRANSFER' ? 'Quick Pay' : pm)
+        : [];
+
+      return {
+        Name: profile.Name || '',
+        'Customer Code': profile['Customer Code'] || '',
+        'Account Number': profile['Account Number'] || '',
+        Country: profile.Country || '',
+        'Account Classification': profile['Account Classification'] || '',
+        'Contact Sales Model': profile['Contact Sales Model'] || '',
+        Tags: profile.Tags || '',
+        'Address Name': profile['Address Name'] || '',
+        'Address Line1': profile['Address Line1'] || '',
+        'Address Line2': profile['Address Line2'] || '',
+        City: profile.City || '',
+        'Service Provider': profile['Service Provider'] || '',
+        'Invoiced Service': profile['Invoiced Service'] || '',
+        'Invoice Number': event.invoiceNumber || '',
+        'Reference Numbers': event.referenceNumbers ? event.referenceNumbers.join(', ') : '',
+        'Posted Date': formatUTCDate(event.transaction?.posted_date),
+        'Issued Date': formatUTCDate(event.transaction?.issued_date),
+        'Due Date': formatUTCDate(event.transaction?.due_date),
+        'Payment Methods': processedPaymentMethods.filter(pm => pm).join(', '),
+        'Total Default Currency': formatDecimalValue(cappedTotal),
+        'Credit Note Amount': formatDecimalValue(creditNoteAmount),
+        'Total Net Amount': formatDecimalValue(totalNetAmount),
+        'Total Discount': formatDecimalValue(event.totalDiscountAmount),
+        'Total Tax': formatDecimalValue(totalTaxAmount),
+        Currency: event.transaction?.currency_code || '',
+        'Total Amount': formatDecimalValue(event.totalAmount),
+        'Exchange Rate': event.transaction?.exchange_rate?.toString() || '',
+      };
+    };
+
+    // Handle JSON output
+    if (format === 'json') {
+      response.results = events.map(processEventData);
+    }
+
+    // Handle CSV output
+    if (format === 'csv') {
+      const fields = [
+        'Name',
+        'Customer Code',
+        'Account Number',
+        'Account Classification',
+        'Contact Sales Model',
+        'Tags',
+        'Address Name',
+        'Address Line1',
+        'Address Line2',
+        'City',
+        'Service Provider',
+        'Invoiced Service',
+        'Invoice Number',
+        'Reference Numbers',
+        'Posted Date',
+        'Issued Date',
+        'Due Date',
+        'Payment Methods',
+        'Total Default Currency',
+        'Total Net Amount',
+        'Total Discount',
+        'Total Tax',
+        'Currency',
+        'Total Amount',
+        'Exchange Rate',
+      ];
+
       const parser = new Parser({ fields, header: true });
       const csvData = events.map(processEventData);
       response.csv = parser.parse(csvData);
@@ -2149,7 +2906,7 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
       // Escape special regex characters and use word boundaries for exact matching
       const escapedIsland = spIsland.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const exactMatchRegex = { $regex: `^${escapedIsland}$`, $options: 'i' };
-      
+
       matchStage.$or = [
         { 'location.city': exactMatchRegex },
         { 'location.address_line1': exactMatchRegex },
@@ -2546,21 +3303,21 @@ const exportCustomerReportsNotEffective = async (search, startDate, endDate, ato
       // Trim whitespace and escape special regex characters
       const trimmedIsland = spIsland.trim();
       const escapedIsland = trimmedIsland.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      
+
       // Use word boundaries for exact matching to prevent partial matches
-      const exactMatchRegex = { 
-        $regex: `^${escapedIsland}$`, 
-        $options: 'i' 
+      const exactMatchRegex = {
+        $regex: `^${escapedIsland}$`,
+        $options: 'i'
       };
-      
+
       // Create separate conditions for each field to ensure exact matching
       const islandConditions = [];
-      
+
       // Only add conditions if the field might contain the island name
       islandConditions.push({ 'location.city': exactMatchRegex });
       islandConditions.push({ 'location.address_line1': exactMatchRegex });
       islandConditions.push({ 'location.address_line2': exactMatchRegex });
-      
+
       // Use $or only if we have multiple conditions
       if (islandConditions.length > 1) {
         matchStage.$or = islandConditions;
@@ -3399,13 +4156,13 @@ const exportCustomerDealerWiseCollection = async (
       // Trim whitespace and escape special regex characters
       const trimmedIsland = spIsland.trim();
       const escapedIsland = trimmedIsland.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      
+
       // Use anchored regex for exact matching
-      const exactMatchRegex = { 
-        $regex: `^${escapedIsland}$`, 
-        $options: 'i' 
+      const exactMatchRegex = {
+        $regex: `^${escapedIsland}$`,
+        $options: 'i'
       };
-      
+
       serviceProviderMatch.$or = [
         { 'location.city': exactMatchRegex },
         { 'location.address_line1': exactMatchRegex },
@@ -3417,9 +4174,9 @@ const exportCustomerDealerWiseCollection = async (
       .collection('ContactProfiles')
       .find(
         serviceProviderMatch,
-        { 
+        {
           projection: { contact_id: 1 },
-          maxTimeMS: 60000 
+          maxTimeMS: 60000
         }
       )
       .toArray();
@@ -3434,11 +4191,11 @@ const exportCustomerDealerWiseCollection = async (
     }
 
     // STEP 2: Build event match with contact filter
-    let eventMatch = { 
+    let eventMatch = {
       type: { $in: ['PAYMENT_POSTED'] },
       contact_id: { $in: Array.from(validContactIdSet) } // Pre-filter by valid contacts
     };
-    
+
     if (startTimestamp) eventMatch['transaction.posted_date'] = { $gte: startTimestamp };
     if (endTimestamp) eventMatch['transaction.posted_date'] = eventMatch['transaction.posted_date']
       ? { $gte: startTimestamp, $lte: endTimestamp }
@@ -3448,7 +4205,7 @@ const exportCustomerDealerWiseCollection = async (
     const totalCount = await mongoose.connection.db
       .collection('Events')
       .countDocuments(eventMatch, { maxTimeMS: 60000 });
-    
+
     const totalPages = Math.ceil(totalCount / limit);
 
     // STEP 4: Get events with pagination (only for JSON)
@@ -3491,9 +4248,9 @@ const exportCustomerDealerWiseCollection = async (
 
     // STEP 5: Get contact profiles for these events
     const eventContactIds = [...new Set(events.map(e => e.contact_id))];
-    
+
     // Build profile match query with service provider and spIsland filter
-    const profileMatchQuery = { 
+    const profileMatchQuery = {
       contact_id: { $in: eventContactIds },
       'custom_fields.key': 'service_provider',
     };
@@ -3508,20 +4265,20 @@ const exportCustomerDealerWiseCollection = async (
       // Trim whitespace and escape special regex characters
       const trimmedIsland = spIsland.trim();
       const escapedIsland = trimmedIsland.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      
+
       // Use anchored regex for exact matching
-      const exactMatchRegex = { 
-        $regex: `^${escapedIsland}$`, 
-        $options: 'i' 
+      const exactMatchRegex = {
+        $regex: `^${escapedIsland}$`,
+        $options: 'i'
       };
-      
+
       profileMatchQuery.$or = [
         { 'location.city': exactMatchRegex },
         { 'location.address_line1': exactMatchRegex },
         { 'location.address_line2': exactMatchRegex },
       ];
     }
-    
+
     const profileQuery = [
       { $match: profileMatchQuery },
       {
@@ -3649,7 +4406,7 @@ const exportCustomerDealerWiseCollection = async (
     // STEP 6: Transform data
     const data = events.map(event => {
       const profile = profiles.find(p => p.contact_id === event.contact_id) || {};
-      
+
       // Helper function to safely extract transaction fields
       const getTransactionField = (field, isDecimal = false) => {
         if (!event.transaction || !event.transaction[field]) return '';
@@ -3679,12 +4436,12 @@ const exportCustomerDealerWiseCollection = async (
         action = 'Top Up';
       } else if (event.type === 'PAYMENT_POSTED') {
         if (profile.joinedDataJournals && profile.joinedDataJournals.length > 0) {
-          const journalEntry = profile.joinedDataJournals.find(j => 
+          const journalEntry = profile.joinedDataJournals.find(j =>
             j.related_entity?.id === event.transaction?.id && j.account_type
           );
           if (journalEntry && journalEntry.account_type) {
             action = journalEntry.account_type.toUpperCase() === 'CREDIT' ? 'Add' :
-                     journalEntry.account_type.toUpperCase() === 'DEBIT' ? 'Deduct' : '';
+              journalEntry.account_type.toUpperCase() === 'DEBIT' ? 'Deduct' : '';
           } else {
             // Fallback for PAYMENT_POSTED when no matching journal entry is found
             action = 'Payment';
@@ -3863,169 +4620,373 @@ const exportDealerReports = async (startDate, endDate, dealerName) => {
 };
 
 
-const exportCollectionReports = async (search, startDate, endDate, atoll, island) => {
+const exportCollectionReports = async ({ page = 1, limit = 50, search, atoll, island, startDate, endDate, format = 'json' }) => {
   try {
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 50;
+    const skip = (pageNum - 1) * limitNum;
 
-    // Calculate timestamps for date filtering
-    let startTimestamp, endTimestamp;
-    if (startDate) {
-      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
-    }
-    if (endDate) {
-      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
-    }
+    // Prepare match stage for filtering
+    let matchStage = {};
+    if (atoll) matchStage['location.province'] = atoll;
+    if (island) matchStage['location.city'] = island;
+    if (search) matchStage.$text = { $search: search };
 
-    // Date filter for initial match (subscriptions with at least one matching service)
-    let dateFilter = {};
+    // Prepare date range condition
+    let dateMatchCondition = {};
     if (startDate || endDate) {
-      const elemMatchConditions = {};
       if (startDate) {
-        elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
+        const startTimestamp = Math.floor(new Date(startDate).getTime() / 1000);
+        dateMatchCondition.$gte = startTimestamp;
       }
       if (endDate) {
-        elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
+        const endOfDay = new Date(endDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        const endTimestamp = Math.floor(endOfDay.getTime() / 1000);
+        dateMatchCondition.$lte = endTimestamp;
       }
-      dateFilter.services = { $elemMatch: elemMatchConditions };
     }
 
-    // Date filter for individual services after unwind
-    let serviceDateFilter = {};
-    if (startDate) {
-      serviceDateFilter["services.service_terms.start_date"] = { $gte: startTimestamp };
-    }
-    if (endDate) {
-      serviceDateFilter["services.service_terms.end_date"] = { $lte: endTimestamp };
-    }
-
-    // Match stage for search, atoll, and island
-    let matchStage = { ...dateFilter };
-
-    if (search) {
-      matchStage.$text = { $search: search };
-    }
-
-    if (atoll) {
-      matchStage['joinedData2.location.province'] = atoll;
-    }
-
-    if (island) {
-      matchStage['joinedData2.location.city'] = island;
-    }
-    // Prepare your aggregation query
-    const aggregationQuery = [
-      {
-        $lookup: {
-          from: 'ContactProfiles',
-          localField: 'contact_id',
-          foreignField: 'contact_id',
-          as: 'joinedData2',
-        }
-      },
-      { $match: matchStage },
-      { $unwind: "$services" },
-      { $match: serviceDateFilter },
-      {
-        $lookup: {
-          from: 'Devices',
-          localField: 'contact_id',
-          foreignField: 'ownership.id',
-          as: 'joinedData3',
-        }
-      },
-      {
-        $lookup: {
-          from: 'Orders',
-          localField: 'contact_id',
-          foreignField: 'contact_id',
-          as: 'ordersData',
-        }
-      },
-      {
-        $lookup: {
-          from: 'Journals',
-          localField: 'contact_id',
-          foreignField: 'contact_id',
-          as: 'joinedData4',
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          "Contact Name": { $arrayElemAt: ['$joinedData2.profile.name', 0] },
-          "Contact Code": {
-            $concat: ['"', { $toString: { $arrayElemAt: ['$joinedData4.contact_code', 0] } }, '"']
-          },
-          "Back Office Code": '$joinedData4.related_entity.backoffice_code',
-          "Account Number": {
-            $ifNull: [
-              { $arrayElemAt: ['$joinedData4.account_number', 0] },
-              'N/A'
-            ]
-          },
-          "Amount": {
-            $ifNull: [
-              {
-                $reduce: {
-                  input: {
-                    $map: {
-                      input: "$joinedData4.amount",
-                      as: "amt",
-                      in: { $toString: "$$amt" }
-                    }
-                  },
-                  initialValue: "",
-                  in: {
-                    $cond: [
-                      { $eq: ["$$value", ""] },
-                      "$$this",
-                      { $concat: ["$$value", ", ", "$$this"] }
+    // Common lookup pipelines for Events and Journals
+    const eventsLookup = {
+      from: 'Events',
+      let: { contactId: '$contact_id' },
+      pipeline: [
+        {
+          $match: {
+            $expr: {
+              $and: [
+                { $eq: ['$contact_id', '$$contactId'] },
+                { $eq: ['$type', 'PAYMENT_POSTED'] },
+                { $ne: ['$payment_method', null] },
+                ...(Object.keys(dateMatchCondition).length > 0
+                  ? [
+                      {
+                        $match: {
+                          'transaction.posted_date': dateMatchCondition,
+                        },
+                      },
                     ]
-                  }
-                }
+                  : []),
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            payment_method_type: '$payment_method.payment_method_type',
+            issued_date: '$transaction.posted_date',
+            total_amount: '$transaction.total_amount',
+            total_default_currency: '$transaction.total_default_currency',
+            reference_number: '$transaction.number',
+            user_name: '$submited_by_user_name',
+          },
+        },
+        { $limit: limitNum }, // Limit documents in lookup
+      ],
+      as: 'payments',
+    };
+
+    const journalsLookup = {
+      from: 'Journals',
+      let: { contactId: '$contact_id' },
+      pipeline: [
+        {
+          $match: {
+            $expr: {
+              $and: [
+                { $eq: ['$contact_id', '$$contactId'] },
+                { $eq: ['$related_entity.transaction_type', 'MANUAL_JOURNAL'] },
+                ...(Object.keys(dateMatchCondition).length > 0
+                  ? [
+                      {
+                        $match: {
+                          submited_date: {
+                            $gte: dateMatchCondition.$gte
+                              ? new Date(dateMatchCondition.$gte * 1000)
+                              : undefined,
+                            $lte: dateMatchCondition.$lte
+                              ? new Date(dateMatchCondition.$lte * 1000)
+                              : undefined,
+                          },
+                        },
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            payment_method_type: {
+              $cond: [
+                { $in: ['$account_type', ['CREDIT', 'DEBIT']] },
+                {
+                  $cond: [
+                    { $eq: ['$account_type', 'CREDIT'] },
+                    'Credit Note',
+                    'Debit Note',
+                  ],
+                },
+                {
+                  $cond: [
+                    { $and: [{ $ne: ['$wallet_type', null] }, { $ne: ['$wallet_type', ''] }] },
+                    '$wallet_type',
+                    'N/A',
+                  ],
+                },
+              ],
+            },
+            issued_date: { $divide: [{ $toLong: '$submited_date' }, 1000] },
+            total_amount: '$amount',
+            total_default_currency: '$amount',
+            reference_number: '$code',
+            user_name: '$submited_by_user_name',
+            contact_name: '$contact_name', // Include contact_name from Journals
+          },
+        },
+        { $limit: limitNum }, // Limit documents in lookup
+      ],
+      as: 'journals',
+    };
+
+    // Common projection stage
+    const projectionStage = {
+      _id: 0,
+      customerName: {
+        $cond: [
+          { $and: [
+            { $eq: [{ $ifNull: ['$demographics.first_name', ''] }, ''] },
+            { $eq: [{ $ifNull: ['$demographics.last_name', ''] }, ''] }
+          ]},
+          { $ifNull: ['$combinedTransactions.contact_name', 'N/A'] }, // Use Journals contact_name if demographics are empty
+          { $concat: [
+            { $ifNull: ['$demographics.first_name', ''] },
+            ' ',
+            { $ifNull: ['$demographics.last_name', ''] },
+          ]},
+        ],
+      },
+      account: { $ifNull: ['$account.number', 'N/A'] },
+      area: {
+        $reduce: {
+          input: { $ifNull: ['$tags', []] },
+          initialValue: '',
+          in: {
+            $cond: [
+              { $eq: ['$$value', ''] },
+              '$$this.name',
+              { $concat: ['$$value', ', ', '$$this.name'] },
+            ],
+          },
+        },
+      },
+      dealer: {
+        $let: {
+          vars: {
+            dealerField: {
+              $arrayElemAt: [
+                {
+                  $filter: {
+                    input: { $ifNull: ['$custom_fields', []] },
+                    as: 'field',
+                    cond: { $eq: ['$$field.key', 'service_provider'] },
+                  },
+                },
+                0,
+              ],
+            },
+          },
+          in: { $ifNull: ['$$dealerField.value_label', 'N/A'] },
+        },
+      },
+      ward: { $ifNull: ['$location.address_line1', 'N/A'] },
+      road: { $ifNull: ['$location.address_line2', 'N/A'] },
+      island: { $ifNull: ['$location.city', 'N/A'] },
+      atoll: { $ifNull: ['$location.province', 'N/A'] },
+      payment_method_type: {
+        $switch: {
+          branches: [
+            { case: { $eq: ['$combinedTransactions.payment_method_type', 'ELECTRONIC_TRANSFER'] }, then: 'Quick Pay' },
+            { case: { $eq: ['$combinedTransactions.payment_method_type', 'CRM_WALLET'] }, then: 'Cash' },
+          ],
+          default: { $ifNull: ['$combinedTransactions.payment_method_type', 'N/A'] },
+        },
+      },
+      issued_date: {
+        $dateToString: {
+          format: '%Y-%m-%d %H:%M:%S',
+          date: { $toDate: { $multiply: ['$combinedTransactions.issued_date', 1000] } },
+        },
+      },
+      total_amount: { $ifNull: ['$combinedTransactions.total_amount', 'N/A'] },
+      currency_code: { $ifNull: ['$combinedTransactions.currency_code', 'N/A'] },
+      total_default_currency: { $ifNull: ['$combinedTransactions.total_default_currency', 'N/A'] },
+      amount: {
+        $cond: [
+          { $eq: ['$combinedTransactions.total_default_currency', 'N/A'] },
+          'N/A',
+          { $round: [{ $divide: ['$combinedTransactions.total_default_currency', 1.08] }, 2] },
+        ],
+      },
+      gst: {
+        $cond: [
+          { $eq: ['$combinedTransactions.total_default_currency', 'N/A'] },
+          'N/A',
+          {
+            $round: [
+              {
+                $subtract: [
+                  '$combinedTransactions.total_default_currency',
+                  { $divide: ['$combinedTransactions.total_default_currency', 1.08] },
+                ],
               },
-              "N/A"
-            ]
+              2,
+            ],
           },
-          "Total Default Currency": {
-            $toDouble: {
-              $ifNull: [
-                { $arrayElemAt: ['$joinedData4.total_default_currency', 0] },
-                0
-              ]
-            }
-          },
-          "Payment Type": {
-            $cond: {
-              if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
-              then: 'QuickPay',
-              else: { $arrayElemAt: ['$ordersData.payment_method.type', 0] }
-            }
-          },
-        }
-      }
-    ];
+        ],
+      },
+      reference_number: { $ifNull: ['$combinedTransactions.reference_number', 'N/A'] },
+      user_name: { $ifNull: ['$combinedTransactions.user_name', 'N/A'] },
+    };
 
-    // Optionally, filter based on the 'search' query parameter if provided
-    if (search) {
-      aggregationQuery[0].$match = {
-        ...aggregationQuery[0].$match,
-        $text: { $search: search }
+    if (format === 'json') {
+      // Use $facet to combine data and count in a single query
+      const aggregationQuery = [
+        { $match: matchStage },
+        { $lookup: eventsLookup },
+        { $lookup: journalsLookup },
+        {
+          $addFields: {
+            combinedTransactions: {
+              $concatArrays: [{ $ifNull: ['$payments', []] }, { $ifNull: ['$journals', []] }],
+            },
+          },
+        },
+        { $match: { combinedTransactions: { $ne: [] } } },
+        { $unwind: { path: '$combinedTransactions', preserveNullAndEmptyArrays: false } },
+        {
+          $facet: {
+            data: [{ $skip: skip }, { $limit: limitNum }, { $project: projectionStage }],
+            count: [{ $count: 'total' }],
+          },
+        },
+      ];
+
+      const result = await mongoose.connection.db
+        .collection('ContactProfiles')
+        .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+
+      const transformedResults = result[0].data.map((doc) => ({
+        'Customer Name': doc.customerName,
+        'Account': doc.account,
+        'Area': doc.area,
+        'Dealer': doc.dealer,
+        'Ward': doc.ward,
+        'Road': doc.road,
+        'Island': doc.island,
+        'Atoll': doc.atoll,
+        'Payment Method': doc.payment_method_type,
+        'Posted Date': doc.issued_date,
+        'Total Amount': doc.total_default_currency,
+        'Amount': doc.amount,
+        'GST': doc.gst,
+        'Reference Number': doc.reference_number,
+        'User Name': doc.user_name,
+      }));
+
+      const totalCount = result[0].count[0]?.total || 0;
+
+      return {
+        data: transformedResults,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / limitNum),
+        },
       };
+    } else {
+      // CSV streaming with batch processing
+      const cursor = mongoose.connection.db.collection('ContactProfiles').aggregate(
+        [
+          { $match: matchStage },
+          { $lookup: eventsLookup },
+          { $lookup: journalsLookup },
+          {
+            $addFields: {
+              combinedTransactions: {
+                $concatArrays: [{ $ifNull: ['$payments', []] }, { $ifNull: ['$journals', []] }],
+              },
+            },
+          },
+          { $match: { combinedTransactions: { $ne: [] } } },
+          { $unwind: { path: '$combinedTransactions', preserveNullAndEmptyArrays: false } },
+          { $project: projectionStage },
+        ],
+        { maxTimeMS: 600000, allowDiskUse: true, cursor: { batchSize: 1000 } }
+      );
+
+      return new Promise((resolve, reject) => {
+        const csvStream = csv.format({
+          headers: [
+            'Customer Name',
+            'Account',
+            'Area',
+            'Dealer',
+            'Ward',
+            'Road',
+            'Island',
+            'Atoll',
+            'Payment Method',
+            'Posted Date',
+            'Total Amount',
+            'Amount',
+            'GST',
+            'Reference Number',
+            'User Name',
+          ],
+          writeHeaders: true,
+        });
+
+        const chunks = [];
+        csvStream.on('data', (chunk) => chunks.push(chunk));
+        csvStream.on('end', () => resolve(Buffer.concat(chunks).toString()));
+        csvStream.on('error', (err) => reject(err));
+
+        cursor
+          .stream()
+          .on('data', (doc) => {
+            csvStream.write({
+              'Customer Name': doc.customerName || '',
+              'Account': doc.account || 'N/A',
+              'Area': doc.area || '',
+              'Dealer': doc.dealer || 'N/A',
+              'Ward': doc.ward || 'N/A',
+              'Road': doc.road || 'N/A',
+              'Island': doc.island || 'N/A',
+              'Atoll': doc.atoll || 'N/A',
+              'Payment Method': doc.payment_method_type || 'N/A',
+              'Posted Date': doc.issued_date || 'N/A',
+              'Total Amount': doc.total_amount || 'N/A',
+              'Amount': doc.amount || 'N/A',
+              'GST': doc.gst || 'N/A',
+              'Reference Number': doc.reference_number || 'N/A',
+              'User Name': doc.user_name || 'N/A',
+            });
+          })
+          .on('end', () => csvStream.end())
+          .on('error', (err) => csvStream.emit('error', err));
+      });
     }
-
-    // Perform aggregation to fetch the data
-    const results = await mongoose.connection.db.collection('Subscriptions').aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true }).toArray();
-
-    // Convert the data to CSV format
-    const csvData = parse(results);
-
-    return csvData;
-
   } catch (error) {
     console.error('Error exporting report:', error);
-    throw new Error('Error exporting report');
+    throw new Error(`Error exporting report: ${error.message}`);
   }
 };
+
 
 const serviceRequestReports = async (req) => {
   try {
@@ -5455,7 +6416,7 @@ const getMtvUserReports = async (page, limit, startDate, endDate) => {
       date.setHours(isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0, isEnd ? 999 : 0);
       return date;
     };
-    
+
     if (startDate && endDate) {
       const startUTC = parseDate(startDate);
       const endUTC = parseDate(endDate, true);
@@ -5467,7 +6428,7 @@ const getMtvUserReports = async (page, limit, startDate, endDate) => {
       const endUTC = parseDate(endDate, true);
       dateFilter.createdAt = { $lte: endUTC };
     }
-    
+
     // Build the aggregation pipeline
     const aggregationPipeline = [
       { $match: dateFilter },
@@ -5491,20 +6452,20 @@ const getMtvUserReports = async (page, limit, startDate, endDate) => {
         },
       },
     ];
-    
+
     // Conditionally add pagination stages
     const isPaginated = page !== undefined && limit !== undefined;
     if (isPaginated) {
       const skip = (page - 1) * limit;
       aggregationPipeline.splice(2, 0, { $skip: skip }, { $limit: limit });
     }
-    
+
     const mtvDb = getMTVConnection();
     const results = await mtvDb
       .collection('MTVUsers')
       .aggregate(aggregationPipeline)
       .toArray();
-    
+
     // Calculate total count for pagination (only needed if paginated)
     let pagination = {};
     if (isPaginated) {
@@ -5518,7 +6479,7 @@ const getMtvUserReports = async (page, limit, startDate, endDate) => {
         totalPages: Math.ceil(total / limit),
       };
     }
-    
+
     return {
       message: 'User Reports Data',
       data: results,
@@ -6040,5 +7001,7 @@ module.exports = {
   exportCustomerCollection,
   exportContactProfiles,
   exportContactProfilesWithInvoice,
-  exportContactProfilesWithHdc
+  exportContactProfilesWithHdc,
+  exportHdcContactProfiles,
+  exportContactProfilesWithHdcClient
 }

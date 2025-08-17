@@ -25,9 +25,13 @@ router.get('/customerDealers', billingReportController.exportCustomerCSVorJSON);
 
 router.get('/customerReports', billingReportController.exportContactProfiles);
 
+router.get('/hdcCustomerReports', billingReportController.exportHdcContactProfiles);
+
 router.get('/invoiceReports', billingReportController.exportContactProfilesWithInvoiceController);
 
 router.get('/hdcReports', billingReportController.exportContactProfilesWithHdc);
+
+router.get('/hdcReportsClient', billingReportController.exportContactProfilesWithHdcClient);
 
 router.get('/customerDisconnectedDealers', billingReportController.exportCustomerReportsNotEffective);
 

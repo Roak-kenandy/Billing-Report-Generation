@@ -49,6 +49,32 @@ const exportContactProfiles = async (req, res) => {
   }
 };
 
+const exportHdcContactProfiles = async (req, res) => {
+  try {
+    const { search, startDate, endDate, page = 1, limit = 10, format = 'json' } = req.query;
+
+    console.log(limit,'limiting value')
+
+    const data = await billingReportService.exportHdcContactProfiles(startDate, endDate, page, limit, format);
+
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=hdc-customer-reports.csv');
+      res.send(data.csv);
+    } else {
+      res.json({
+        data: data.results,
+        pagination: data.pagination,
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error processing request',
+      error: error.message,
+    });
+  }
+};
+
 const exportContactProfilesWithInvoiceController = async (req, res) => {
   try {
     const { search, startDate, endDate, atoll, island, page = 1, limit = 10, format = 'json' } = req.query;
@@ -78,6 +104,30 @@ const exportContactProfilesWithHdc = async (req, res) => {
     const { startDate, endDate, page = 1, limit = 10, format = 'json' } = req.query;
 
     const data = await billingReportService.exportContactProfilesWithHdc(startDate, endDate, page, limit, format);
+
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=customer-hdc-reports.csv');
+      res.send(data.csv);
+    } else {
+      res.json({
+        data: data.results,
+        pagination: data.pagination,
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error processing request',
+      error: error.message,
+    });
+  }
+};
+
+const exportContactProfilesWithHdcClient = async (req, res) => {
+  try {
+    const { startDate, endDate, page = 1, limit = 10, format = 'json' } = req.query;
+
+    const data = await billingReportService.exportContactProfilesWithHdcClient(startDate, endDate, page, limit, format);
 
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
@@ -368,20 +418,69 @@ const exportCustomerDealerWiseCollection = async (req, res) => {
 
 const exportCollectionReports = async (req, res) => {
   try {
-    const { search, startDate, endDate, atoll, island } = req.query;
+    const { page, limit, search, atoll, island, startDate, endDate, format } = req.query;
 
-    const csvData = await billingReportService.exportCollectionReports(search, startDate, endDate, atoll, island);
+    // Validate date format if provided
+    if (startDate && !isValidDate(startDate)) {
+      return res.status(400).json({
+        message: 'Invalid start date format. Please use YYYY-MM-DD format.',
+        error: 'INVALID_START_DATE'
+      });
+    }
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=reports.csv');
-    res.send(csvData);
+    if (endDate && !isValidDate(endDate)) {
+      return res.status(400).json({
+        message: 'Invalid end date format. Please use YYYY-MM-DD format.',
+        error: 'INVALID_END_DATE'
+      });
+    }
 
+    // Validate date range
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+      return res.status(400).json({
+        message: 'Start date cannot be later than end date.',
+        error: 'INVALID_DATE_RANGE'
+      });
+    }
+
+    const result = await billingReportService.exportCollectionReports({ 
+      page, 
+      limit, 
+      search, 
+      atoll, 
+      island, 
+      startDate, 
+      endDate, 
+      format 
+    });
+
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=reports-${new Date().toISOString().split('T')[0]}.csv`);
+      res.send(result);
+    } else {
+      res.json(result);
+    }
   } catch (error) {
+    console.error('Error in exportCollectionReports controller:', error);
     res.status(500).json({
-      message: 'Error exporting CSV',
+      message: 'Error fetching reports',
       error: error.message
     });
   }
+};
+
+// Helper function to validate date format
+const isValidDate = (dateString) => {
+  const regex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!regex.test(dateString)) return false;
+  
+  const date = new Date(dateString);
+  const timestamp = date.getTime();
+  
+  if (typeof timestamp !== 'number' || Number.isNaN(timestamp)) return false;
+  
+  return date.toISOString().startsWith(dateString);
 };
 
 const serviceRequestReports = async (req, res) => {
@@ -780,5 +879,7 @@ module.exports = {
   exportCustomerCollection,
   exportContactProfiles,
   exportContactProfilesWithInvoiceController,
-  exportContactProfilesWithHdc
+  exportContactProfilesWithHdc,
+  exportHdcContactProfiles,
+  exportContactProfilesWithHdcClient
 }

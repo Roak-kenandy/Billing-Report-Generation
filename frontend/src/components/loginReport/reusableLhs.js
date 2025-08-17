@@ -39,6 +39,7 @@ const ReusableLhs = () => {
     const [openFinancialSubmenu, setOpenFinancialSubmenu] = useState(false);
     const [openSalesSubmenu, setOpenSalesSubmenu] = useState(false);
     const [openRbacSubmenu, setOpenRbacSubmenu] = useState(false);
+    const [openHdcSubmenu, setOpenHdcSubmenu] = useState(false);
     const [openMtvRegisterSubmenu, setOpenMtvregisterSubmenu] = useState(false);
     const [openDeviceSubmenu, setOpenDeviceSubmenu] = useState(false);
     const [openDealerMenu, setOpenDealerMenu] = useState(false);
@@ -64,6 +65,11 @@ const ReusableLhs = () => {
 
     const rbacReportItems = [
         { name: 'User Roles', path: '/rbac/roles', icon: <PeopleIcon /> },
+    ];
+
+    const hdcReportItems = [
+        { name: 'Customer Reports', path: '/hdcCustomer', icon: <SupportAgentIcon /> },
+        { name: 'Invoice Reports', path: '/hdcCustomerInvoiceReports', icon: <DescriptionIcon /> },
     ];
 
     const mtvRegisterReportItems = [
@@ -99,6 +105,7 @@ const ReusableLhs = () => {
         setOpenFinancialSubmenu(JSON.parse(localStorage.getItem('financialSubmenuOpen')) || false);
         setOpenSalesSubmenu(JSON.parse(localStorage.getItem('salesSubmenuOpen')) || false);
         setOpenRbacSubmenu(JSON.parse(localStorage.getItem('rbacSubmenuOpen')) || false);
+        setOpenHdcSubmenu(JSON.parse(localStorage.getItem('hdcSubmenuOpen')) || false);
         setOpenMtvregisterSubmenu(JSON.parse(localStorage.getItem('mtvRegisterSubmenuOpen')) || false);
         setOpenDeviceSubmenu(JSON.parse(localStorage.getItem('openDeviceSubmenu')) || false);
         setOpenDealerMenu(JSON.parse(localStorage.getItem('openDealersSubmenu')) || false);
@@ -112,6 +119,7 @@ const ReusableLhs = () => {
             ...mtvRegisterReportItems,
             ...deviceStatistics,
             ...dealerReports,
+            ...hdcReportItems
         ];
         const currentIndex = allMenuItems.findIndex(item => item.path === location.pathname);
         setSelectedIndex(currentIndex >= 0 ? currentIndex : 0);
@@ -136,6 +144,10 @@ const ReusableLhs = () => {
             setOpenDealerMenu(true);
             localStorage.setItem('openDealersSubmenu', JSON.stringify(true));
         }
+        else if (hdcReportItems.some(item => item.path === location.pathname)) {
+            setOpenHdcSubmenu(true);
+            localStorage.setItem('openHdcSubmenu', JSON.stringify(true));
+        }
     }, [location.pathname, navigate]);
 
     // Redirect to appropriate path based on role
@@ -143,7 +155,9 @@ const ReusableLhs = () => {
         if (location.pathname === '/') {
             if (userRoles.some(role => role.startsWith('Service Provider'))) {
                 navigate('/subscribed/dealers');
-            } else {
+            } else if (userRoles.includes('HDC')) {
+            navigate('/hdcCustomer'); // Redirect HDC users to HDC Reports
+        } else {
                 navigate('/dashboard');
             }
         }
@@ -207,7 +221,24 @@ const ReusableLhs = () => {
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
             localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
-        } else if (menu === 'mtvRegister') {
+        } else if (menu === 'hdc') {
+            const newState = !openHdcSubmenu;
+            setOpenHdcSubmenu(newState);
+            setOpenRbacSubmenu(false);
+            setOpenFinancialSubmenu(false);
+            setOpenSalesSubmenu(false);
+            setOpenMtvregisterSubmenu(false);
+            setOpenDeviceSubmenu(false);
+            setOpenDealerMenu(false);
+            localStorage.setItem('hdcSubmenuOpen', JSON.stringify(newState));
+            localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
+            localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
+            localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
+            localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
+        }
+        else if (menu === 'mtvRegister') {
             const newState = !openMtvRegisterSubmenu;
             setOpenMtvregisterSubmenu(newState);
             setOpenFinancialSubmenu(false);
@@ -257,10 +288,11 @@ const ReusableLhs = () => {
     const canViewFinancialReports = !isServiceProvider && (userRoles.includes('Finance') || userRoles.includes('Admin'));
     const canViewSalesDepartment = !isServiceProvider && (userRoles.includes('Sales') || userRoles.includes('Admin'));
     const canViewRbacManagement = !isServiceProvider && userRoles.includes('Admin');
+    const canViewHDC = !isServiceProvider && userRoles.includes('Admin') || !isServiceProvider && userRoles.includes('HDC');
     const canViewMtvUsersManagement = !isServiceProvider && (userRoles.includes('Admin') || userRoles.includes('Sales'));
     const canViewDeviceStatistics = !isServiceProvider && userRoles.includes('Admin');
     const canViewDealerReports = userRoles.includes('Admin') || userRoles.includes('Finance') || userRoles.includes('Sales') || isServiceProvider;
-    const canViewDashboard = !isServiceProvider;
+    const canViewDashboard = !isServiceProvider && !userRoles.includes('HDC');;
 
     return (
         <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -703,6 +735,87 @@ const ReusableLhs = () => {
                                                 isServiceProvider
                                                     ? index
                                                     : index + financialReportItems.length + salesReportItems.length + mtvRegisterReportItems.length + deviceStatistics.length + 1,
+                                                item.path
+                                            )}
+                                            component={Link}
+                                            to={item.path}
+                                            sx={{
+                                                pl: isSidebarOpen ? 5 : 1,
+                                                py: 1.2,
+                                                mx: 1,
+                                                borderRadius: 2,
+                                                transition: 'all 0.3s ease',
+                                                '&:hover': {
+                                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                                    transform: isSidebarOpen ? 'translateX(5px)' : 'none',
+                                                },
+                                                '&.Mui-selected': {
+                                                    backgroundColor: '#3b82f6',
+                                                    color: '#ffffff',
+                                                    '&:hover': { backgroundColor: '#2563eb' },
+                                                },
+                                            }}
+                                        >
+                                            <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                                {item.icon}
+                                            </ListItemIcon>
+                                            {isSidebarOpen && (
+                                                <ListItemText
+                                                    primary={item.name}
+                                                    primaryTypographyProps={{
+                                                        fontSize: 14,
+                                                        fontWeight: 400,
+                                                    }}
+                                                />
+                                            )}
+                                        </ListItemButton>
+                                    ))}
+                                </Collapse>
+                            </>
+                        )}
+
+                        {/* HDC Section */}
+                        {canViewHDC && (
+                            <>
+                                <ListItemButton
+                                    onClick={() => handleSubmenuToggle('hdc')}
+                                    sx={{
+                                        py: 1.5,
+                                        mx: 1,
+                                        borderRadius: 2,
+                                        transition: 'all 0.3s ease',
+                                        '&:hover': {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                        },
+                                        backgroundColor: openHdcSubmenu ? 'rgba(255, 255, 255, 0.05)' : 'inherit',
+                                    }}
+                                >
+                                    <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
+                                        <AssignmentIcon />
+
+                                    </ListItemIcon>
+                                    {isSidebarOpen && (
+                                        <>
+                                            <ListItemText
+                                                primary="HDC Reports"
+                                                primaryTypographyProps={{ fontWeight: 500 }}
+                                            />
+                                            {openHdcSubmenu ? (
+                                                <ExpandLess sx={{ color: '#93c5fd' }} />
+                                            ) : (
+                                                <ExpandMore sx={{ color: '#93c5fd' }} />
+                                            )}
+                                        </>
+                                    )}
+                                </ListItemButton>
+
+                                <Collapse in={openHdcSubmenu && isSidebarOpen} timeout="auto" unmountOnExit>
+                                    {hdcReportItems.map((item, index) => (
+                                        <ListItemButton
+                                            key={item.name}
+                                            selected={location?.pathname === item.path}
+                                            onClick={() => handleListItemClick(
+                                                index + financialReportItems.length + salesReportItems.length + mtvRegisterReportItems.length + deviceStatistics.length + dealerReports.length + 1,
                                                 item.path
                                             )}
                                             component={Link}
