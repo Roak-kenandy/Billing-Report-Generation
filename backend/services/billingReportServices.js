@@ -483,6 +483,7 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
           Province: { $ifNull: ['$location.province', ''] },
           Atoll: { $ifNull: ['$location.province', ''] },
           Island: { $ifNull: ['$location.city', ''] },
+          'Account Number': { $ifNull: ['$account.number', ''] },
           'Service Provider': {
             $cond: {
               if: {

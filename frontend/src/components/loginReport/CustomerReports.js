@@ -40,8 +40,8 @@ const CustomerReports = () => {
     const [selectedIsland, setSelectedIsland] = useState('');
     const [appliedAtoll, setAppliedAtoll] = useState('');
     const [appliedIsland, setAppliedIsland] = useState('');
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
-    // const API_URL = 'http://localhost:3003/billing-reports';
+    // const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    const API_URL = 'http://localhost:3003/billing-reports';
 
     useEffect(() => {
         const fetchAtolls = async () => {
@@ -364,6 +364,7 @@ const CustomerReports = () => {
                                     'Customer Code',
                                     'Phone',
                                     'Registered Date',
+                                    'Account Number',
                                     'Address Line 1',
                                     'Address Line 2',
                                     'Address Name',
@@ -375,7 +376,7 @@ const CustomerReports = () => {
                                     'Service Provider',
                                     'Device Code',
                                     'Tags',
-                                    'Device Name'
+                                    'Device Name',
                                 ].map((header) => (
                                     <TableCell
                                         key={header}
@@ -421,6 +422,7 @@ const CustomerReports = () => {
                                             'Customer Code',
                                             'Phone',
                                             'Registered Date',
+                                            'Account Number',
                                             'Address Line 1',
                                             'Address Line 2',
                                             'Address Name',
