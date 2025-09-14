@@ -1,5 +1,6 @@
 const express = require('express');
 const multer = require('multer');
+const path = require("path");
 const billingReportController = require('../controllers/billingReportsController');
 const loginReportController = require('../controllers/loginReportController');
 const rbacController = require('../controllers/rbacController');
@@ -31,7 +32,9 @@ router.get('/invoiceReports', billingReportController.exportContactProfilesWithI
 
 router.get('/hdcReports', billingReportController.exportContactProfilesWithHdc);
 
-router.get('/hdcReportsClient', billingReportController.exportContactProfilesWithHdcClient);
+router.get("/hdcReportsClient", billingReportController.exportContactProfilesWithHdcClient);
+
+router.get("/hdcConsolidatedInvoice", billingReportController.exportConsolidatedContactProfilesWithHdcClient);
 
 router.get('/customerDisconnectedDealers', billingReportController.exportCustomerReportsNotEffective);
 

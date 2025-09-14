@@ -123,29 +123,86 @@ const exportContactProfilesWithHdc = async (req, res) => {
   }
 };
 
+
 const exportContactProfilesWithHdcClient = async (req, res) => {
   try {
-    const { startDate, endDate, page = 1, limit = 10, format = 'json' } = req.query;
+    const { postedStartDate, postedEndDate, page, limit, format = 'json' } = req.query;
 
-    const data = await billingReportService.exportContactProfilesWithHdcClient(startDate, endDate, page, limit, format);
+    const data = await billingReportService.exportContactProfilesWithHdcClient(
+      postedStartDate,
+      postedEndDate,
+      page,
+      limit,
+      format
+    );
 
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=customer-hdc-reports.csv');
-      res.send(data.csv);
+
+      for await (const chunk of data.csvStream) {
+        res.write(chunk);
+      }
+      res.end();
     } else {
-      res.json({
-        data: data.results,
-        pagination: data.pagination,
-      });
+      res.json({ data: data.results, pagination: data.pagination });
     }
   } catch (error) {
-    res.status(500).json({
-      message: 'Error processing request',
-      error: error.message,
-    });
+    console.error('Error exporting HDC report:', error);
+    res.status(500).json({ message: 'Error processing request', error: error.message });
   }
 };
+
+const exportConsolidatedContactProfilesWithHdcClient = async (req, res) => {
+  try {
+    const { postedStartDate, postedEndDate, page, limit, format = 'json' } = req.query;
+
+    const data = await billingReportService.exportConsolidatedContactProfilesWithHdcClient(
+      postedStartDate,
+      postedEndDate,
+      page,
+      limit,
+      format
+    );
+
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=customer-hdc-reports.csv');
+
+      for await (const chunk of data.csvStream) {
+        res.write(chunk);
+      }
+      res.end();
+    } else {
+      res.json({ data: data.results, pagination: data.pagination });
+    }
+  } catch (error) {
+    console.error('Error exporting HDC report:', error);
+    res.status(500).json({ message: 'Error processing request', error: error.message });
+  }
+};
+
+
+// const exportContactProfilesWithHdcClient = async (req, res) => {
+//   try {
+//     const { startDate, endDate } = req.query;
+//     console.log('Received export request with params:', { startDate, endDate });
+
+//     // Queue the job instead of calling the service directly
+//     const job = await exportQueue.add("hdcReport", { startDate, endDate });
+
+//     res.json({
+//       jobId: job.id,
+//       message: "HDC report export started. Check status later.",
+//     });
+//   } catch (error) {
+//     console.error("Error queuing export job:", error);
+//     res.status(500).json({ message: "Error queuing export job", error: error.message });
+//   }
+// };
+
+
+
 
 const exportCustomerCSVorJSON = async (req, res) => {
   try {
@@ -881,5 +938,6 @@ module.exports = {
   exportContactProfilesWithInvoiceController,
   exportContactProfilesWithHdc,
   exportHdcContactProfiles,
-  exportContactProfilesWithHdcClient
+  exportContactProfilesWithHdcClient,
+  exportConsolidatedContactProfilesWithHdcClient
 }

@@ -70,6 +70,7 @@ const ReusableLhs = () => {
     const hdcReportItems = [
         { name: 'Customer Reports', path: '/hdcCustomer', icon: <SupportAgentIcon /> },
         { name: 'Invoice Reports', path: '/hdcCustomerInvoiceReports', icon: <DescriptionIcon /> },
+        { name: 'Consolidated Invoice Reports', path: '/hdcConsolidatedReports', icon: <DescriptionIcon /> },
     ];
 
     const mtvRegisterReportItems = [
