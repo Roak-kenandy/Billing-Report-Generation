@@ -82,8 +82,8 @@ async function connectCRM() {
     await mongoose.connect(process.env.MONGO_URI, {
       maxPoolSize: 100, // Increase if handling many concurrent requests
       connectTimeoutMS: 60000, // 60 seconds for initial connection
-      socketTimeoutMS: 600000, // 120 seconds for socket operations
-      serverSelectionTimeoutMS: 60000,
+      socketTimeoutMS: 120000, // 120 seconds for socket operations
+      serverSelectionTimeoutMS: 30000,
       heartbeatFrequencyMS: 10000,
       retryWrites: true,
       retryReads: true,
