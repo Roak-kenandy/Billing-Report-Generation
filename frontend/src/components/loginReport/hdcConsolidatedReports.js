@@ -26,7 +26,7 @@ import { format } from 'date-fns';
 // const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3003/billing-reports';
 const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
 
-const HdcCustomerInvoiceReports = () => {
+const HdcConsolidatedReports = () => {
   const [reports, setReports] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,22 +58,15 @@ const HdcCustomerInvoiceReports = () => {
     'Address Line 1',
     'Address Line 2',
     'City',
-    'Type',
-    'Product Name',
     'Product Net',
     'Product Discount',
     'Product Tax',
     'Product Sub Total',
-    'Exchange Rate',
     'Total Default Currency',
     'Discount Amount',
     'Total Amount',
     'Tax Amount',
-    'Issued Date',
-    'Posted Date',
-    'Due Date',
     'Currency Code',
-    'Reference Number'
   ];
 
   const formatDateToUTC = (date) => {
@@ -84,7 +77,7 @@ const HdcCustomerInvoiceReports = () => {
   const fetchReports = async (page, limit, search = '', postedStart = '', postedEnd = '', dueStart = '', dueEnd = '', atoll = '', island = '') => {
     setLoading(true);
     try {
-      let url = `${API_URL}/hdcReportsClient?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}&format=json`;
+      let url = `${API_URL}/hdcConsolidatedInvoice?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}&format=json`;
       if (postedStart) url += `&postedStartDate=${encodeURIComponent(postedStart)}`;
       if (postedEnd) url += `&postedEndDate=${encodeURIComponent(postedEnd)}`;
       if (dueStart) url += `&dueStartDate=${encodeURIComponent(dueStart)}`;
@@ -177,7 +170,7 @@ const HdcCustomerInvoiceReports = () => {
   const handleDownloadCSV = async () => {
     try {
       setIsDownloading(true);
-      let url = new URL(`${API_URL}/hdcReportsClient`, window.location.origin);
+      let url = new URL(`${API_URL}/hdcConsolidatedInvoice`, window.location.origin);
       url.searchParams.append('search', searchTerm);
       url.searchParams.append('format', 'csv');
       if (appliedPostedStartDate) url.searchParams.append('postedStartDate', encodeURIComponent(appliedPostedStartDate));
@@ -543,4 +536,4 @@ const HdcCustomerInvoiceReports = () => {
   );
 };
 
-export default HdcCustomerInvoiceReports;
+export default HdcConsolidatedReports;
