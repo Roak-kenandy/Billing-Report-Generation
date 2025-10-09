@@ -553,28 +553,14 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
               else: '',
             },
           },
-          'Customer Code': {
-            $cond: {
-              if: {
-                $and: [
-                  { $isArray: '$joinedDataJournals' },
-                  { $gt: [{ $size: '$joinedDataJournals' }, 0] },
-                ],
-              },
-              then: {
-                $ifNull: [
-                  {
-                    $concat: [
-                      "'",
-                      { $toString: { $arrayElemAt: ['$joinedDataJournals.contact_code', 0] } }
-                    ]
-                  },
-                  ''
-                ]
-              },
-              else: ''
-            }
-          },
+    'Customer Code': {
+      $ifNull: [
+        {
+          $concat: ["", { $toString: "$profile.code" }]
+        },
+        ''
+      ]
+    },
           Tags: {
             $cond: {
               if: { $isArray: '$tags' },
@@ -7326,6 +7312,57 @@ const getVipTags = async () => {
   }
 };
 
+const getSubscriptionMetrics = async (startDate, endDate) => {
+  try {
+    // Convert dates to timestamps if needed
+    const startTimestamp = new Date(startDate).getTime() / 1000;
+    console.log('startTimestamp:', startTimestamp);
+    const endTimestamp = new Date(endDate).getTime() / 1000;
+    console.log('endTimestamp:', endTimestamp);
+    
+    const aggregationPipeline = [
+      { $unwind: "$services" },
+      {
+        $match: {
+          "services.service_terms.start_date": { $lte: endTimestamp },
+          "services.service_terms.end_date": { $gte: startTimestamp }
+        }
+      },
+      {
+        $facet: {
+          subscriptionCount: [
+            { $match: { state: "ACTIVE" } },
+            { $count: "count" }
+          ],
+          serviceCount: [
+            { $match: { "services.state": "EFFECTIVE" } },
+            { $count: "count" }
+          ],
+        }
+      },
+      {
+        $project: {
+          subscriptionCount: { $arrayElemAt: ["$subscriptionCount.count", 0] },
+          serviceCount: { $arrayElemAt: ["$serviceCount.count", 0] }
+        }
+      }
+    ];
+
+    const result = await mongoose.connection.db.collection('Subscriptions')
+      .aggregate(aggregationPipeline)
+      .next();
+
+    return result || {
+      subscriptionCount: 0,
+      serviceCount: 0,
+      totalRevenue: 0
+    };
+  } catch (err) {
+    console.error('Error occurred in metrics:', err);
+    throw err;
+  }
+};
+
 
 module.exports = {
   getReports,
@@ -7357,5 +7394,6 @@ module.exports = {
   exportContactProfilesWithHdc,
   exportHdcContactProfiles,
   exportContactProfilesWithHdcClient,
-  exportConsolidatedContactProfilesWithHdcClient
+  exportConsolidatedContactProfilesWithHdcClient,
+  getSubscriptionMetrics
 }
