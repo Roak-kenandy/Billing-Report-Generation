@@ -47,6 +47,7 @@ router.get('/getCollectionReports', billingReportController.exportCollectionRepo
 router.get('/getAtolls', billingReportController.getAtollsData);
 
 router.get('/metrics', billingReportController.getMetrics);
+router.get('/subscriptionMetrics', billingReportController.getSubscriptionMetrics);
 
 router.get('/package-distribution', billingReportController.getPackageDistribution);
 
@@ -106,6 +107,13 @@ router.get('/vip/tags', billingReportController.getVipTags);
 router.post('/bulkService', bulkUploadController.updateAddress);
 
 router.post('/bulkAddress', bulkUploadController.updateContactAddress);
+
+router.get('/dealerInformation', billingReportController.exportDealerCSVorJSON);
+
+router.get('/serviceStartDates', billingReportController.exportServiceStartDates);
+
+router.get('/registrationInformation', billingReportController.exportRegistrationCSVorJSON);
+
 
 
 // router.get('/fetchFutureReports', billingReportController.fetchFutureReports);

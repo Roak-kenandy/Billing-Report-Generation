@@ -909,6 +909,116 @@ const getVipTags = async (req, res) => {
   }
 };
 
+const getSubscriptionMetrics = async (req, res) => {
+  try {
+    const {startDate, endDate} = req.query;
+    const data = await billingReportService.getSubscriptionMetrics(startDate, endDate);
+
+    res.status(200).json({
+      success: true,
+      message: 'Metrics data fetched successfully',
+      data: data,
+    });
+  } catch (error) {
+    console.error('Error fetching metrics data:', error);
+
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching metrics data',
+      error: error.message,
+    });
+  }
+};
+
+const exportDealerCSVorJSON = async (req, res) => {
+  try {
+    const { search, startDate, endDate, atoll, island, format, page, limit, serviceProvider, spIsland } = req.query;
+
+    const response = await billingReportService.exportInfoDealerReports(
+      search,
+      startDate,
+      endDate,
+      atoll,
+      island,
+      format,
+      page,
+      limit,
+      serviceProvider,
+      spIsland
+    );
+
+    if (response.isCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=dealer_information.csv');
+      res.send(response.data);
+    } else {
+      res.status(200).json({
+        data: response.data,
+        pagination: response.pagination,
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error exporting dealer report',
+      error: error.message,
+    });
+  }
+};
+
+const exportServiceStartDates = async (req, res) => {
+  try {
+    const { search, startDate, endDate, atoll, island, page = 1, limit = 10, format = 'json' } = req.query;
+
+    const data = await billingReportService.exportServiceStartDates(search, startDate, endDate, atoll, island, page, limit, format);
+
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=service-start-dates.csv');
+      res.send(data.csv);
+    } else {
+      res.json({
+        data: data.results,
+        pagination: data.pagination,
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error processing request',
+      error: error.message,
+    });
+  }
+};
+
+const exportRegistrationCSVorJSON = async (req, res) => {
+  try {
+    const { startDate, endDate, format, page, limit } = req.query;
+
+    const response = await billingReportService.exportRegistrationReports(
+      startDate,
+      endDate,
+      format,
+      page,
+      limit
+    );
+
+    if (response.isCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=registration_information.csv');
+      res.send(response.data);
+    } else {
+      res.status(200).json({
+        data: response.data,
+        pagination: response.pagination,
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error exporting registration report',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getReports,
   exportCSV,
@@ -939,5 +1049,9 @@ module.exports = {
   exportContactProfilesWithHdc,
   exportHdcContactProfiles,
   exportContactProfilesWithHdcClient,
-  exportConsolidatedContactProfilesWithHdcClient
+  exportConsolidatedContactProfilesWithHdcClient,
+  getSubscriptionMetrics,
+  exportDealerCSVorJSON,
+  exportServiceStartDates,
+  exportRegistrationCSVorJSON
 }

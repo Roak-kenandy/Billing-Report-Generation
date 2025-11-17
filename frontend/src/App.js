@@ -25,6 +25,9 @@ import BulkService from './components/loginReport/BulkService';
 import HDCCustomerReports from './components/loginReport/hdcCustomerReports';
 import HdcCustomerInvocieReports from './components/loginReport/hdcCustomerInvoiceReports';
 import HdcConsolidatedReports from './components/loginReport/hdcConsolidatedReports';
+import DealerInformation from './components/loginReport/DealerInformation';
+import CustomerPurchaseReports from './components/loginReport/CustomerPurchaseDates';
+import RegistrationReports from './components/loginReport/RegistrationReports';
 // import DeviceNames from './components/loginReport/DeviceNames';
 // import DynamicReportBuilder from './components/loginReport/DynamicReportBuilder';
 import CustomerReports from './components/loginReport/CustomerReports';
@@ -79,6 +82,9 @@ function App() {
         <Route path="hdcCustomer" element={<HDCCustomerReports/>} />
         <Route path="hdcCustomerInvoiceReports" element={<HdcCustomerInvocieReports/>} />
         <Route path="hdcConsolidatedReports" element={<HdcConsolidatedReports/>} />
+        <Route path="dealerInformation" element={<DealerInformation/>} />
+        <Route path="customerPurchaseDates" element={<CustomerPurchaseReports/>} />
+        <Route path="registrationInformation" element={<RegistrationReports/>} />
         {/* <Route path="rbac/permissions" element={<RbacPermissions />} /> */}
         </Route>
         </Route>

@@ -487,6 +487,7 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
           Atoll: { $ifNull: ['$location.province', ''] },
           Island: { $ifNull: ['$location.city', ''] },
           'Account Number': { $ifNull: ['$account.number', ''] },
+          'Sales Model': { $ifNull: ['$sales_model.name', ''] },
           'Service Provider': {
             $cond: {
               if: {
@@ -2366,7 +2367,7 @@ const exportContactProfilesWithHdcClient = async (
         $lookup: {
           from: 'Events',
           let: { 
-            transactionId: '$related_entity.id',
+            // transactionId: '$related_entity.id',
             contactId: '$contact_id'
           },
           pipeline: [
@@ -2374,7 +2375,7 @@ const exportContactProfilesWithHdcClient = async (
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ['$transaction.id', '$$transactionId'] },
+                    // { $eq: ['$transaction.id', '$$transactionId'] },
                     { $eq: ['$contact_id', '$$contactId'] }
                   ]
                 },
@@ -7363,6 +7364,494 @@ const getSubscriptionMetrics = async (startDate, endDate) => {
   }
 };
 
+const exportInfoDealerReports = async (search, startDate, endDate, atoll, island, format, page, limit, serviceProvider, spIsland) => {
+  try {
+    console.log(spIsland, 'sp island dealer');
+    
+    // Calculate timestamps for date filtering
+    let startTimestamp, endTimestamp;
+    if (startDate) {
+      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+    }
+    if (endDate) {
+      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+    }
+
+    // Match stage for filtering
+    let matchStage = {};
+
+    // Date filter for journals
+    if (startDate || endDate) {
+      matchStage.posted_date = {};
+      if (startDate) {
+        matchStage.posted_date.$gte = startTimestamp;
+      }
+      if (endDate) {
+        matchStage.posted_date.$lt = endTimestamp;
+      }
+    }
+
+    if (search) {
+      matchStage.$or = [
+        { account_organisation_name: { $regex: search, $options: 'i' } },
+        { account_number: { $regex: search, $options: 'i' } },
+        { business_name: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Lookup dealer information
+    const lookupStage = {
+      $lookup: {
+        from: 'medianet_dealers',
+        localField: 'account_organisation_id',
+        foreignField: 'merchant_id',
+        as: 'dealer_info'
+      }
+    };
+
+    // Match only records that have dealer info
+    const dealerMatchStage = {
+      $match: {
+        dealer_info: { $ne: [] }
+      }
+    };
+
+    // Aggregation pipeline for counting total items
+    const countPipeline = [
+      { $match: matchStage },
+      lookupStage,
+      dealerMatchStage,
+      { $count: 'totalItems' }
+    ];
+
+    // Aggregation pipeline for results
+    const aggregationQuery = [
+      { $match: matchStage },
+      lookupStage,
+      dealerMatchStage,
+      {
+        $project: {
+          _id: 0,
+          'Dealer ID': { $arrayElemAt: ['$dealer_info.dealer_id', 0] },
+          'Merchant ID': '$account_organisation_id',
+          'Merchant Name': '$account_organisation_name',
+          'Account Number': '$account_number',
+          'Business Name': '$business_name',
+          'Account Balance': {
+            $cond: {
+              if: { $eq: [{ $type: '$account_balance' }, 'decimal'] },
+              then: { $toDouble: '$account_balance' },
+              else: { $toDouble: { $ifNull: ['$account_balance', '0.0'] } }
+            }
+          },
+          'Currency': '$currency',
+          'Transaction Amount': {
+            $cond: {
+              if: { $eq: [{ $type: '$amount' }, 'decimal'] },
+              then: { $toDouble: '$amount' },
+              else: { $toDouble: { $ifNull: ['$amount', '0.0'] } }
+            }
+          },
+          'Transaction Type': '$related_entity.transaction_type',
+          'Posted Date': {
+            $dateToString: {
+              format: '%d-%b-%Y %H:%M:%S',
+              date: { $toDate: { $multiply: ['$posted_date', 1000] } },
+              timezone: 'Indian/Maldives'
+            }
+          },
+          'Submitted By': '$submited_by_user_name',
+          'Reference Code': '$related_entity.reference_code',
+          'Organization': '$organisation_name',
+          'Is Virtual Merchant': {
+            $cond: {
+              if: { $eq: ['$is_virtual_merchant', true] },
+              then: 'Yes',
+              else: 'No'
+            }
+          },
+          'Overdue Amount': {
+            $cond: {
+              if: { $eq: [{ $type: '$overdue_amount' }, 'decimal'] },
+              then: { $toDouble: '$overdue_amount' },
+              else: { $toDouble: { $ifNull: ['$overdue_amount', '0.0'] } }
+            }
+          }
+        }
+      },
+      { $sort: { 'Posted Date': -1 } }
+    ];
+
+    // Add pagination stages for JSON format
+    let results;
+    let pagination = null;
+    
+    if (format === 'json' && page && limit) {
+      const pageNum = parseInt(page, 10) || 1;
+      const limitNum = parseInt(limit, 10) || 10;
+      const skipNum = (pageNum - 1) * limitNum;
+
+      // Get total count
+      const countResult = await mongoose.connection.db
+        .collection('Journals')
+        .aggregate(countPipeline, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+      const totalItems = countResult.length > 0 ? countResult[0].totalItems : 0;
+      const totalPages = Math.ceil(totalItems / limitNum);
+
+      // Add skip and limit to the main query
+      aggregationQuery.push(
+        { $skip: skipNum },
+        { $limit: limitNum }
+      );
+
+      // Execute paginated query
+      results = await mongoose.connection.db
+        .collection('Journals')
+        .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+
+      // Prepare pagination metadata
+      pagination = {
+        totalItems,
+        totalPages,
+        currentPage: pageNum,
+        pageSize: limitNum,
+      };
+    } else {
+      // Execute non-paginated query (for CSV or JSON without pagination)
+      results = await mongoose.connection.db
+        .collection('Journals')
+        .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+    }
+
+    // Handle response format
+    if (format === 'csv') {
+      const fields = [
+        { label: 'Dealer ID', value: 'Dealer ID' },
+        { label: 'Merchant Name', value: 'Merchant Name' },
+        { label: 'Account Number', value: 'Account Number' },
+        { label: 'Business Name', value: 'Business Name' },
+        { label: 'Account Balance', value: 'Account Balance' },
+        { label: 'Transaction Amount', value: 'Transaction Amount' },
+        { label: 'Transaction Type', value: 'Transaction Type' },
+        { label: 'Posted Date', value: 'Posted Date' },
+        { label: 'Submitted By', value: 'Submitted By' },
+        { label: 'Reference Code', value: 'Reference Code' },
+        { label: 'Organization', value: 'Organization' }
+      ];
+      const csvData = parse(results, { fields });
+      return { data: csvData, isCsv: true };
+    }
+
+    // Return JSON with pagination metadata
+    return {
+      data: results,
+      isCsv: false,
+      pagination,
+    };
+  } catch (error) {
+    console.error('Error exporting dealer report:', error);
+    throw new Error('Error exporting dealer report');
+  }
+};
+
+const exportServiceStartDates = async (search, startDate, endDate, atoll, island, page, limit, format) => {
+  try {
+    // Calculate timestamps for date filtering on service start date
+    let startTimestamp, endTimestamp;
+    if (startDate) {
+      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+    }
+    if (endDate) {
+      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+    }
+
+    // Base match stage for search, atoll, and island
+    let matchStage = {};
+
+    if (search) {
+      matchStage.$text = { $search: search };
+    }
+
+    if (atoll) {
+      matchStage['location.province'] = atoll;
+    }
+
+    if (island) {
+      matchStage['location.city'] = island;
+    }
+
+    // Prepare aggregation query
+    const aggregationQuery = [
+      { $match: matchStage },
+      // Unwind services array to get one document per service
+      { $unwind: '$services' },
+      // Filter services based on start date if provided
+      {
+        $match: {
+          ...(startDate || endDate ? {
+            'services.service_terms.start_date': {
+              ...(startDate && { $gte: startTimestamp }),
+              ...(endDate && { $lte: endTimestamp })
+            }
+          } : {})
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          'Customer Name': { $ifNull: ['$profile.name', ''] },
+          'Customer Code': {
+            $ifNull: [
+              {
+                $concat: ["", { $toString: "$profile.code" }]
+              },
+              ''
+            ]
+          },
+          'Service Start Date': {
+            $dateToString: {
+              format: "%d-%m-%Y %H:%M:%S",
+              date: { $toDate: { $multiply: ["$services.service_terms.start_date", 1000] } }
+            }
+          }
+        }
+      }
+    ];
+
+    // Calculate total count for pagination
+    const countPipeline = [
+      { $match: matchStage },
+      { $unwind: '$services' },
+      {
+        $match: {
+          ...(startDate || endDate ? {
+            'services.service_terms.start_date': {
+              ...(startDate && { $gte: startTimestamp }),
+              ...(endDate && { $lte: endTimestamp })
+            }
+          } : {})
+        }
+      },
+      { $count: 'total' }
+    ];
+
+    const countResult = await mongoose.connection.db
+      .collection('ContactProfiles')
+      .aggregate(countPipeline, { maxTimeMS: 600000, allowDiskUse: true })
+      .toArray();
+    
+    const total = countResult.length > 0 ? countResult[0].total : 0;
+    const totalPages = Math.ceil(total / limit);
+
+    // Add pagination to the aggregation query for JSON format
+    if (format === 'json') {
+      aggregationQuery.push(
+        { $skip: (page - 1) * limit },
+        { $limit: parseInt(limit) }
+      );
+    }
+
+    // Perform aggregation to fetch the data
+    const results = await mongoose.connection.db
+      .collection('ContactProfiles')
+      .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+      .toArray();
+
+    // Initialize response object
+    const response = {
+      results,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages,
+      },
+    };
+
+    // Only generate CSV if requested
+    if (format === 'csv') {
+      response.csv = parse(results);
+    }
+
+    return response;
+  } catch (error) {
+    console.error('Error exporting service start dates:', error);
+    throw new Error('Error exporting service start dates');
+  }
+};
+
+const exportRegistrationReports = async (startDate, endDate, format, page, limit) => {
+  try {
+    // Calculate timestamps for date filtering
+    let startTimestamp, endTimestamp;
+    if (startDate) {
+      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+    }
+    if (endDate) {
+      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+    }
+
+    // Match stage for filtering
+    let matchStage = {
+      'related_entity.backoffice_code': { $regex: /^REG\d+/, $options: 'i' }
+    };
+
+    // Date filter
+    if (startDate || endDate) {
+      matchStage.posted_date = {};
+      if (startDate) {
+        matchStage.posted_date.$gte = startTimestamp;
+      }
+      if (endDate) {
+        matchStage.posted_date.$lt = endTimestamp;
+      }
+    }
+
+    // Aggregation pipeline for counting total items
+    const countPipeline = [
+      { $match: matchStage },
+      { $count: 'totalItems' }
+    ];
+
+    // Aggregation pipeline for results
+    const aggregationQuery = [
+      { $match: matchStage },
+      {
+        $project: {
+          _id: 0,
+          'Merchant ID': '$account_organisation_id',
+          'Merchant Name': '$account_organisation_name',
+          'Account Number': '$account_number',
+          'Business Name': '$business_name',
+          'Account Balance': {
+            $cond: {
+              if: { $eq: [{ $type: '$account_balance' }, 'decimal'] },
+              then: { $toDouble: '$account_balance' },
+              else: { $toDouble: { $ifNull: ['$account_balance', '0.0'] } }
+            }
+          },
+          'Currency': '$currency',
+          'Transaction Amount': {
+            $cond: {
+              if: { $eq: [{ $type: '$amount' }, 'decimal'] },
+              then: { $toDouble: '$amount' },
+              else: { $toDouble: { $ifNull: ['$amount', '0.0'] } }
+            }
+          },
+          'Transaction Type': '$related_entity.transaction_type',
+          'Posted Date': {
+            $dateToString: {
+              format: '%d-%b-%Y %H:%M:%S',
+              date: { $toDate: { $multiply: ['$posted_date', 1000] } },
+              timezone: 'Indian/Maldives'
+            }
+          },
+          'Submitted By': '$submited_by_user_name',
+          'Reference Code': '$related_entity.reference_code',
+          'Backoffice Code': '$related_entity.backoffice_code',
+          'Organization': '$organisation_name',
+          'Is Virtual Merchant': {
+            $cond: {
+              if: { $eq: ['$is_virtual_merchant', true] },
+              then: 'Yes',
+              else: 'No'
+            }
+          },
+          'Overdue Amount': {
+            $cond: {
+              if: { $eq: [{ $type: '$overdue_amount' }, 'decimal'] },
+              then: { $toDouble: '$overdue_amount' },
+              else: { $toDouble: { $ifNull: ['$overdue_amount', '0.0'] } }
+            }
+          },
+          'Contact Name': '$contact_name',
+          'Contact Code': '$contact_code'
+        }
+      },
+      { $sort: { 'Posted Date': -1 } }
+    ];
+
+    // Add pagination stages for JSON format
+    let results;
+    let pagination = null;
+    
+    if (format === 'json' && page && limit) {
+      const pageNum = parseInt(page, 10) || 1;
+      const limitNum = parseInt(limit, 10) || 10;
+      const skipNum = (pageNum - 1) * limitNum;
+
+      // Get total count
+      const countResult = await mongoose.connection.db
+        .collection('Journals')
+        .aggregate(countPipeline, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+      const totalItems = countResult.length > 0 ? countResult[0].totalItems : 0;
+      const totalPages = Math.ceil(totalItems / limitNum);
+
+      // Add skip and limit to the main query
+      aggregationQuery.push(
+        { $skip: skipNum },
+        { $limit: limitNum }
+      );
+
+      // Execute paginated query
+      results = await mongoose.connection.db
+        .collection('Journals')
+        .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+
+      // Prepare pagination metadata
+      pagination = {
+        totalItems,
+        totalPages,
+        currentPage: pageNum,
+        pageSize: limitNum,
+      };
+    } else {
+      // Execute non-paginated query (for CSV or JSON without pagination)
+      results = await mongoose.connection.db
+        .collection('Journals')
+        .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
+        .toArray();
+    }
+
+    // Handle response format
+    if (format === 'csv') {
+      const fields = [
+        { label: 'Merchant ID', value: 'Merchant ID' },
+        { label: 'Merchant Name', value: 'Merchant Name' },
+        { label: 'Account Number', value: 'Account Number' },
+        { label: 'Business Name', value: 'Business Name' },
+        { label: 'Account Balance', value: 'Account Balance' },
+        { label: 'Transaction Amount', value: 'Transaction Amount' },
+        { label: 'Transaction Type', value: 'Transaction Type' },
+        { label: 'Posted Date', value: 'Posted Date' },
+        { label: 'Submitted By', value: 'Submitted By' },
+        { label: 'Reference Code', value: 'Reference Code' },
+        { label: 'Backoffice Code', value: 'Backoffice Code' },
+        { label: 'Organization', value: 'Organization' },
+        { label: 'Contact Name', value: 'Contact Name' },
+        { label: 'Contact Code', value: 'Contact Code' }
+      ];
+      const csvData = parse(results, { fields });
+      return { data: csvData, isCsv: true };
+    }
+
+    // Return JSON with pagination metadata
+    return {
+      data: results,
+      isCsv: false,
+      pagination,
+    };
+  } catch (error) {
+    console.error('Error exporting registration report:', error);
+    throw new Error('Error exporting registration report');
+  }
+};
+
 
 module.exports = {
   getReports,
@@ -7395,5 +7884,8 @@ module.exports = {
   exportHdcContactProfiles,
   exportContactProfilesWithHdcClient,
   exportConsolidatedContactProfilesWithHdcClient,
-  getSubscriptionMetrics
+  getSubscriptionMetrics,
+  exportInfoDealerReports,
+  exportServiceStartDates,
+  exportRegistrationReports
 }
