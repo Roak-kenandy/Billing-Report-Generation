@@ -467,8 +467,13 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
             },
           },
           'Registered Date': {
+
+            // $dateToString: {
+            //   format: "%d-%m-%Y %H:%M:%S",
+            //   date: { $toDate: { $multiply: ["$profile.registration_date", 1000] } }
+            // }
             $dateToString: {
-              format: '%d-%b-%Y',
+              format: "%d-%m-%Y %H:%M:%S",
               date: { $toDate: { $multiply: [{ $toLong: '$profile.registration_date' }, 1000] } },
             },
           },
@@ -7852,6 +7857,124 @@ const exportRegistrationReports = async (startDate, endDate, format, page, limit
   }
 };
 
+const { getMySQLConnection } = require("../config/db");
+
+const exportRegistrationFinance = async (startDate, endDate, format, page, limit) => {
+  try {
+    const pool = getMySQLConnection();
+
+    // Handle date filtering on createdAt
+    let whereClause = "WHERE 1=1";
+    const params = [];
+
+    if (startDate) {
+      whereClause += " AND createdAt >= ?";
+      params.push(startDate + " 00:00:00");
+    }
+
+    if (endDate) {
+      whereClause += " AND createdAt <= ?";
+      params.push(endDate + " 23:59:59");
+    }
+
+    // Pagination
+    let pagination = null;
+    let limitQuery = "";
+
+    if (format === "json" && page && limit) {
+      const pageNum = parseInt(page, 10);
+      const limitNum = parseInt(limit, 10);
+      const offset = (pageNum - 1) * limitNum;
+
+      // Count total
+      const [countRows] = await pool.query(
+        `SELECT COUNT(*) AS totalItems FROM Transactions ${whereClause}`,
+        params
+      );
+
+      const totalItems = countRows[0].totalItems;
+      const totalPages = Math.ceil(totalItems / limitNum);
+
+      pagination = {
+        totalItems,
+        totalPages,
+        currentPage: pageNum,
+        pageSize: limitNum,
+      };
+
+      limitQuery = ` LIMIT ${limitNum} OFFSET ${offset}`;
+    }
+
+    // Main query
+    const [rows] = await pool.query(
+      `
+      SELECT
+        id,
+        contactId,
+        personName,
+        phoneNumber,
+        contactCode,
+        accountId,
+        transactionId,
+        customerReference,
+        localId,
+        amount,
+        totalAmount,
+        isExistingUser,
+        bmlStatus,
+        status,
+        paymentInitiatedAt,
+        paymentCompletedAt,
+        createdAt
+      FROM Transactions
+      ${whereClause}
+      ORDER BY createdAt DESC
+      ${limitQuery}
+      `,
+      params
+    );
+
+    // CSV export
+    if (format === "csv") {
+      const fields = [
+        "id",
+        "contactId",
+        "personName",
+        "phoneNumber",
+        "contactCode",
+        "accountId",
+        "transactionId",
+        "customerReference",
+        "localId",
+        "amount",
+        "totalAmount",
+        "isExistingUser",
+        "bmlStatus",
+        "status",
+        "paymentInitiatedAt",
+        "paymentCompletedAt",
+        "createdAt"
+      ];
+
+      const csv = parse(rows, { fields });
+
+      return { data: csv, isCsv: true };
+    }
+
+    // JSON response
+    return {
+      data: rows,
+      isCsv: false,
+      pagination,
+    };
+
+  } catch (err) {
+    console.error("Error generating MySQL registration report:", err);
+    throw new Error("Error generating MySQL registration report");
+  }
+};
+
+
 
 module.exports = {
   getReports,
@@ -7887,5 +8010,5 @@ module.exports = {
   getSubscriptionMetrics,
   exportInfoDealerReports,
   exportServiceStartDates,
-  exportRegistrationReports
+  exportRegistrationReports,
 }
