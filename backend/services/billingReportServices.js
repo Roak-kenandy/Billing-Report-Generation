@@ -7974,6 +7974,493 @@ const exportRegistrationFinance = async (startDate, endDate, format, page, limit
   }
 };
 
+const exportContactOrderReports = async (startDate, endDate, format, page, limit) => {
+  try {
+    // Calculate timestamps
+    let startTimestamp, endTimestamp;
+    if (startDate) {
+      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+    }
+    if (endDate) {
+      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+    }
+
+    // Build match stage for Orders
+    const ordersMatchStage = {};
+    if (startDate || endDate) {
+      ordersMatchStage.submited_date = {};
+      if (startDate) ordersMatchStage.submited_date.$gte = startTimestamp;
+      if (endDate) ordersMatchStage.submited_date.$lt = endTimestamp;
+    }
+
+    // OPTION 1: Reverse the lookup (start from Orders instead of ContactProfiles)
+    // This is more efficient when you have date filters on Orders
+    const aggregationQuery = [
+      // Stage 1: Filter Orders first (reduces dataset early)
+      {
+        $match: ordersMatchStage
+      },
+      
+      // Stage 2: Lookup ContactProfiles (not the other way around)
+      {
+        $lookup: {
+          from: 'ContactProfiles',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'contact'
+        }
+      },
+      
+      // Stage 3: Unwind contact array (each order has one contact)
+      {
+        $unwind: {
+          path: '$contact',
+          preserveNullAndEmptyArrays: false // Only orders with contacts
+        }
+      },
+      
+      // Stage 4: Project required fields
+      {
+        $project: {
+          _id: 0,
+          'Account Number': '$contact.account.number',
+          'Customer Code': '$contact.profile.code',
+          'Customer Name': '$contact.profile.name',
+          'Order State': '$state',
+          'Order Notes': '$notes',
+          'Submitted By User Name': '$submited_by_user_name',
+          'Order Date': {
+            $cond: {
+              if: { $and: ['$submited_date', { $ne: ['$submited_date', null] }] },
+              then: {
+                $dateToString: {
+                  format: '%d-%b-%Y %H:%M:%S',
+                  date: { $toDate: { $multiply: ['$submited_date', 1000] } },
+                  timezone: 'Indian/Maldives'
+                }
+              },
+              else: 'N/A'
+            }
+          },
+          'Order Number': '$number'
+        }
+      },
+      
+      // Stage 5: Sort
+      {
+        $sort: { 'Order Date': -1 }
+      }
+    ];
+
+    // For counting total documents
+    const countPipeline = [
+      { $match: ordersMatchStage },
+      { 
+        $lookup: {
+          from: 'ContactProfiles',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'contact'
+        }
+      },
+      { $unwind: '$contact' },
+      { $count: 'totalItems' }
+    ];
+
+    // Execute queries
+    let results;
+    let totalItems = 0;
+    let pagination = null;
+
+    if (format === 'json' && page && limit) {
+      const pageNum = parseInt(page, 10) || 1;
+      const limitNum = parseInt(limit, 10) || 10;
+      const skipNum = (pageNum - 1) * limitNum;
+
+      try {
+        // Get count - REMOVED INVALID HINT
+        const countResult = await mongoose.connection.db
+          .collection('Orders')
+          .aggregate(countPipeline, { 
+            maxTimeMS: 300000, 
+            allowDiskUse: true
+            // Removed: hint: { submited_date: 1, contact_id: 1 }
+          })
+          .toArray();
+        
+        totalItems = countResult.length > 0 ? countResult[0].totalItems : 0;
+        const totalPages = Math.ceil(totalItems / limitNum);
+
+        // Add pagination to main query
+        const paginatedQuery = [...aggregationQuery];
+        paginatedQuery.push({ $skip: skipNum }, { $limit: limitNum });
+
+        // Get paginated results - REMOVED INVALID HINT
+        results = await mongoose.connection.db
+          .collection('Orders')
+          .aggregate(paginatedQuery, { 
+            maxTimeMS: 300000, 
+            allowDiskUse: true
+            // Removed: hint: { submited_date: 1, contact_id: 1 }
+          })
+          .toArray();
+
+        pagination = {
+          totalItems,
+          totalPages,
+          currentPage: pageNum,
+          pageSize: limitNum,
+        };
+
+      } catch (countError) {
+        console.error('Count query error:', countError);
+        // Fallback: Get count from results
+        const allResults = await mongoose.connection.db
+          .collection('Orders')
+          .aggregate(aggregationQuery, { 
+            maxTimeMS: 300000, 
+            allowDiskUse: true 
+          })
+          .toArray();
+        
+        totalItems = allResults.length;
+        const startIndex = skipNum;
+        const endIndex = Math.min(startIndex + limitNum, totalItems);
+        results = allResults.slice(startIndex, endIndex);
+        
+        const totalPages = Math.ceil(totalItems / limitNum);
+        pagination = {
+          totalItems,
+          totalPages,
+          currentPage: pageNum,
+          pageSize: limitNum,
+        };
+      }
+    } else {
+      // For CSV or non-paginated JSON - REMOVED INVALID HINT
+      results = await mongoose.connection.db
+        .collection('Orders')
+        .aggregate(aggregationQuery, { 
+          maxTimeMS: 300000, 
+          allowDiskUse: true
+          // Removed: hint: { submited_date: 1, contact_id: 1 }
+        })
+        .toArray();
+    }
+
+    // Handle CSV format
+    if (format === 'csv') {
+      const fields = [
+        { label: 'Account Number', value: 'Account Number' },
+        { label: 'Customer Code', value: 'Customer Code' },
+        { label: 'Customer Name', value: 'Customer Name' },
+        { label: 'Order State', value: 'Order State' },
+        { label: 'Order Notes', value: 'Order Notes' },
+        { label: 'Submitted By User Name', value: 'Submitted By User Name' },
+        { label: 'Order Date', value: 'Order Date' },
+        { label: 'Order Number', value: 'Order Number' }
+      ];
+      
+      const csvData = parse(results, { fields });
+      return { data: csvData, isCsv: true };
+    }
+
+    // Return JSON
+    return {
+      data: results,
+      isCsv: false,
+      pagination,
+    };
+
+  } catch (error) {
+    console.error('Error exporting contact order report:', error);
+    throw new Error(`Error exporting contact order report: ${error.message}`);
+  }
+};
+
+const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limit) => {
+  try {
+    // Calculate timestamps
+    let startTimestamp, endTimestamp;
+    if (startDate) {
+      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+    }
+    if (endDate) {
+      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+    }
+
+    // Build match stage for Orders
+    const ordersMatchStage = {};
+    if (startDate || endDate) {
+      ordersMatchStage.submited_date = {};
+      if (startDate) ordersMatchStage.submited_date.$gte = startTimestamp;
+      if (endDate) ordersMatchStage.submited_date.$lt = endTimestamp;
+    }
+
+    const aggregationQuery = [
+      // Stage 1: Filter Orders first
+      {
+        $match: ordersMatchStage
+      },
+      
+      // Stage 2: Lookup ContactProfiles
+      {
+        $lookup: {
+          from: 'ContactProfiles',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'contact'
+        }
+      },
+      
+      // Stage 3: Unwind contact array
+      {
+        $unwind: {
+          path: '$contact',
+          preserveNullAndEmptyArrays: false
+        }
+      },
+      
+      // Stage 4: Unwind items array
+      {
+        $unwind: {
+          path: '$items',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      
+      // Stage 5: Group back to consolidate product information
+      {
+        $group: {
+          _id: '$_id',
+          contact: { $first: '$contact' },
+          state: { $first: '$state' },
+          notes: { $first: '$notes' },
+          submited_by_user_name: { $first: '$submited_by_user_name' },
+          submited_date: { $first: '$submited_date' },
+          number: { $first: '$number' },
+          amounts: { $first: '$amounts' },
+          productNames: { 
+            $push: { 
+              $ifNull: ['$items.product.name', 'N/A'] 
+            } 
+          },
+          productTypes: { 
+            $push: { 
+              $ifNull: ['$items.type.name', 'N/A'] 
+            } 
+          },
+          quantities: { 
+            $push: { 
+              $ifNull: ['$items.quantity', 0] 
+            } 
+          }
+        }
+      },
+      
+      // Stage 6: Project required fields with the 4 new columns
+      {
+        $project: {
+          _id: 0,
+          'Account Number': '$contact.account.number',
+          'Customer Code': '$contact.profile.code',
+          'Customer Name': '$contact.profile.name',
+          'Order State': '$state',
+          'Order Notes': '$notes',
+          'Submitted By User Name': '$submited_by_user_name',
+          'Order Date': {
+            $cond: {
+              if: { $and: ['$submited_date', { $ne: ['$submited_date', null] }] },
+              then: {
+                $dateToString: {
+                  format: '%d-%b-%Y %H:%M:%S',
+                  date: { $toDate: { $multiply: ['$submited_date', 1000] } },
+                  timezone: 'Indian/Maldives'
+                }
+              },
+              else: 'N/A'
+            }
+          },
+          'Order Number': '$number',
+          // New columns
+          'Product Name': {
+            $cond: {
+              if: { $gt: [{ $size: '$productNames' }, 0] },
+              then: { $arrayElemAt: ['$productNames', 0] },
+              else: 'N/A'
+            }
+          },
+          'Product Type': {
+            $cond: {
+              if: { $gt: [{ $size: '$productTypes' }, 0] },
+              then: { $arrayElemAt: ['$productTypes', 0] },
+              else: 'N/A'
+            }
+          },
+          'Quantity': {
+            $cond: {
+              if: { $gt: [{ $size: '$quantities' }, 0] },
+              then: { 
+                $convert: { 
+                  input: { $arrayElemAt: ['$quantities', 0] }, 
+                  to: 'double',
+                  onError: 0,
+                  onNull: 0
+                } 
+              },
+              else: 0
+            }
+          },
+          'Total': {
+            $cond: {
+              if: { $and: ['$amounts.total', { $ne: ['$amounts.total', null] }] },
+              then: { 
+                $convert: { 
+                  input: '$amounts.total', 
+                  to: 'double',
+                  onError: 0,
+                  onNull: 0
+                } 
+              },
+              else: 0
+            }
+          }
+        }
+      },
+      
+      // Stage 7: Sort
+      {
+        $sort: { 'Order Date': -1 }
+      }
+    ];
+
+    // For counting total documents
+    const countPipeline = [
+      { $match: ordersMatchStage },
+      { 
+        $lookup: {
+          from: 'ContactProfiles',
+          localField: 'contact_id',
+          foreignField: 'contact_id',
+          as: 'contact'
+        }
+      },
+      { $unwind: '$contact' },
+      { $count: 'totalItems' }
+    ];
+
+    // Execute queries
+    let results;
+    let totalItems = 0;
+    let pagination = null;
+
+    if (format === 'json' && page && limit) {
+      const pageNum = parseInt(page, 10) || 1;
+      const limitNum = parseInt(limit, 10) || 10;
+      const skipNum = (pageNum - 1) * limitNum;
+
+      try {
+        // Get count
+        const countResult = await mongoose.connection.db
+          .collection('Orders')
+          .aggregate(countPipeline, { 
+            maxTimeMS: 300000, 
+            allowDiskUse: true
+          })
+          .toArray();
+        
+        totalItems = countResult.length > 0 ? countResult[0].totalItems : 0;
+        const totalPages = Math.ceil(totalItems / limitNum);
+
+        // Add pagination to main query
+        const paginatedQuery = [...aggregationQuery];
+        paginatedQuery.push({ $skip: skipNum }, { $limit: limitNum });
+
+        // Get paginated results
+        results = await mongoose.connection.db
+          .collection('Orders')
+          .aggregate(paginatedQuery, { 
+            maxTimeMS: 300000, 
+            allowDiskUse: true
+          })
+          .toArray();
+
+        pagination = {
+          totalItems,
+          totalPages,
+          currentPage: pageNum,
+          pageSize: limitNum,
+        };
+
+      } catch (countError) {
+        console.error('Count query error:', countError);
+        // Fallback
+        const allResults = await mongoose.connection.db
+          .collection('Orders')
+          .aggregate(aggregationQuery, { 
+            maxTimeMS: 300000, 
+            allowDiskUse: true 
+          })
+          .toArray();
+        
+        totalItems = allResults.length;
+        const startIndex = skipNum;
+        const endIndex = Math.min(startIndex + limitNum, totalItems);
+        results = allResults.slice(startIndex, endIndex);
+        
+        const totalPages = Math.ceil(totalItems / limitNum);
+        pagination = {
+          totalItems,
+          totalPages,
+          currentPage: pageNum,
+          pageSize: limitNum,
+        };
+      }
+    } else {
+      // For CSV or non-paginated JSON
+      results = await mongoose.connection.db
+        .collection('Orders')
+        .aggregate(aggregationQuery, { 
+          maxTimeMS: 300000, 
+          allowDiskUse: true
+        })
+        .toArray();
+    }
+
+    // Handle CSV format
+    if (format === 'csv') {
+      const fields = [
+        { label: 'Account Number', value: 'Account Number' },
+        { label: 'Customer Code', value: 'Customer Code' },
+        { label: 'Customer Name', value: 'Customer Name' },
+        { label: 'Order State', value: 'Order State' },
+        { label: 'Order Notes', value: 'Order Notes' },
+        { label: 'Submitted By User Name', value: 'Submitted By User Name' },
+        { label: 'Order Date', value: 'Order Date' },
+        { label: 'Order Number', value: 'Order Number' },
+        { label: 'Product Name', value: 'Product Name' },
+        { label: 'Product Type', value: 'Product Type' },
+        { label: 'Quantity', value: 'Quantity' },
+        { label: 'Total', value: 'Total' }
+      ];
+      
+      const csvData = parse(results, { fields });
+      return { data: csvData, isCsv: true };
+    }
+
+    // Return JSON
+    return {
+      data: results,
+      isCsv: false,
+      pagination,
+    };
+
+  } catch (error) {
+    console.error('Error exporting contact order report:', error);
+    throw new Error(`Error exporting contact order report: ${error.message}`);
+  }
+};
+
 
 
 module.exports = {
@@ -8011,4 +8498,6 @@ module.exports = {
   exportInfoDealerReports,
   exportServiceStartDates,
   exportRegistrationReports,
+  exportContactOrderReports,
+  exportInvoiceOrdersReports
 }

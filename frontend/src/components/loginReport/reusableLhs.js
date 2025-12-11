@@ -57,6 +57,8 @@ const ReusableLhs = () => {
         { name: 'HDC Reports', path: '/hdcReports', icon: <DescriptionIcon /> },
         { name: 'Service Provider Bulk', path: '/bulkService', icon: <CloudUploadIcon />},
         { name: 'Registration Reports', path: '/registrationInformation', icon: <DescriptionIcon /> },
+        { name: 'Order Reports', path: '/orderReports', icon: <DescriptionIcon /> },
+        { name: 'Order Invoices Reports', path: '/orderInvoicesReports', icon: <DescriptionIcon /> },
     ];
 
     const salesReportItems = [
@@ -64,7 +66,7 @@ const ReusableLhs = () => {
         { name: 'Customer Reports', path: '/customerReports', icon: <SupportAgentIcon /> },
     ];
 
-    const rbacReportItems = [
+        const rbacReportItems = [
         { name: 'User Roles', path: '/rbac/roles', icon: <PeopleIcon /> },
     ];
 

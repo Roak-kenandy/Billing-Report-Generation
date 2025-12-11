@@ -1019,6 +1019,102 @@ const exportRegistrationCSVorJSON = async (req, res) => {
   }
 };
 
+const exportRegistrationFinance = async (req, res) => {
+  try {
+    const { startDate, endDate, format, page, limit } = req.query;
+
+    const response = await billingReportService.exportRegistrationFinance(
+      startDate,
+      endDate,
+      format,
+      page,
+      limit
+    );
+
+    if (response.isCsv) {
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        "attachment; filename=registration_information.csv"
+      );
+      return res.send(response.data);
+    }
+
+    res.status(200).json({
+      data: response.data,
+      pagination: response.pagination,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error exporting registration report",
+      error: error.message,
+    });
+  }
+};
+
+const exportContactOrderCSVorJSON = async (req, res) => {
+  try {
+    const { startDate, endDate, format, page, limit } = req.query;
+
+    const response = await billingReportService.exportContactOrderReports(
+      startDate,
+      endDate,
+      format,
+      page,
+      limit
+    );
+
+    if (response.isCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=contact_order_information.csv');
+      res.send(response.data);
+    } else {
+      res.status(200).json({
+        data: response.data,
+        pagination: response.pagination,
+      });
+    }
+  } catch (error) {
+    console.error('Error in exportContactOrderCSVorJSON:', error);
+    res.status(500).json({
+      message: 'Error exporting contact order report',
+      error: error.message,
+    });
+  }
+};
+
+const exportOrderInvoiceCSVorJSON = async (req, res) => {
+  try {
+    const { startDate, endDate, format, page, limit } = req.query;
+
+    const response = await billingReportService.exportInvoiceOrdersReports(
+      startDate,
+      endDate,
+      format,
+      page,
+      limit
+    );
+
+    if (response.isCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=contact_order_information.csv');
+      res.send(response.data);
+    } else {
+      res.status(200).json({
+        data: response.data,
+        pagination: response.pagination,
+      });
+    }
+  } catch (error) {
+    console.error('Error in exportContactOrderCSVorJSON:', error);
+    res.status(500).json({
+      message: 'Error exporting contact order report',
+      error: error.message,
+    });
+  }
+};
+
+
 module.exports = {
   getReports,
   exportCSV,
@@ -1053,5 +1149,8 @@ module.exports = {
   getSubscriptionMetrics,
   exportDealerCSVorJSON,
   exportServiceStartDates,
-  exportRegistrationCSVorJSON
+  exportRegistrationCSVorJSON,
+  exportRegistrationFinance,
+  exportContactOrderCSVorJSON,
+  exportOrderInvoiceCSVorJSON
 }

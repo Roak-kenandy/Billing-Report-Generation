@@ -114,6 +114,13 @@ router.get('/serviceStartDates', billingReportController.exportServiceStartDates
 
 router.get('/registrationInformation', billingReportController.exportRegistrationCSVorJSON);
 
+router.get('/registrationFinance', billingReportController.exportRegistrationFinance);
+
+router.get('/contactOrderInformation', billingReportController.exportContactOrderCSVorJSON);
+
+router.get('/orderInvoiceInformation', billingReportController.exportOrderInvoiceCSVorJSON);
+
+
 
 
 // router.get('/fetchFutureReports', billingReportController.fetchFutureReports);
