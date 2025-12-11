@@ -8247,7 +8247,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
           },
           productTypes: { 
             $push: { 
-              $ifNull: ['$items.type.name', 'N/A'] 
+              $ifNull: ['$items.product.type.name', 'N/A'] 
             } 
           },
           quantities: { 
@@ -8258,7 +8258,18 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         }
       },
       
-      // Stage 6: Project required fields with the 4 new columns
+      // Stage 6: Filter out orders that have "Termed service" product type
+      {
+        $match: {
+          $expr: {
+            $not: {
+              $in: ["Termed service", "$productTypes"]
+            }
+          }
+        }
+      },
+      
+      // Stage 7: Project required fields with the 4 new columns
       {
         $project: {
           _id: 0,
@@ -8313,10 +8324,10 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
           },
           'Total': {
             $cond: {
-              if: { $and: ['$amounts.total', { $ne: ['$amounts.total', null] }] },
+              if: { $and: ['$amounts.sub_total', { $ne: ['$amounts.sub_total', null] }] },
               then: { 
                 $convert: { 
-                  input: '$amounts.total', 
+                  input: '$amounts.sub_total', 
                   to: 'double',
                   onError: 0,
                   onNull: 0
@@ -8328,13 +8339,13 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         }
       },
       
-      // Stage 7: Sort
+      // Stage 8: Sort
       {
         $sort: { 'Order Date': -1 }
       }
     ];
 
-    // For counting total documents
+    // For counting total documents (excluding those with "Termed service")
     const countPipeline = [
       { $match: ordersMatchStage },
       { 
@@ -8346,6 +8357,28 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         }
       },
       { $unwind: '$contact' },
+      { $unwind: { path: '$items', preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: '$_id',
+          contact: { $first: '$contact' },
+          productTypes: { 
+            $push: { 
+              $ifNull: ['$items.product.type.name', 'N/A'] 
+            } 
+          }
+        }
+      },
+      // Filter out orders that have "Termed service" product type
+      {
+        $match: {
+          $expr: {
+            $not: {
+              $in: ["Termed service", "$productTypes"]
+            }
+          }
+        }
+      },
       { $count: 'totalItems' }
     ];
 
@@ -8394,7 +8427,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
 
       } catch (countError) {
         console.error('Count query error:', countError);
-        // Fallback
+        // Fallback: Get all results and apply pagination manually
         const allResults = await mongoose.connection.db
           .collection('Orders')
           .aggregate(aggregationQuery, { 
@@ -8460,8 +8493,6 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
     throw new Error(`Error exporting contact order report: ${error.message}`);
   }
 };
-
-
 
 module.exports = {
   getReports,
