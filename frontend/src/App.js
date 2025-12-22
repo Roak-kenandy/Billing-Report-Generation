@@ -27,6 +27,7 @@ import HdcCustomerInvocieReports from './components/loginReport/hdcCustomerInvoi
 import HdcConsolidatedReports from './components/loginReport/hdcConsolidatedReports';
 import OrderReports from './components/loginReport/OrderReports';
 import OrderInvoicesReports from './components/loginReport/OrderInvoicesReports';
+import VipCustomerReports from './components/loginReport/VipCustomerReports';
 // import DealerInformation from './components/loginReport/DealerInformation';
 // import CustomerPurchaseReports from './components/loginReport/CustomerPurchaseDates';
 import RegistrationReports from './components/loginReport/RegistrationReports';
@@ -89,6 +90,7 @@ function App() {
         <Route path="registrationInformation" element={<RegistrationReports/>} />
         <Route path="orderReports" element={<OrderReports/>} />
         <Route path="orderInvoicesReports" element={<OrderInvoicesReports/>} />
+        <Route path="vipCustomerReports" element={<VipCustomerReports/>} />
         {/* <Route path="rbac/permissions" element={<RbacPermissions />} /> */}
         </Route>
         </Route>

@@ -59,6 +59,7 @@ const ReusableLhs = () => {
         { name: 'Registration Reports', path: '/registrationInformation', icon: <DescriptionIcon /> },
         { name: 'Order Reports', path: '/orderReports', icon: <DescriptionIcon /> },
         { name: 'Order Invoices Reports', path: '/orderInvoicesReports', icon: <DescriptionIcon /> },
+        { name: 'VIP Customer Reports', path: '/vipCustomerReports', icon: <DescriptionIcon /> },
     ];
 
     const salesReportItems = [

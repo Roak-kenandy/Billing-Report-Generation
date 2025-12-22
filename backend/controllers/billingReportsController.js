@@ -49,6 +49,30 @@ const exportContactProfiles = async (req, res) => {
   }
 };
 
+const exportVipContactProfiles = async (req, res) => {
+  try {
+    const { search, startDate, endDate, atoll, island, page = 1, limit = 10, format = 'json' } = req.query;
+
+    const data = await billingReportService.exportVipContactProfiles(search, startDate, endDate, atoll, island, page, limit, format);
+
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=customer-reports.csv');
+      res.send(data.csv);
+    } else {
+      res.json({
+        data: data.results,
+        pagination: data.pagination,
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error processing request',
+      error: error.message,
+    });
+  }
+};
+
 const exportHdcContactProfiles = async (req, res) => {
   try {
     const { search, startDate, endDate, page = 1, limit = 10, format = 'json' } = req.query;
@@ -1152,5 +1176,6 @@ module.exports = {
   exportRegistrationCSVorJSON,
   exportRegistrationFinance,
   exportContactOrderCSVorJSON,
-  exportOrderInvoiceCSVorJSON
+  exportOrderInvoiceCSVorJSON,
+  exportVipContactProfiles
 }

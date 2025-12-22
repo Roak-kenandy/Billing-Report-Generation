@@ -26,6 +26,8 @@ router.get('/customerDealers', billingReportController.exportCustomerCSVorJSON);
 
 router.get('/customerReports', billingReportController.exportContactProfiles);
 
+router.get('/vipCustomerReports', billingReportController.exportVipContactProfiles);
+
 router.get('/hdcCustomerReports', billingReportController.exportHdcContactProfiles);
 
 router.get('/invoiceReports', billingReportController.exportContactProfilesWithInvoiceController);

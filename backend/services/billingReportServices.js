@@ -654,6 +654,163 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
   }
 };
 
+const exportVipContactProfiles = async (search, startDate, endDate, atoll, island, page, limit, format) => {
+  try {
+    // Calculate timestamps for date filtering
+    const startTimestamp = startDate ? Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000) : null;
+    const endTimestamp = endDate ? Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000) : null;
+
+    // Build match stage
+    const matchStage = {};
+    
+    // Date filter - FIXED: Only create filter if dates are provided
+    if (startTimestamp || endTimestamp) {
+      const dateFilter = {};
+      if (startTimestamp) dateFilter.$gte = startTimestamp;
+      if (endTimestamp) dateFilter.$lte = endTimestamp;
+      matchStage['profile.registration_date'] = dateFilter;
+    }
+    
+    // Text search
+    if (search) matchStage.$text = { $search: search };
+    
+    // Location filters
+    if (atoll) matchStage['location.province'] = atoll;
+    if (island) matchStage['location.city'] = island;
+    
+    // Sales model filter - only these specific values
+    matchStage['sales_model.name'] = {
+      $in: ['VIP', 'BP VIP', 'VVIP', 'Employees']
+    };
+
+    // Aggregation pipeline
+    const aggregationQuery = [
+      { $match: matchStage },
+      {
+        $project: {
+          _id: 0,
+          'Contact Name': {
+            $ifNull: ['$profile.name', '']
+          },
+          'Account Number': {
+            $ifNull: ['$account.number', '']
+          },
+          'Sales Model': {
+            $ifNull: ['$sales_model.name', '']
+          },
+          'Product Names': {
+            $cond: {
+              if: { 
+                $and: [
+                  { $isArray: '$services' }, 
+                  { $gt: [{ $size: '$services' }, 0] }
+                ] 
+              },
+              then: {
+                $reduce: {
+                  input: { 
+                    $filter: {
+                      input: '$services',
+                      as: 'service',
+                      cond: { $ne: ['$$service.product.name', null] }
+                    }
+                  },
+                  initialValue: '',
+                  in: {
+                    $cond: {
+                      if: { $eq: ['$$value', ''] },
+                      then: '$$this.product.name',
+                      else: { $concat: ['$$value', ', ', '$$this.product.name'] }
+                    }
+                  }
+                }
+              },
+              else: ''
+            }
+          },
+          'Registered Date': {
+            $cond: {
+              if: { $and: [
+                { $ne: ['$profile.registration_date', null] },
+                { $ne: ['$profile.registration_date', undefined] }
+              ]},
+              then: {
+                $dateToString: {
+                  format: "%d-%m-%Y %H:%M:%S",
+                  date: { 
+                    $toDate: { 
+                      $multiply: [
+                        { $toLong: '$profile.registration_date' }, 
+                        1000
+                      ] 
+                    } 
+                  }
+                }
+              },
+              else: ''
+            }
+          }
+        }
+      },
+      { $sort: { 'Registered Date': -1 } }
+    ];
+
+    // Get total count
+    const countResult = await mongoose.connection.db
+      .collection('ContactProfiles')
+      .aggregate([
+        { $match: matchStage }, 
+        { $count: 'total' }
+      ], { 
+        maxTimeMS: 600000, 
+        allowDiskUse: true 
+      })
+      .toArray();
+    
+    const total = countResult[0]?.total || 0;
+    const totalPages = Math.ceil(total / limit);
+
+    // Add pagination for JSON format
+    if (format === 'json') {
+      const skip = (page - 1) * limit;
+      aggregationQuery.push(
+        { $skip: skip },
+        { $limit: parseInt(limit, 10) }
+      );
+    }
+
+    // Execute query
+    const results = await mongoose.connection.db
+      .collection('ContactProfiles')
+      .aggregate(aggregationQuery, { 
+        maxTimeMS: 600000, 
+        allowDiskUse: true 
+      })
+      .toArray();
+
+    // Prepare response
+    const response = {
+      results,
+      pagination: {
+        page: parseInt(page, 10),
+        limit: parseInt(limit, 10),
+        total,
+        totalPages,
+      },
+    };
+
+    // Generate CSV if requested
+    if (format === 'csv') {
+      response.csv = parse(results);
+    }
+
+    return response;
+  } catch (error) {
+    console.error('Error exporting VIP contact profiles report:', error);
+    throw new Error(`Error exporting VIP contact profiles report: ${error.message}`);
+  }
+};
+
 const exportHdcContactProfiles = async (startDate, endDate, page, limit, format) => {
   try {
     const pageNum = parseInt(page, 10) || 1;
@@ -8530,5 +8687,6 @@ module.exports = {
   exportServiceStartDates,
   exportRegistrationReports,
   exportContactOrderReports,
-  exportInvoiceOrdersReports
+  exportInvoiceOrdersReports,
+  exportVipContactProfiles
 }
