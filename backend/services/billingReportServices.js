@@ -8335,7 +8335,357 @@ const exportContactOrderReports = async (startDate, endDate, format, page, limit
   }
 };
 
+// const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limit) => {
+//   try {
+//     // Calculate timestamps
+//     let startTimestamp, endTimestamp;
+//     if (startDate) {
+//       startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+//     }
+//     if (endDate) {
+//       endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+//     }
+
+//     // Build match stage for Orders
+//     const ordersMatchStage = {};
+//     if (startDate || endDate) {
+//       ordersMatchStage.submited_date = {};
+//       if (startDate) ordersMatchStage.submited_date.$gte = startTimestamp;
+//       if (endDate) ordersMatchStage.submited_date.$lt = endTimestamp;
+//     }
+
+//     const aggregationQuery = [
+//       // Stage 1: Filter Orders first
+//       {
+//         $match: ordersMatchStage
+//       },
+      
+//       // Stage 2: Lookup ContactProfiles
+//       {
+//         $lookup: {
+//           from: 'ContactProfiles',
+//           localField: 'contact_id',
+//           foreignField: 'contact_id',
+//           as: 'contact'
+//         }
+//       },
+      
+//       // Stage 3: Unwind contact array
+//       {
+//         $unwind: {
+//           path: '$contact',
+//           preserveNullAndEmptyArrays: false
+//         }
+//       },
+      
+//       // Stage 4: Unwind items array
+//       {
+//         $unwind: {
+//           path: '$items',
+//           preserveNullAndEmptyArrays: true
+//         }
+//       },
+      
+//       // Stage 5: Group back to consolidate product information
+//       {
+//         $group: {
+//           _id: '$_id',
+//           contact: { $first: '$contact' },
+//           state: { $first: '$state' },
+//           notes: { $first: '$notes' },
+//           submited_by_user_name: { $first: '$submited_by_user_name' },
+//           submited_date: { $first: '$submited_date' },
+//           number: { $first: '$number' },
+//           amounts: { $first: '$amounts' },
+//           productNames: { 
+//             $push: { 
+//               $ifNull: ['$items.product.name', 'N/A'] 
+//             } 
+//           },
+//           productTypes: { 
+//             $push: { 
+//               $ifNull: ['$items.product.type.name', 'N/A'] 
+//             } 
+//           },
+//           quantities: { 
+//             $push: { 
+//               $ifNull: ['$items.quantity', 0] 
+//             } 
+//           }
+//         }
+//       },
+      
+//       // Stage 6: Filter out orders that have "Termed service" product type
+//       {
+//         $match: {
+//           $expr: {
+//             $not: {
+//               $in: ["Termed service", "$productTypes"]
+//             }
+//           }
+//         }
+//       },
+      
+//       // Stage 7: Project required fields with the 4 new columns
+//       {
+//         $project: {
+//           _id: 0,
+//           'Account Number': '$contact.account.number',
+//           'Customer Code': '$contact.profile.code',
+//           'Customer Name': '$contact.profile.name',
+//           'Order State': '$state',
+//           'Order Notes': '$notes',
+//           'Submitted By User Name': '$submited_by_user_name',
+//           'Order Date': {
+//             $cond: {
+//               if: { $and: ['$submited_date', { $ne: ['$submited_date', null] }] },
+//               then: {
+//                 $dateToString: {
+//                   format: '%d-%b-%Y %H:%M:%S',
+//                   date: { $toDate: { $multiply: ['$submited_date', 1000] } },
+//                   timezone: 'Indian/Maldives'
+//                 }
+//               },
+//               else: 'N/A'
+//             }
+//           },
+//           'Order Number': '$number',
+//           // New columns
+//           'Product Name': {
+//             $cond: {
+//               if: { $gt: [{ $size: '$productNames' }, 0] },
+//               then: { $arrayElemAt: ['$productNames', 0] },
+//               else: 'N/A'
+//             }
+//           },
+//           'Product Type': {
+//             $cond: {
+//               if: { $gt: [{ $size: '$productTypes' }, 0] },
+//               then: { $arrayElemAt: ['$productTypes', 0] },
+//               else: 'N/A'
+//             }
+//           },
+//           'Quantity': {
+//             $cond: {
+//               if: { $gt: [{ $size: '$quantities' }, 0] },
+//               then: { 
+//                 $convert: { 
+//                   input: { $arrayElemAt: ['$quantities', 0] }, 
+//                   to: 'double',
+//                   onError: 0,
+//                   onNull: 0
+//                 } 
+//               },
+//               else: 0
+//             }
+//           },
+//           'Total': {
+//             $cond: {
+//               if: { $and: ['$amounts.sub_total', { $ne: ['$amounts.sub_total', null] }] },
+//               then: { 
+//                 $convert: { 
+//                   input: '$amounts.sub_total', 
+//                   to: 'double',
+//                   onError: 0,
+//                   onNull: 0
+//                 } 
+//               },
+//               else: 0
+//             }
+//           }
+//         }
+//       },
+      
+//       // Stage 8: Sort
+//       {
+//         $sort: { 'Order Date': -1 }
+//       }
+//     ];
+
+//     // For counting total documents (excluding those with "Termed service")
+//     const countPipeline = [
+//       { $match: ordersMatchStage },
+//       { 
+//         $lookup: {
+//           from: 'ContactProfiles',
+//           localField: 'contact_id',
+//           foreignField: 'contact_id',
+//           as: 'contact'
+//         }
+//       },
+//       { $unwind: '$contact' },
+//       { $unwind: { path: '$items', preserveNullAndEmptyArrays: true } },
+//       {
+//         $group: {
+//           _id: '$_id',
+//           contact: { $first: '$contact' },
+//           productTypes: { 
+//             $push: { 
+//               $ifNull: ['$items.product.type.name', 'N/A'] 
+//             } 
+//           }
+//         }
+//       },
+//       // Filter out orders that have "Termed service" product type
+//       {
+//         $match: {
+//           $expr: {
+//             $not: {
+//               $in: ["Termed service", "$productTypes"]
+//             }
+//           }
+//         }
+//       },
+//       { $count: 'totalItems' }
+//     ];
+
+//     // Execute queries
+//     let results;
+//     let totalItems = 0;
+//     let pagination = null;
+
+//     if (format === 'json' && page && limit) {
+//       const pageNum = parseInt(page, 10) || 1;
+//       const limitNum = parseInt(limit, 10) || 10;
+//       const skipNum = (pageNum - 1) * limitNum;
+
+//       try {
+//         // Get count
+//         const countResult = await mongoose.connection.db
+//           .collection('Orders')
+//           .aggregate(countPipeline, { 
+//             maxTimeMS: 300000, 
+//             allowDiskUse: true
+//           })
+//           .toArray();
+        
+//         totalItems = countResult.length > 0 ? countResult[0].totalItems : 0;
+//         const totalPages = Math.ceil(totalItems / limitNum);
+
+//         // Add pagination to main query
+//         const paginatedQuery = [...aggregationQuery];
+//         paginatedQuery.push({ $skip: skipNum }, { $limit: limitNum });
+
+//         // Get paginated results
+//         results = await mongoose.connection.db
+//           .collection('Orders')
+//           .aggregate(paginatedQuery, { 
+//             maxTimeMS: 300000, 
+//             allowDiskUse: true
+//           })
+//           .toArray();
+
+//         pagination = {
+//           totalItems,
+//           totalPages,
+//           currentPage: pageNum,
+//           pageSize: limitNum,
+//         };
+
+//       } catch (countError) {
+//         console.error('Count query error:', countError);
+//         // Fallback: Get all results and apply pagination manually
+//         const allResults = await mongoose.connection.db
+//           .collection('Orders')
+//           .aggregate(aggregationQuery, { 
+//             maxTimeMS: 300000, 
+//             allowDiskUse: true 
+//           })
+//           .toArray();
+        
+//         totalItems = allResults.length;
+//         const startIndex = skipNum;
+//         const endIndex = Math.min(startIndex + limitNum, totalItems);
+//         results = allResults.slice(startIndex, endIndex);
+        
+//         const totalPages = Math.ceil(totalItems / limitNum);
+//         pagination = {
+//           totalItems,
+//           totalPages,
+//           currentPage: pageNum,
+//           pageSize: limitNum,
+//         };
+//       }
+//     } else {
+//       // For CSV or non-paginated JSON
+//       results = await mongoose.connection.db
+//         .collection('Orders')
+//         .aggregate(aggregationQuery, { 
+//           maxTimeMS: 300000, 
+//           allowDiskUse: true
+//         })
+//         .toArray();
+//     }
+
+//     // Handle CSV format
+//     if (format === 'csv') {
+//       const fields = [
+//         { label: 'Account Number', value: 'Account Number' },
+//         { label: 'Customer Code', value: 'Customer Code' },
+//         { label: 'Customer Name', value: 'Customer Name' },
+//         { label: 'Order State', value: 'Order State' },
+//         { label: 'Order Notes', value: 'Order Notes' },
+//         { label: 'Submitted By User Name', value: 'Submitted By User Name' },
+//         { label: 'Order Date', value: 'Order Date' },
+//         { label: 'Order Number', value: 'Order Number' },
+//         { label: 'Product Name', value: 'Product Name' },
+//         { label: 'Product Type', value: 'Product Type' },
+//         { label: 'Quantity', value: 'Quantity' },
+//         { label: 'Total', value: 'Total' }
+//       ];
+      
+//       const csvData = parse(results, { fields });
+//       return { data: csvData, isCsv: true };
+//     }
+
+//     // Return JSON
+//     return {
+//       data: results,
+//       isCsv: false,
+//       pagination,
+//     };
+
+//   } catch (error) {
+//     console.error('Error exporting contact order report:', error);
+//     throw new Error(`Error exporting contact order report: ${error.message}`);
+//   }
+// };
+
 const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limit) => {
+  const getSubmitters = async (entityId) => {
+    let allContent = [];
+    let currentPage = 1;
+    let hasMore = true;
+    
+    while (hasMore) {
+      const apiUrl = `https://app.crm.com/backoffice/v2/event_logs?size=100&page=${currentPage}&entity=ORDER&entity_id=${entityId}`;
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'api_key': process.env.CRM_API_KEY,
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      allContent = allContent.concat(data.content || []);
+      hasMore = data.paging?.has_more || false;
+      currentPage++;
+    }
+    
+    const userNames = allContent
+      .map(log => log.submitted_by?.name)
+      .filter(name => name && typeof name === 'string')
+      .filter((name, index, self) => self.indexOf(name) === index);
+    
+    return userNames;
+  };
+
   try {
     // Calculate timestamps
     let startTimestamp, endTimestamp;
@@ -8345,7 +8695,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
     if (endDate) {
       endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
     }
-
+    
     // Build match stage for Orders
     const ordersMatchStage = {};
     if (startDate || endDate) {
@@ -8359,7 +8709,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
       {
         $match: ordersMatchStage
       },
-      
+     
       // Stage 2: Lookup ContactProfiles
       {
         $lookup: {
@@ -8369,7 +8719,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
           as: 'contact'
         }
       },
-      
+     
       // Stage 3: Unwind contact array
       {
         $unwind: {
@@ -8377,7 +8727,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
           preserveNullAndEmptyArrays: false
         }
       },
-      
+     
       // Stage 4: Unwind items array
       {
         $unwind: {
@@ -8385,11 +8735,12 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
           preserveNullAndEmptyArrays: true
         }
       },
-      
+     
       // Stage 5: Group back to consolidate product information
       {
         $group: {
           _id: '$_id',
+          id: { $first: '$id' }, // Order UUID for API
           contact: { $first: '$contact' },
           state: { $first: '$state' },
           notes: { $first: '$notes' },
@@ -8397,24 +8748,24 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
           submited_date: { $first: '$submited_date' },
           number: { $first: '$number' },
           amounts: { $first: '$amounts' },
-          productNames: { 
-            $push: { 
-              $ifNull: ['$items.product.name', 'N/A'] 
-            } 
+          productNames: {
+            $push: {
+              $ifNull: ['$items.product.name', 'N/A']
+            }
           },
-          productTypes: { 
-            $push: { 
-              $ifNull: ['$items.product.type.name', 'N/A'] 
-            } 
+          productTypes: {
+            $push: {
+              $ifNull: ['$items.product.type.name', 'N/A']
+            }
           },
-          quantities: { 
-            $push: { 
-              $ifNull: ['$items.quantity', 0] 
-            } 
+          quantities: {
+            $push: {
+              $ifNull: ['$items.quantity', 0]
+            }
           }
         }
       },
-      
+     
       // Stage 6: Filter out orders that have "Termed service" product type
       {
         $match: {
@@ -8425,17 +8776,22 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
           }
         }
       },
-      
-      // Stage 7: Project required fields with the 4 new columns
+     
+      // Stage 7: Sort by submited_date descending
+      {
+        $sort: { submited_date: -1 }
+      },
+
+      // Stage 8: Project required fields with the 4 new columns
       {
         $project: {
           _id: 0,
+          order_uuid: '$id', // Temporary for API calls
           'Account Number': '$contact.account.number',
           'Customer Code': '$contact.profile.code',
           'Customer Name': '$contact.profile.name',
           'Order State': '$state',
           'Order Notes': '$notes',
-          'Submitted By User Name': '$submited_by_user_name',
           'Order Date': {
             $cond: {
               if: { $and: ['$submited_date', { $ne: ['$submited_date', null] }] },
@@ -8468,13 +8824,13 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
           'Quantity': {
             $cond: {
               if: { $gt: [{ $size: '$quantities' }, 0] },
-              then: { 
-                $convert: { 
-                  input: { $arrayElemAt: ['$quantities', 0] }, 
+              then: {
+                $convert: {
+                  input: { $arrayElemAt: ['$quantities', 0] },
                   to: 'double',
                   onError: 0,
                   onNull: 0
-                } 
+                }
               },
               else: 0
             }
@@ -8482,30 +8838,25 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
           'Total': {
             $cond: {
               if: { $and: ['$amounts.sub_total', { $ne: ['$amounts.sub_total', null] }] },
-              then: { 
-                $convert: { 
-                  input: '$amounts.sub_total', 
+              then: {
+                $convert: {
+                  input: '$amounts.sub_total',
                   to: 'double',
                   onError: 0,
                   onNull: 0
-                } 
+                }
               },
               else: 0
             }
           }
         }
-      },
-      
-      // Stage 8: Sort
-      {
-        $sort: { 'Order Date': -1 }
       }
     ];
 
     // For counting total documents (excluding those with "Termed service")
     const countPipeline = [
       { $match: ordersMatchStage },
-      { 
+      {
         $lookup: {
           from: 'ContactProfiles',
           localField: 'contact_id',
@@ -8519,10 +8870,10 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         $group: {
           _id: '$_id',
           contact: { $first: '$contact' },
-          productTypes: { 
-            $push: { 
-              $ifNull: ['$items.product.type.name', 'N/A'] 
-            } 
+          productTypes: {
+            $push: {
+              $ifNull: ['$items.product.type.name', 'N/A']
+            }
           }
         }
       },
@@ -8539,65 +8890,134 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
       { $count: 'totalItems' }
     ];
 
+    // Helper function to fetch submitters for rows with concurrency control
+    const fetchSubmittersForRows = async (rows) => {
+      const results = [];
+      const concurrencyLimit = 5; // Process 5 requests at a time
+      
+      for (let i = 0; i < rows.length; i += concurrencyLimit) {
+        const chunk = rows.slice(i, i + concurrencyLimit);
+        const chunkPromises = chunk.map(async (row) => {
+          if (!row.order_uuid) {
+            return { 
+              ...row, 
+              order_uuid: undefined,
+              submitterColumns: {} // Add empty submitter columns
+            };
+          }
+          
+          try {
+            const submitters = await getSubmitters(row.order_uuid);
+            
+            // Create submitter columns dynamically
+            const submitterColumns = {};
+            if (submitters && submitters.length > 0) {
+              // Add each submitter to a separate column
+              submitters.forEach((submitter, index) => {
+                const columnName = `Submitted By User Name ${index + 1}`;
+                submitterColumns[columnName] = submitter;
+              });
+            } else {
+              // If no submitters, add at least one column with original value
+              submitterColumns['Submitted By User Name 1'] = row['Submitted By User Name'] || '';
+            }
+            
+            return {
+              ...row,
+              ...submitterColumns,
+              order_uuid: undefined
+            };
+          } catch (err) {
+            // Keep original submitter name if API call fails
+            return {
+              ...row,
+              'Submitted By User Name 1': row['Submitted By User Name'] || '',
+              order_uuid: undefined
+            };
+          }
+        });
+        
+        const chunkResults = await Promise.all(chunkPromises);
+        results.push(...chunkResults);
+      }
+      
+      return results;
+    };
+
     // Execute queries
     let results;
     let totalItems = 0;
     let pagination = null;
-
+    
     if (format === 'json' && page && limit) {
       const pageNum = parseInt(page, 10) || 1;
       const limitNum = parseInt(limit, 10) || 10;
       const skipNum = (pageNum - 1) * limitNum;
-
+      
       try {
         // Get count
         const countResult = await mongoose.connection.db
           .collection('Orders')
-          .aggregate(countPipeline, { 
-            maxTimeMS: 300000, 
+          .aggregate(countPipeline, {
+            maxTimeMS: 300000,
             allowDiskUse: true
           })
           .toArray();
-        
+       
         totalItems = countResult.length > 0 ? countResult[0].totalItems : 0;
         const totalPages = Math.ceil(totalItems / limitNum);
-
+        
         // Add pagination to main query
-        const paginatedQuery = [...aggregationQuery];
-        paginatedQuery.push({ $skip: skipNum }, { $limit: limitNum });
-
+        const paginatedQuery = [...aggregationQuery, { $skip: skipNum }, { $limit: limitNum }];
+        
         // Get paginated results
-        results = await mongoose.connection.db
+        let rawResults = await mongoose.connection.db
           .collection('Orders')
-          .aggregate(paginatedQuery, { 
-            maxTimeMS: 300000, 
+          .aggregate(paginatedQuery, {
+            maxTimeMS: 300000,
             allowDiskUse: true
           })
           .toArray();
 
+        // Add temporary Submitted By User Name column for backward compatibility
+        rawResults = rawResults.map(row => ({
+          ...row,
+          'Submitted By User Name': row['Submitted By User Name'] || ''
+        }));
+
+        // Fetch submitters for each order
+        results = await fetchSubmittersForRows(rawResults);
+       
         pagination = {
           totalItems,
           totalPages,
           currentPage: pageNum,
           pageSize: limitNum,
         };
-
       } catch (countError) {
-        console.error('Count query error:', countError);
         // Fallback: Get all results and apply pagination manually
-        const allResults = await mongoose.connection.db
+        let rawResults = await mongoose.connection.db
           .collection('Orders')
-          .aggregate(aggregationQuery, { 
-            maxTimeMS: 300000, 
-            allowDiskUse: true 
+          .aggregate(aggregationQuery, {
+            maxTimeMS: 300000,
+            allowDiskUse: true
           })
           .toArray();
-        
-        totalItems = allResults.length;
+
+        // Add temporary Submitted By User Name column for backward compatibility
+        rawResults = rawResults.map(row => ({
+          ...row,
+          'Submitted By User Name': row['Submitted By User Name'] || ''
+        }));
+
+        // Fetch submitters for each order
+        const allUpdatedResults = await fetchSubmittersForRows(rawResults);
+       
+        totalItems = allUpdatedResults.length;
         const startIndex = skipNum;
         const endIndex = Math.min(startIndex + limitNum, totalItems);
-        results = allResults.slice(startIndex, endIndex);
-        
+        results = allUpdatedResults.slice(startIndex, endIndex);
+       
         const totalPages = Math.ceil(totalItems / limitNum);
         pagination = {
           totalItems,
@@ -8608,24 +9028,55 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
       }
     } else {
       // For CSV or non-paginated JSON
-      results = await mongoose.connection.db
+      let rawResults = await mongoose.connection.db
         .collection('Orders')
-        .aggregate(aggregationQuery, { 
-          maxTimeMS: 300000, 
+        .aggregate(aggregationQuery, {
+          maxTimeMS: 300000,
           allowDiskUse: true
         })
         .toArray();
+
+      // Add temporary Submitted By User Name column for backward compatibility
+      rawResults = rawResults.map(row => ({
+        ...row,
+        'Submitted By User Name': row['Submitted By User Name'] || ''
+      }));
+
+      // Fetch submitters for each order
+      results = await fetchSubmittersForRows(rawResults);
     }
+
+    // Clean up order_uuid from all results and remove temporary Submitted By User Name column
+    const cleanedResults = results.map(row => {
+      const { order_uuid, 'Submitted By User Name': tempColumn, ...rest } = row;
+      return rest;
+    });
+
+    // Determine all possible submitter column names from all results
+    const allSubmitterColumns = new Set();
+    cleanedResults.forEach(row => {
+      Object.keys(row).forEach(key => {
+        if (key.startsWith('Submitted By User Name')) {
+          allSubmitterColumns.add(key);
+        }
+      });
+    });
+
+    // Sort submitter columns numerically (Submitted By User Name 1, 2, 3...)
+    const sortedSubmitterColumns = Array.from(allSubmitterColumns).sort((a, b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0] || '0');
+      const numB = parseInt(b.match(/\d+/)?.[0] || '0');
+      return numA - numB;
+    });
 
     // Handle CSV format
     if (format === 'csv') {
-      const fields = [
+      const baseFields = [
         { label: 'Account Number', value: 'Account Number' },
         { label: 'Customer Code', value: 'Customer Code' },
         { label: 'Customer Name', value: 'Customer Name' },
         { label: 'Order State', value: 'Order State' },
         { label: 'Order Notes', value: 'Order Notes' },
-        { label: 'Submitted By User Name', value: 'Submitted By User Name' },
         { label: 'Order Date', value: 'Order Date' },
         { label: 'Order Number', value: 'Order Number' },
         { label: 'Product Name', value: 'Product Name' },
@@ -8633,18 +9084,25 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         { label: 'Quantity', value: 'Quantity' },
         { label: 'Total', value: 'Total' }
       ];
-      
-      const csvData = parse(results, { fields });
+
+      // Add submitter columns
+      const submitterFields = sortedSubmitterColumns.map(columnName => ({
+        label: columnName,
+        value: columnName
+      }));
+
+      const fields = [...baseFields, ...submitterFields];
+     
+      const csvData = parse(cleanedResults, { fields });
       return { data: csvData, isCsv: true };
     }
 
     // Return JSON
     return {
-      data: results,
+      data: cleanedResults,
       isCsv: false,
       pagination,
     };
-
   } catch (error) {
     console.error('Error exporting contact order report:', error);
     throw new Error(`Error exporting contact order report: ${error.message}`);
