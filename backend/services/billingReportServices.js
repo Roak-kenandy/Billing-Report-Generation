@@ -472,10 +472,18 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
             //   format: "%d-%m-%Y %H:%M:%S",
             //   date: { $toDate: { $multiply: ["$profile.registration_date", 1000] } }
             // }
-            $dateToString: {
-              format: "%d-%m-%Y %H:%M:%S",
-              date: { $toDate: { $multiply: [{ $toLong: '$profile.registration_date' }, 1000] } },
-            },
+$dateToString: {
+  format: "%d-%m-%Y %H:%M:%S",
+  date: {
+    $toDate: {
+      $multiply: [
+        { $toLong: "$profile.registration_date" },
+        1000
+      ]
+    }
+  },
+  timezone: "+05:00"
+}
           },
           'Address Line 1': { $ifNull: ['$location.address_line1', ''] },
           'Address Line 2': { $ifNull: ['$location.address_line2', ''] },
