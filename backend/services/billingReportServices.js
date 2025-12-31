@@ -212,7 +212,6 @@ const getReports = async (page, limit, search = '', startDate, endDate, atoll, i
 
 const exportReports = async (search, startDate, endDate, atoll, island) => {
   try {
-
     // Calculate timestamps for date filtering
     let startTimestamp, endTimestamp;
     if (startDate) {
@@ -258,6 +257,7 @@ const exportReports = async (search, startDate, endDate, atoll, island) => {
     if (island) {
       matchStage['joinedData2.location.city'] = island;
     }
+
     // Prepare your aggregation query
     const aggregationQuery = [
       {
@@ -298,6 +298,7 @@ const exportReports = async (search, startDate, endDate, atoll, island) => {
       {
         $project: {
           _id: 0,
+          "Submitted By User": "$submited_by_user_name",
           "Contact Code": {
             $concat: ['"', { $toString: { $arrayElemAt: ['$joinedData4.contact_code', 0] } }, '"']
           },
@@ -322,7 +323,6 @@ const exportReports = async (search, startDate, endDate, atoll, island) => {
               else: { $arrayElemAt: ['$joinedData2.company_profile.industry_name', 0] }
             }
           },
-          "Submitted By User": "$submited_by_user_name",
           "Payment Type": {
             $cond: {
               if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
@@ -331,6 +331,42 @@ const exportReports = async (search, startDate, endDate, atoll, island) => {
             }
           },
           "Sales Model": { $arrayElemAt: ['$joinedData2.sales_model.name', 0] },
+          "Available Balance": { $ifNull: [ { $toDouble: { $arrayElemAt: ['$joinedData2.account.balance', 0] } }, 0 ] },
+          "Service Provider": {
+            $let: {
+              vars: {
+                serviceProviderField: {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: { $ifNull: [{ $arrayElemAt: ['$joinedData2.custom_fields', 0] }, []] },
+                        as: 'field',
+                        cond: { $eq: ['$$field.key', 'service_provider'] }
+                      }
+                    },
+                    0
+                  ]
+                }
+              },
+              in: {
+                $cond: {
+                  if: { $ne: ['$$serviceProviderField', null] },
+                  then: '$$serviceProviderField.value_label',
+                  else: 'N/A'
+                }
+              }
+            }
+          },
+          "Wallet Code": {
+            $cond: {
+              if: { $and: [
+                { $ne: [{ $arrayElemAt: ['$joinedData2.wallet', 0] }, null] },
+                { $ne: [{ $arrayElemAt: ['$joinedData2.wallet.code', 0] }, null] }
+              ]},
+              then: { $arrayElemAt: ['$joinedData2.wallet.code', 0] },
+              else: 'N/A'
+            }
+          },
           Area: {
             $cond: {
               if: { $eq: [{ $type: '$joinedData2.tags.name' }, 'array'] },
@@ -338,7 +374,7 @@ const exportReports = async (search, startDate, endDate, atoll, island) => {
               else: '$joinedData2.tags.name',
             }
           },
-          "Service Provider": {
+          "Dealer": {
             $cond: {
               if: { $eq: [{ $type: '$joinedData2.custom_fields.value_label' }, 'array'] },
               then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData2.custom_fields.value_label', 0] }, 0] },
@@ -365,24 +401,58 @@ const exportReports = async (search, startDate, endDate, atoll, island) => {
               format: "%d-%b-%Y",
               date: { $toDate: { $multiply: [{ $toLong: "$services.service_terms.end_date" }, 1000] } }
             }
+          },
+          "Day Count from Cycle End Date to Report Extraction Date": {
+            $round: [
+              {
+                $divide: [
+                  {
+                    $subtract: [
+                      "$$NOW",
+                      {
+                        $toDate: {
+                          $multiply: [
+                            { $toLong: "$services.service_terms.end_date" },
+                            1000
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  86400000
+                ]
+              },
+              0
+            ]
           }
         }
       }
     ];
 
-    // Optionally, filter based on the 'search' query parameter if provided
-    if (search) {
-      aggregationQuery[0].$match = {
-        ...aggregationQuery[0].$match,
-        $text: { $search: search }
-      };
-    }
-
     // Perform aggregation to fetch the data
     const results = await mongoose.connection.db.collection('Subscriptions').aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true }).toArray();
 
-    // Convert the data to CSV format
-    const csvData = parse(results);
+    // Process the results to convert Decimal128 to number (kept as fallback, though now handled in aggregation)
+    const processedResults = results.map(result => {
+      // Convert Available Balance from Decimal128 object to number (if somehow still present)
+      if (result["Available Balance"] && 
+          typeof result["Available Balance"] === 'object' && 
+          result["Available Balance"].$numberDecimal !== undefined) {
+        result["Available Balance"] = parseFloat(result["Available Balance"].$numberDecimal);
+      }
+      
+      // Also handle Price field if it's in Decimal128 format (if somehow still present)
+      if (result["Price"] && 
+          typeof result["Price"] === 'object' && 
+          result["Price"].$numberDecimal !== undefined) {
+        result["Price"] = parseFloat(result["Price"].$numberDecimal);
+      }
+      
+      return result;
+    });
+
+    // Convert the processed data to CSV format
+    const csvData = parse(processedResults);
 
     return csvData;
 
