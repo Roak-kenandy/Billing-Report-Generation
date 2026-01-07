@@ -8806,7 +8806,34 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         }
       },
      
-      // Stage 4: Unwind items array
+      // Stage 4: Lookup Devices collection using contact_id to match ownership.id
+      {
+        $lookup: {
+          from: 'Devices',
+          let: { orderContactId: '$contact_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$ownership.id', '$$orderContactId'] },
+                    { $eq: ['$ownership.type', 'CONTACT'] }
+                  ]
+                }
+              }
+            },
+            {
+              $sort: { submited_date: -1 } // Get the most recent device first
+            },
+            {
+              $limit: 1 // Get only the most recent device
+            }
+          ],
+          as: 'devices'
+        }
+      },
+     
+      // Stage 5: Unwind items array
       {
         $unwind: {
           path: '$items',
@@ -8814,12 +8841,13 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         }
       },
      
-      // Stage 5: Group back to consolidate product information
+      // Stage 6: Group back to consolidate product information
       {
         $group: {
           _id: '$_id',
           id: { $first: '$id' }, // Order UUID for API
           contact: { $first: '$contact' },
+          devices: { $first: '$devices' },
           state: { $first: '$state' },
           notes: { $first: '$notes' },
           submited_by_user_name: { $first: '$submited_by_user_name' },
@@ -8844,7 +8872,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         }
       },
      
-      // Stage 6: Filter out orders that have "Termed service" product type
+      // Stage 7: Filter out orders that have "Termed service" product type
       {
         $match: {
           $expr: {
@@ -8855,12 +8883,12 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         }
       },
      
-      // Stage 7: Sort by submited_date descending
+      // Stage 8: Sort by submited_date descending
       {
         $sort: { submited_date: -1 }
       },
 
-      // Stage 8: Project required fields with the 4 new columns
+      // Stage 9: Project required fields with the 4 new columns and device serial number
       {
         $project: {
           _id: 0,
@@ -8884,6 +8912,33 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
             }
           },
           'Order Number': '$number',
+          // Device Serial Number
+          'Device Serial Number': {
+            $cond: {
+              if: { $and: [{ $isArray: '$devices' }, { $gt: [{ $size: '$devices' }, 0] }] },
+              then: {
+                $let: {
+                  vars: {
+                    device: { $arrayElemAt: ['$devices', 0] }
+                  },
+                  in: {
+                    $cond: {
+                      if: { $ifNull: ['$$device.provisioning.serial_number', false] },
+                      then: '$$device.provisioning.serial_number',
+                      else: {
+                        $cond: {
+                          if: { $ifNull: ['$$device.serial_number', false] },
+                          then: '$$device.serial_number',
+                          else: 'N/A'
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              else: 'N/A'
+            }
+          },
           // New columns
           'Product Name': {
             $cond: {
@@ -9157,6 +9212,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         { label: 'Order Notes', value: 'Order Notes' },
         { label: 'Order Date', value: 'Order Date' },
         { label: 'Order Number', value: 'Order Number' },
+        { label: 'Device Serial Number', value: 'Device Serial Number' },
         { label: 'Product Name', value: 'Product Name' },
         { label: 'Product Type', value: 'Product Type' },
         { label: 'Quantity', value: 'Quantity' },
