@@ -8806,7 +8806,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         }
       },
      
-      // Stage 4: Lookup Devices collection using contact_id to match ownership.id
+      // Stage 4: Lookup ALL Devices for the contact
       {
         $lookup: {
           from: 'Devices',
@@ -8823,13 +8823,10 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
               }
             },
             {
-              $sort: { submited_date: -1 } // Get the most recent device first
-            },
-            {
-              $limit: 1 // Get only the most recent device
+              $sort: { submited_date: -1 }
             }
           ],
-          as: 'devices'
+          as: 'allDevices'
         }
       },
      
@@ -8847,7 +8844,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
           _id: '$_id',
           id: { $first: '$id' }, // Order UUID for API
           contact: { $first: '$contact' },
-          devices: { $first: '$devices' },
+          allDevices: { $first: '$allDevices' },
           state: { $first: '$state' },
           notes: { $first: '$notes' },
           submited_by_user_name: { $first: '$submited_by_user_name' },
@@ -8888,7 +8885,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         $sort: { submited_date: -1 }
       },
 
-      // Stage 9: Project required fields with the 4 new columns and device serial number
+      // Stage 9: Project required fields with the 4 new columns and ALL device serial numbers
       {
         $project: {
           _id: 0,
@@ -8912,25 +8909,43 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
             }
           },
           'Order Number': '$number',
-          // Device Serial Number
-          'Device Serial Number': {
+          // ALL Device Serial Numbers - concatenated with commas
+          'Device Serial Numbers': {
             $cond: {
-              if: { $and: [{ $isArray: '$devices' }, { $gt: [{ $size: '$devices' }, 0] }] },
+              if: { $and: [{ $isArray: '$allDevices' }, { $gt: [{ $size: '$allDevices' }, 0] }] },
               then: {
-                $let: {
-                  vars: {
-                    device: { $arrayElemAt: ['$devices', 0] }
-                  },
+                $reduce: {
+                  input: '$allDevices',
+                  initialValue: '',
                   in: {
-                    $cond: {
-                      if: { $ifNull: ['$$device.provisioning.serial_number', false] },
-                      then: '$$device.provisioning.serial_number',
-                      else: {
-                        $cond: {
-                          if: { $ifNull: ['$$device.serial_number', false] },
-                          then: '$$device.serial_number',
-                          else: 'N/A'
+                    $let: {
+                      vars: {
+                        currentSerialNumber: {
+                          $cond: {
+                            if: { $ifNull: ['$$this.provisioning.serial_number', false] },
+                            then: '$$this.provisioning.serial_number',
+                            else: {
+                              $cond: {
+                                if: { $ifNull: ['$$this.serial_number', false] },
+                                then: '$$this.serial_number',
+                                else: ''
+                              }
+                            }
+                          }
                         }
+                      },
+                      in: {
+                        $cond: [
+                          { $eq: ['$$value', ''] },
+                          '$$currentSerialNumber',
+                          {
+                            $concat: [
+                              '$$value',
+                              { $cond: [{ $ne: ['$$currentSerialNumber', ''] }, ', ', ''] },
+                              '$$currentSerialNumber'
+                            ]
+                          }
+                        ]
                       }
                     }
                   }
@@ -9212,7 +9227,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         { label: 'Order Notes', value: 'Order Notes' },
         { label: 'Order Date', value: 'Order Date' },
         { label: 'Order Number', value: 'Order Number' },
-        { label: 'Device Serial Number', value: 'Device Serial Number' },
+        { label: 'Device Serial Numbers', value: 'Device Serial Numbers' },
         { label: 'Product Name', value: 'Product Name' },
         { label: 'Product Type', value: 'Product Type' },
         { label: 'Quantity', value: 'Quantity' },
