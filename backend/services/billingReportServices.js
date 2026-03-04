@@ -463,7 +463,7 @@ const exportReports = async (search, startDate, endDate, atoll, island) => {
 };
 
 
-const exportContactProfiles = async (search, startDate, endDate, atoll, island, page, limit, format) => {
+const exportContactProfiles = async (search, startDate, endDate, atoll, island, page, limit, format, deviceProductNameFilter) => {
   try {
     // Calculate timestamps for date filtering
     let startTimestamp, endTimestamp;
@@ -519,9 +519,13 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
           as: 'joinedDataJournals',
         },
       },
+      ...(deviceProductNameFilter
+        ? [{ $match: { 'joinedDataDevices.product.name': { $regex: deviceProductNameFilter, $options: 'i' } } }]
+        : []),
       {
         $project: {
           _id: 0,
+          contact_id: 1,
           Name: {
             $concat: [
               { $ifNull: ['$demographics.first_name', ''] },
@@ -537,23 +541,10 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
             },
           },
           'Registered Date': {
-
-            // $dateToString: {
-            //   format: "%d-%m-%Y %H:%M:%S",
-            //   date: { $toDate: { $multiply: ["$profile.registration_date", 1000] } }
-            // }
-$dateToString: {
-  format: "%d-%m-%Y %H:%M:%S",
-  date: {
-    $toDate: {
-      $multiply: [
-        { $toLong: "$profile.registration_date" },
-        1000
-      ]
-    }
-  },
-  timezone: "+05:00"
-}
+            $dateToString: {
+              format: "%d-%m-%Y %H:%M:%S",
+              date: { $toDate: { $multiply: ["$profile.registration_date", 1000] } }
+            }
           },
           'Address Line 1': { $ifNull: ['$location.address_line1', ''] },
           'Address Line 2': { $ifNull: ['$location.address_line2', ''] },
@@ -570,7 +561,119 @@ $dateToString: {
           Atoll: { $ifNull: ['$location.province', ''] },
           Island: { $ifNull: ['$location.city', ''] },
           'Account Number': { $ifNull: ['$account.number', ''] },
+          'Customer Type': { $ifNull: ['$profile.type', ''] },
           'Sales Model': { $ifNull: ['$sales_model.name', ''] },
+          'Account Balance': {
+            $cond: {
+              if: { $eq: [{ $type: '$account.balance' }, 'array'] },
+              then: { $toDouble: { $arrayElemAt: ['$account.balance', 0] } },
+              else: { $toDouble: { $ifNull: ['$account.balance', '0.0'] } },
+            },
+          },
+          'Wallet Balance': {
+            $cond: {
+              if: { $eq: [{ $type: '$wallet.balance' }, 'array'] },
+              then: { $toDouble: { $arrayElemAt: ['$wallet.balance', 0] } },
+              else: { $toDouble: { $ifNull: ['$wallet.balance', '0.0'] } },
+            },
+          },
+          'Email': {
+            $cond: {
+              if: {
+                $and: [
+                  { $isArray: '$custom_fields' },
+                  {
+                    $in: [
+                      'email',
+                      { $map: { input: '$custom_fields', as: 'field', in: '$$field.key' } },
+                    ],
+                  },
+                ],
+              },
+              then: {
+                $let: {
+                  vars: {
+                    emailField: {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: '$custom_fields',
+                            as: 'field',
+                            cond: { $eq: ['$$field.key', 'email'] },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  },
+                  in: {
+                    $ifNull: [
+                      '$$emailField.value_label',
+                      { $ifNull: ['$$emailField.value', ''] },
+                    ],
+                  },
+                },
+              },
+              else: {
+                $ifNull: [
+                  '$email',
+                  { $ifNull: ['$contact.email', { $ifNull: ['$profile.email', ''] }] },
+                ],
+              },
+            },
+          },
+          'NIC': {
+            $cond: {
+              if: {
+                $and: [
+                  { $isArray: '$custom_fields' },
+                  {
+                    $or: [
+                      {
+                        $in: [
+                          'id_number',
+                          { $map: { input: '$custom_fields', as: 'field', in: '$$field.key' } },
+                        ],
+                      },
+                      {
+                        $in: [
+                          'id _number',
+                          { $map: { input: '$custom_fields', as: 'field', in: '$$field.key' } },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              then: {
+                $let: {
+                  vars: {
+                    idField: {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: '$custom_fields',
+                            as: 'field',
+                            cond: {
+                              $in: ['$$field.key', ['id_number', 'id _number']],
+                            },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  },
+                  in: {
+                    $ifNull: [
+                      '$$idField.value_label',
+                      { $ifNull: ['$$idField.value', ''] },
+                    ],
+                  },
+                },
+              },
+              else: '',
+            },
+          },
           'Service Provider': {
             $cond: {
               if: {
@@ -637,14 +740,6 @@ $dateToString: {
               else: '',
             },
           },
-    'Customer Code': {
-      $ifNull: [
-        {
-          $concat: ["", { $toString: "$profile.code" }]
-        },
-        ''
-      ]
-    },
           Tags: {
             $cond: {
               if: { $isArray: '$tags' },
@@ -682,24 +777,96 @@ $dateToString: {
               else: '',
             },
           },
+          'Serial Number': {
+            $cond: {
+              if: {
+                $and: [
+                  { $isArray: '$joinedDataDevices' },
+                  { $gt: [{ $size: '$joinedDataDevices' }, 0] },
+                ],
+              },
+              then: {
+                $reduce: {
+                  input: '$joinedDataDevices',
+                  initialValue: '',
+                  in: {
+                    $concat: [
+                      '$$value',
+                      { $cond: { if: { $eq: ['$$value', ''] }, then: '', else: ', ' } },
+                      {
+                        $ifNull: [
+                          '$$this.provisioning.serial_number',
+                          { $ifNull: ['$$this.serial_number', ''] },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              },
+              else: '',
+            },
+          },
+          'Electronic ID': {
+            $cond: {
+              if: {
+                $and: [
+                  { $isArray: '$joinedDataDevices' },
+                  { $gt: [{ $size: '$joinedDataDevices' }, 0] },
+                ],
+              },
+              then: {
+                $reduce: {
+                  input: '$joinedDataDevices',
+                  initialValue: '',
+                  in: {
+                    $concat: [
+                      '$$value',
+                      { $cond: { if: { $eq: ['$$value', ''] }, then: '', else: ', ' } },
+                      {
+                        // Normalize electronic_id so it matches CRM style:
+                        // remove any ':' characters (e.g. D8:0C:CF... -> D80CCF...)
+                        $replaceAll: {
+                          input: { $toString: { $ifNull: ['$$this.electronic_id', ''] } },
+                          find: ':',
+                          replacement: '',
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+              else: '',
+            },
+          },
         },
       },
     ];
 
-    // Calculate total count for pagination
-    const countPipeline = [{ $match: matchStage }, { $count: 'total' }];
+    // Calculate total count for pagination (include device filter when applied)
+    const countPipeline = [
+      { $match: matchStage },
+      ...(deviceProductNameFilter
+        ? [
+            { $lookup: { from: 'Devices', localField: 'contact_id', foreignField: 'ownership.id', as: 'joinedDataDevices' } },
+            { $match: { 'joinedDataDevices.product.name': { $regex: deviceProductNameFilter, $options: 'i' } } },
+          ]
+        : []),
+      { $count: 'total' },
+    ];
     const countResult = await mongoose.connection.db
       .collection('ContactProfiles')
       .aggregate(countPipeline, { maxTimeMS: 600000, allowDiskUse: true })
       .toArray();
-    const total = countResult.length > 0 ? countResult[0].total : 0;
-    const totalPages = Math.ceil(total / limit);
+    const total = countResult.length > 0 ? Number(countResult[0].total) : 0;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, parseInt(limit, 10) || 10);
+    const totalPages = limitNum > 0 ? Math.max(1, Math.ceil(total / limitNum)) : 0;
 
     // Add pagination to the aggregation query for JSON format
     if (format === 'json') {
       aggregationQuery.push(
-        { $skip: (page - 1) * limit },
-        { $limit: parseInt(limit) }
+        { $skip: (pageNum - 1) * limitNum },
+        { $limit: limitNum }
       );
     }
 
@@ -713,8 +880,8 @@ $dateToString: {
     const response = {
       results,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
         totalPages,
       },
@@ -729,6 +896,354 @@ $dateToString: {
   } catch (error) {
     console.error('Error exporting contact profiles report:', error);
     throw new Error('Error exporting contact profiles report');
+  }
+};
+
+/**
+ * Migration reports – based on customer contact profiles,
+ * enriched with subscription/account information from exportCustomerReports.
+ * Returns the same shape as customer reports plus extra columns used by the Migration UI.
+ */
+const exportMigrationReports = async (search, startDate, endDate, atoll, island, page, limit, format) => {
+  try {
+    const isCsv = format === 'csv';
+
+    // Always get base customer report data (with "Hits Hybrid Box" filter applied in DB for correct pagination)
+    const baseResponse = await exportContactProfiles(
+      search,
+      startDate,
+      endDate,
+      atoll,
+      island,
+      isCsv ? 1 : page,
+      isCsv ? 0 : limit,
+      isCsv ? 'csv' : 'json',
+      'hits hybrid box'
+    );
+
+    const baseRows = Array.isArray(baseResponse.results) ? baseResponse.results : [];
+    const pagination = baseResponse.pagination || null;
+
+    const contactIds = [...new Set(baseRows.map((row) => row.contact_id).filter(Boolean))];
+
+    // Run Subscriptions, Customer reports, and (for CSV) Devices in parallel to speed up export
+    const subsPromise =
+      contactIds.length > 0
+        ? mongoose.connection.db
+            .collection('Subscriptions')
+            .aggregate(
+              [
+                { $match: { contact_id: { $in: contactIds } } },
+                { $unwind: '$services' },
+                {
+                  $addFields: {
+                    _productNameLower: {
+                      $toLower: {
+                        $toString: { $ifNull: ['$services.product.name', ''] },
+                      },
+                    },
+                  },
+                },
+                {
+                  $match: {
+                    $and: [
+                      { _productNameLower: { $not: { $regex: 'video club' } } },
+                      { _productNameLower: { $not: { $regex: 'big screen' } } },
+                    ],
+                  },
+                },
+                {
+                  $project: {
+                    contact_id: 1,
+                    ServiceName: '$services.product.name',
+                    StartDate: {
+                      $cond: {
+                        if: { $ifNull: ['$services.service_terms.start_date', false] },
+                        then: {
+                          $dateToString: {
+                            format: '%d-%m-%Y',
+                            date: { $toDate: { $multiply: ['$services.service_terms.start_date', 1000] } },
+                          },
+                        },
+                        else: '',
+                      },
+                    },
+                    EndDate: {
+                      $cond: {
+                        if: {
+                          $ifNull: [
+                            {
+                              $ifNull: ['$services.rated_up_to_date', '$services.service_terms.end_date'],
+                            },
+                            false,
+                          ],
+                        },
+                        then: {
+                          $dateToString: {
+                            format: '%d-%m-%Y',
+                            date: {
+                              $toDate: {
+                                $multiply: [
+                                  {
+                                    $ifNull: [
+                                      '$services.rated_up_to_date',
+                                      '$services.service_terms.end_date',
+                                    ],
+                                  },
+                                  1000,
+                                ],
+                              },
+                            },
+                          },
+                        },
+                        else: '',
+                      },
+                    },
+                    StartSort: '$services.service_terms.start_date',
+                  },
+                },
+                { $sort: { StartSort: -1 } },
+                {
+                  $group: {
+                    _id: '$contact_id',
+                    ServiceName: { $first: '$ServiceName' },
+                    StartDate: { $first: '$StartDate' },
+                    EndDate: { $first: '$EndDate' },
+                  },
+                },
+              ],
+              { maxTimeMS: 600000, allowDiskUse: true }
+            )
+            .toArray()
+        : Promise.resolve([]);
+
+    const customerPromise = exportCustomerReports(
+      search,
+      startDate,
+      endDate,
+      atoll,
+      island,
+      'json',
+      isCsv ? undefined : page,
+      isCsv ? undefined : limit
+    );
+
+    const devicesPromise =
+      format === 'csv' && contactIds.length > 0
+        ? mongoose.connection.db
+            .collection('Devices')
+            .aggregate(
+              [
+                { $match: { 'ownership.id': { $in: contactIds } } },
+                {
+                  $project: {
+                    contact_id: '$ownership.id',
+                    deviceName: { $ifNull: ['$product.name', ''] },
+                    serialNumber: {
+                      $toString: {
+                        $ifNull: ['$provisioning.serial_number', { $ifNull: ['$serial_number', ''] }],
+                      },
+                    },
+                    electronicId: {
+                      $replaceAll: {
+                        input: { $toString: { $ifNull: ['$electronic_id', ''] } },
+                        find: ':',
+                        replacement: '',
+                      },
+                    },
+                    deviceCode: {
+                      $let: {
+                        vars: {
+                          cf: {
+                            $arrayElemAt: [
+                              {
+                                $filter: {
+                                  input: { $ifNull: ['$custom_fields', []] },
+                                  as: 'f',
+                                  cond: { $eq: ['$$f.key', 'code'] },
+                                },
+                              },
+                              0,
+                            ],
+                          },
+                        },
+                        in: { $ifNull: ['$$cf.value_label', { $ifNull: ['$$cf.value', ''] }] },
+                      },
+                    },
+                  },
+                },
+              ],
+              { maxTimeMS: 600000, allowDiskUse: true }
+            )
+            .toArray()
+        : Promise.resolve([]);
+
+    const [subsResults, customerResponse, deviceDocs] = await Promise.all([
+      subsPromise,
+      customerPromise,
+      devicesPromise,
+    ]);
+
+    // Build service index from Subscriptions result (only non–Video Club TV services)
+    const serviceByContactId = new Map();
+    const contactIdsWithNonVideoClubService = new Set();
+    if (Array.isArray(subsResults)) {
+      for (const doc of subsResults) {
+        const name = (doc.ServiceName || '').trim();
+        const nameLower = name.toLowerCase();
+        if (nameLower.includes('video club') || nameLower.includes('big screen')) {
+          continue;
+        }
+        contactIdsWithNonVideoClubService.add(doc._id);
+        serviceByContactId.set(doc._id, {
+          serviceName: doc.ServiceName || '',
+          startDate: doc.StartDate || '',
+          endDate: doc.EndDate || '',
+        });
+      }
+    }
+
+    // Exclude customers who have only Video Club TV (and related): show only those with at least one other service
+    const filteredBaseRows =
+      contactIdsWithNonVideoClubService.size > 0
+        ? baseRows.filter((row) => row.contact_id && contactIdsWithNonVideoClubService.has(row.contact_id))
+        : baseRows;
+
+    const customerRows = customerResponse && Array.isArray(customerResponse.data)
+      ? customerResponse.data
+      : [];
+
+    // Index enrichment rows by Account Number for quick lookup
+    const byAccountNumber = new Map();
+    for (const row of customerRows) {
+      const acc = row['Account Number'];
+      if (acc) {
+        byAccountNumber.set(acc, row);
+      }
+    }
+
+    const enriched = filteredBaseRows.map((row) => {
+      const accNumber = row['Account Number'];
+      const details = accNumber ? byAccountNumber.get(accNumber) : undefined;
+
+      const svcInfo = row.contact_id ? serviceByContactId.get(row.contact_id) : undefined;
+      const serviceName = svcInfo ? svcInfo.serviceName : '';
+      const startDateStr = svcInfo ? svcInfo.startDate : '';
+      const endDateStr = svcInfo ? svcInfo.endDate : '';
+
+      return {
+        ...row,
+        // Prefer values already present on the base row, fall back to enriched data
+        'Sales Model': row['Sales Model'] ?? (details ? details['Sales Model'] : '') ?? '',
+        'Account Balance': (row['Account Balance'] != null && row['Account Balance'] !== undefined)
+          ? String(row['Account Balance'])
+          : (details ? (details['Account Balance'] ?? '') : ''),
+        'Start Date': startDateStr,
+        'End Date': endDateStr,
+        'Service Name': serviceName,
+        'Customer Type': row['Customer Type'] ?? (details ? (details['Customer Type'] ?? '') : '') ?? '',
+        // Best-effort mappings / placeholders – can be refined when field names are confirmed
+        'Electronic ID': (row['Electronic ID'] != null && String(row['Electronic ID']).trim() !== '')
+          ? String(row['Electronic ID']).trim()
+          : (row['Customer Code'] ?? ''),
+        'Wallet Balance': (row['Wallet Balance'] != null && row['Wallet Balance'] !== undefined)
+          ? String(row['Wallet Balance'])
+          : '',
+        'Email': (row['Email'] != null && row['Email'] !== undefined) ? String(row['Email']) : '',
+        'NIC': (row['NIC'] != null && row['NIC'] !== undefined) ? String(row['NIC']) : '',
+      };
+    });
+
+    // Handle CSV export: one row per device (each device on its own line), first row full then device-only rows, blank row between customers
+    if (format === 'csv') {
+      const fields = [
+        'Name',
+        'Customer Code',
+        'Phone',
+        'Registered Date',
+        'Account Number',
+        'Address Line 1',
+        'Address Line 2',
+        'Address Name',
+        'City',
+        'Country',
+        'Province',
+        'Atoll',
+        'Island',
+        'Service Provider',
+        'Device Code',
+        'Tags',
+        'Device Name',
+        'Serial Number',
+        'Service Name',
+        'Start Date',
+        'End Date',
+        'Sales Model',
+        'Electronic ID',
+        'Account Balance',
+        'Wallet Balance',
+        'Email',
+        'NIC',
+        'Customer Type',
+      ];
+
+      // Use deviceDocs already fetched in parallel (when format is csv)
+      const devicesByContactId = new Map();
+      if (Array.isArray(deviceDocs) && deviceDocs.length > 0) {
+        for (const d of deviceDocs) {
+          const cid = d.contact_id;
+          if (!devicesByContactId.has(cid)) devicesByContactId.set(cid, []);
+          devicesByContactId.get(cid).push({
+            deviceName: d.deviceName || '',
+            serialNumber: d.serialNumber || '',
+            electronicId: d.electronicId || '',
+            deviceCode: d.deviceCode || '',
+          });
+        }
+      }
+
+      const csvRows = [];
+      const emptyRow = {};
+      for (const key of fields) emptyRow[key] = '';
+
+      for (let i = 0; i < enriched.length; i++) {
+        const row = enriched[i];
+        const devices = row.contact_id ? (devicesByContactId.get(row.contact_id) || []) : [];
+
+        if (devices.length === 0) {
+          csvRows.push({ ...row });
+          csvRows.push({ ...emptyRow });
+          continue;
+        }
+
+        for (let j = 0; j < devices.length; j++) {
+          const dev = devices[j];
+          csvRows.push({
+            ...row,
+            'Device Name': dev.deviceName,
+            'Serial Number': dev.serialNumber,
+            'Electronic ID': dev.electronicId,
+            'Device Code': dev.deviceCode,
+          });
+        }
+        csvRows.push({ ...emptyRow });
+      }
+
+      const csvData = parse(csvRows, { fields });
+      return {
+        csv: csvData,
+        results: enriched,
+        pagination,
+      };
+    }
+
+    return {
+      results: enriched,
+      pagination,
+    };
+  } catch (error) {
+    console.error('Error exporting migration reports:', error);
+    throw new Error('Error exporting migration reports');
   }
 };
 
@@ -9284,6 +9799,7 @@ module.exports = {
   getVipTags,
   exportCustomerCollection,
   exportContactProfiles,
+  exportMigrationReports,
   exportContactProfilesWithInvoice,
   exportContactProfilesWithHdc,
   exportHdcContactProfiles,

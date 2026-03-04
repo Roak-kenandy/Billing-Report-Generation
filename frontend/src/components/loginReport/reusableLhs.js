@@ -65,6 +65,7 @@ const ReusableLhs = () => {
     const salesReportItems = [
         { name: 'Service Request Reports', path: '/serviceRequest', icon: <SupportAgentIcon /> },
         { name: 'Customer Reports', path: '/customerReports', icon: <SupportAgentIcon /> },
+        { name: 'Migration Reports', path: '/customerNewReports', icon: <SupportAgentIcon /> },
     ];
 
         const rbacReportItems = [
