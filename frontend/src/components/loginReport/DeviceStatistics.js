@@ -10,21 +10,21 @@ import {
     CircularProgress,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
 const DeviceStatistics = () => {
     const [loading, setLoading] = useState(true);
     const [deviceStats, setDeviceStats] = useState([]);
     const [downloading, setDownloading] = useState(false); // State for download button
     const isSmallScreen = useMediaQuery('(max-width:600px)');
-    // const API_URL = 'http://localhost:3003/billing-reports';
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    const API_URL = getApiBaseUrl();
 
     // Fetch device statistics for display
     const fetchDeviceStatistics = async () => {
         setLoading(true);
         try {
             const url = `${API_URL}/devices/statistics`;
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: getAuthHeaders() });
             if (!response.ok) throw Error(response.status);
             const data = await response.json();
             const stats = data.statistics || [];
@@ -42,7 +42,7 @@ const DeviceStatistics = () => {
         setDownloading(true);
         try {
             const url = `${API_URL}/devices/statistics/export`;
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: getAuthHeaders() });
             console.log('Download URL:', url);
             if (!response.ok) {
                 const errorText = await response.text();

@@ -23,6 +23,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { getApiBaseUrl, getAuthHeaders } from '../utils/auth';
 
 const BillingReports = () => {
     const [reports, setReports] = useState([]);
@@ -40,13 +41,12 @@ const BillingReports = () => {
     const [selectedIsland, setSelectedIsland] = useState('');
     const [appliedAtoll, setAppliedAtoll] = useState('');
     const [appliedIsland, setAppliedIsland] = useState('');
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
-    // const API_URL = 'http://localhost:3003/billing-reports';
+    const API_URL = getApiBaseUrl();
 
     useEffect(() => {
         const fetchAtolls = async () => {
             try {
-                const response = await fetch(`${API_URL}/getAtolls`);
+                const response = await fetch(`${API_URL}/getAtolls`, { headers: getAuthHeaders() });
                 const data = await response.json();
                 setAtolls(data.data);
             } catch (err) {
@@ -72,7 +72,7 @@ const BillingReports = () => {
                 if (selectedIslandName) url += `&island=${encodeURIComponent(selectedIslandName)}`;
             }
 
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: getAuthHeaders() });
             const data = await response.json();
             setReports(data.data);
             setPagination(data.pagination);
@@ -138,7 +138,7 @@ const BillingReports = () => {
                 if (selectedIslandName) url += `&island=${encodeURIComponent(selectedIslandName)}`;
             }
 
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: getAuthHeaders() });
             if (!response.ok) throw new Error('Export failed');
             const blob = await response.blob();
             const downloadUrl = window.URL.createObjectURL(blob);

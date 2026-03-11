@@ -24,6 +24,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import ClearIcon from '@mui/icons-material/Clear';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
 const DealerReport = () => {
     const [reports, setReports] = useState([]);
@@ -38,13 +39,13 @@ const DealerReport = () => {
     const [appliedDealer, setAppliedDealer] = useState('');
     const [appliedStartDate, setAppliedStartDate] = useState('');
     const [appliedEndDate, setAppliedEndDate] = useState('');
-    // const API_URL = 'http://localhost:3003/billing-reports';
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    // const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    const API_URL = getApiBaseUrl();
 
     useEffect(() => {
         const fetchDealers = async () => {
             try {
-                const response = await fetch(`${API_URL}/getDealerNames`);
+                const response = await fetch(`${API_URL}/getDealerNames`, { headers: getAuthHeaders() });
                 const data = await response.json();
                 setDealers(data.data.data);
             } catch (err) {
@@ -64,7 +65,7 @@ const DealerReport = () => {
                 const selectedDealerName = dealers.find((dealer) => dealer.dealerName === appliedDealer);
                 if (selectedDealerName) url += `&dealerName=${selectedDealerName.dealerName}`;
             }
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: getAuthHeaders() });
             const data = await response.json();
             console.log(data, 'data comes along');
             console.log(appliedDealer, 'selectedDealerselectedDealer');
@@ -116,7 +117,7 @@ const DealerReport = () => {
                 const selectedDealerName = dealers.find((dealer) => dealer.dealerName === appliedDealer);
                 if (selectedDealerName) url += `&dealerName=${selectedDealerName.dealerName}`;
             }
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: getAuthHeaders() });
             if (!response.ok) throw new Error('Export failed');
 
             const blob = await response.blob();

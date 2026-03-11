@@ -30,7 +30,9 @@ import {
     Assignment as AssignmentIcon,
     HowToReg as HowToRegIcon,
     BarChart as BarChartIcon,
+    Person as PersonIcon,
 } from '@mui/icons-material';
+import { getToken, clearAuth, getUserName } from '../../utils/auth';
 
 const ReusableLhs = () => {
     const navigate = useNavigate();
@@ -45,6 +47,7 @@ const ReusableLhs = () => {
     const [openDealerMenu, setOpenDealerMenu] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [userRoles, setUserRoles] = useState([]);
+    const [userName, setUserName] = useState('');
 
     const financialReportItems = [
         { name: 'Subscription Reports', path: '/subscription', icon: <DescriptionIcon /> },
@@ -96,16 +99,17 @@ const ReusableLhs = () => {
 
     // Initialize component state based on current location and stored preferences
     useEffect(() => {
-        // Check authentication
-        const token = localStorage.getItem('token');
+    // Check authentication (JWT)
+        const token = getToken();
         if (!token) {
             navigate('/reports/login');
             return;
         }
 
-        // Fetch user roles
+        // User roles from login response
         const roles = JSON.parse(localStorage.getItem('userRoles')) || [];
         setUserRoles(roles);
+        setUserName(getUserName());
 
         // Restore submenu states from localStorage
         setOpenFinancialSubmenu(JSON.parse(localStorage.getItem('financialSubmenuOpen')) || false);
@@ -175,8 +179,9 @@ const ReusableLhs = () => {
     };
 
     const handleLogout = () => {
-        localStorage.clear();
+        clearAuth();
         sessionStorage.clear();
+        ['financialSubmenuOpen', 'salesSubmenuOpen', 'rbacSubmenuOpen', 'hdcSubmenuOpen', 'mtvRegisterSubmenuOpen', 'openDeviceSubmenu', 'openDealersSubmenu'].forEach(k => localStorage.removeItem(k));
         window.location.href = '/reports/login';
     };
 
@@ -953,6 +958,25 @@ const ReusableLhs = () => {
                         backgroundColor: 'rgba(255, 255, 255, 0.05)',
                     }}
                 >
+                    {isSidebarOpen && userName && (
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1,
+                                mb: 1.5,
+                                px: 1,
+                                py: 1,
+                                borderRadius: 1,
+                                backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                            }}
+                        >
+                            <PersonIcon sx={{ color: '#93c5fd', fontSize: 20 }} />
+                            <Typography variant="body2" sx={{ color: '#e0e7ff', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {userName}
+                            </Typography>
+                        </Box>
+                    )}
                     <Button
                         fullWidth
                         variant="contained"

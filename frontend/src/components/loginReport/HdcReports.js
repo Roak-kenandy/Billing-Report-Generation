@@ -26,9 +26,9 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { format } from 'date-fns';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
-// const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3003/billing-reports';
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+const API_URL = getApiBaseUrl();
 
 const HdcReports = () => {
   const [reports, setReports] = useState([]);
@@ -102,7 +102,7 @@ const HdcReports = () => {
         if (selectedIslandName) url += `&island=${encodeURIComponent(selectedIslandName)}`;
       }
 
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: getAuthHeaders() });
       if (!response.ok) throw new Error('Failed to fetch reports');
       const data = await response.json();
       setReports(data.data);
@@ -175,7 +175,7 @@ const HdcReports = () => {
         if (selectedIslandName) url.searchParams.append('island', encodeURIComponent(selectedIslandName));
       }
 
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: getAuthHeaders() });
       if (!response.ok) throw new Error('Export failed');
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);

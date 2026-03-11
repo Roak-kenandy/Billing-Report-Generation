@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { GetApp } from '@mui/icons-material';
 import SearchIcon from '@mui/icons-material/Search';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
 const ReferralCountReports = () => {
     const [loading, setLoading] = useState(true);
@@ -20,8 +21,7 @@ const ReferralCountReports = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isDownloading, setIsDownloading] = useState(false);
     const isSmallScreen = useMediaQuery('(max-width:600px)');
-    // const API_URL = 'http://localhost:3003/billing-reports';
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    const API_URL = getApiBaseUrl();
 
     const fetchRegisteredCounts = async (page, limit, search = '') => {
         setLoading(true);
@@ -30,7 +30,7 @@ const ReferralCountReports = () => {
             if (search) {
                 url += `&search=${encodeURIComponent(search)}`;
             }
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: getAuthHeaders() });
             const data = await response.json();
             const counts = data.data || [];
             console.log('Fetched registered counts:', data);
@@ -63,7 +63,7 @@ const ReferralCountReports = () => {
             if (searchTerm) {
                 url.searchParams.append('search', searchTerm);
             }
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: getAuthHeaders() });
             if (!response.ok) throw new Error('Export failed');
 
             const data = await response.json();

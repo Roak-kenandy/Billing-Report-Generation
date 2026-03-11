@@ -44,12 +44,13 @@ const loginUser = async (email, password) => {
             throw new Error('Invalid password');
         }
 
-        //Return the user data
+        //Return the user data (include id for JWT payload)
         return {
+            id: user._id.toString(),
             userName: user.name,
             email: user.email,
-            roles: user.roles,
-            permissions: user.permissions
+            roles: user.roles || [],
+            permissions: user.permissions || []
         };
     } catch (error) {
         throw new Error(error.message);

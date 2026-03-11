@@ -16,6 +16,7 @@ import {
 import { GetApp } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
 const ManualJournalReport = () => {
     const [reports, setReports] = useState([]);
@@ -23,13 +24,13 @@ const ManualJournalReport = () => {
     const [loading, setLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
     const isSmallScreen = useMediaQuery('(max-width:600px)');
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    const API_URL = getApiBaseUrl();
 
     const fetchReports = async (page, limit) => {
         setLoading(true);
         try {
             let url = `${API_URL}/getManualJournalReports?page=${page}&limit=${limit}`;
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: getAuthHeaders() });
             const data = await response.json();
             setReports(data.data);
             setPagination(data.pagination);
@@ -56,7 +57,7 @@ const ManualJournalReport = () => {
         try {
           setIsDownloading(true);
           const url = `${API_URL}/getManualJournalReports?export=csv`;
-          const response = await fetch(url);
+          const response = await fetch(url, { headers: getAuthHeaders() });
           
           if (!response.ok) throw new Error('Export failed');
           

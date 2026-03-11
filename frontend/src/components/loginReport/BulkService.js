@@ -15,6 +15,7 @@ import {
 import { CloudUpload, Description, CheckCircle, Autorenew } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { uploadFile, uploadServiceBulk, createOperationRecord, getAllBulkOperations } from '../../service/apiService';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 const xlsx = require('xlsx');
 
 const BulkService = () => {
@@ -26,9 +27,7 @@ const BulkService = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  // const API_URL = 'http://localhost:3003/billing-reports';
-//   const API_URL = 'http://localhost:3003/billing-reports';
-  const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+  const API_URL = getApiBaseUrl();
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -195,6 +194,7 @@ const BulkService = () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...getAuthHeaders(),
           },
           body: JSON.stringify(data),
         });

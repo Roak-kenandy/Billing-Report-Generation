@@ -23,6 +23,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
 const MtvRegisteredCustomer = () => {
     const [reports, setReports] = useState([]);
@@ -35,8 +36,7 @@ const MtvRegisteredCustomer = () => {
     const [appliedStartDate, setAppliedStartDate] = useState('');
     const [appliedEndDate, setAppliedEndDate] = useState('');
     const isSmallScreen = useMediaQuery('(max-width:600px)');
-    // const API_URL = 'http://localhost:3003/billing-reports';
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    const API_URL = getApiBaseUrl();
 
     const fetchReports = async (page, limit, search = '', start = '', end = '') => {
         setLoading(true);
@@ -45,7 +45,7 @@ const MtvRegisteredCustomer = () => {
             if (start) url += `&startDate=${encodeURIComponent(start)}`;
             if (end) url += `&endDate=${encodeURIComponent(end)}`;
 
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: getAuthHeaders() });
             const data = await response.json();
             setReports(data.data);
             setPagination(data.pagination);
@@ -91,7 +91,7 @@ const MtvRegisteredCustomer = () => {
             if (startDate) url.searchParams.append('startDate', startDate);
             if (endDate) url.searchParams.append('endDate', endDate);
     
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: getAuthHeaders() });
             if (!response.ok) throw new Error('Export failed');
     
             const data = await response.json();

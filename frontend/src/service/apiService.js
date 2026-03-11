@@ -1,6 +1,13 @@
 import axios from 'axios';
+import { getToken } from '../utils/auth';
 
-const baseUrl = 'https://mdnrpt.medianet.mv/billing-reports';
+const baseUrl = process.env.REACT_APP_API_URL || 'https://mdnrpt.medianet.mv/billing-reports';
+
+axios.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
 const uploadFile = async (file) => {
     const formData = new FormData();

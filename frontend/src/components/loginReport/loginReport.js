@@ -177,7 +177,7 @@ const LoginReports = () => {
         setError('');
 
         try {
-            const response = await fetch('https://mdnrpt.medianet.mv/billing-reports/login', {
+            const response = await fetch(process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/login` : 'https://mdnrpt.medianet.mv/billing-reports/login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -188,8 +188,16 @@ const LoginReports = () => {
             const data = await response.json();
 
             if (response.ok) {
-                localStorage.setItem('token', data.token || '5b4f516ae6b5709b5e3a7a540cdaf5b3c8d6f19c0070e38bb8e015be3c66b95b');
-                localStorage.setItem('userRoles', JSON.stringify(data.user.roles || []));
+                const token = data.token;
+                const user = data.user || {};
+                if (!token) {
+                    setError('Login succeeded but no token received. Please try again.');
+                    setOpenSnackbar(true);
+                    return;
+                }
+                localStorage.setItem('token', token);
+                localStorage.setItem('userRoles', JSON.stringify(user.roles || []));
+                localStorage.setItem('userName', user.userName || user.email || '');
                 setOpenSnackbar(true);
 
                 setTimeout(() => {

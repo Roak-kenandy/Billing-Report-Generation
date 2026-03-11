@@ -1,4 +1,6 @@
 const loginReportService = require('../services/loginReportService');
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../middleware/authMiddleware');
 
 const registerUser = async (req, res) => {
     try {
@@ -16,18 +18,31 @@ const registerUser = async (req, res) => {
 }
 
 const loginUser = async (req, res) => {
-    const {email, password} = req.body;
-    
-    if(!email || !password){
-        res.status(400).json({ message: 'Email and password are required' });
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ message: 'Email and password are required' });
     }
 
     try {
         const user = await loginReportService.loginUser(email, password);
-        res.status(200).json({ message: "Login successful", user});
-    }
-    catch (error) {
-        res.status(401).json({ message: error.message });
+        const token = jwt.sign(
+            { userId: user.id, email: user.email, roles: user.roles },
+            JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+        );
+        return res.status(200).json({
+            message: 'Login successful',
+            token,
+            user: {
+                userName: user.userName,
+                email: user.email,
+                roles: user.roles,
+                permissions: user.permissions,
+            },
+        });
+    } catch (error) {
+        return res.status(401).json({ message: error.message });
     }
 };
 

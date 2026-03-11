@@ -45,6 +45,7 @@ import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
 import { format } from 'date-fns';
 import { enUS } from 'date-fns/locale';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
 ChartJS.register(
   CategoryScale,
@@ -56,7 +57,7 @@ ChartJS.register(
   ArcElement
 );
 
-const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+const API_URL = getApiBaseUrl();
 
 const handleDownloadCSV = async (team, queue, startDate, endDate, setIsDownloading) => {
   try {
@@ -67,7 +68,7 @@ const handleDownloadCSV = async (team, queue, startDate, endDate, setIsDownloadi
     if (startDate) url.searchParams.append('startDate', format(startDate, 'yyyy-MM-dd'));
     if (endDate) url.searchParams.append('endDate', format(endDate, 'yyyy-MM-dd'));
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { headers: getAuthHeaders() });
     if (!response.ok) throw new Error('Export failed');
 
     const blob = await response.blob();
@@ -145,7 +146,7 @@ const ServiceRequestReport = () => {
     try {
       const url = new URL(`${API_URL}/getQueueData`);
       url.searchParams.append('owner_team', ownerTeamFilter);
-      const response = await fetch(url.toString());
+      const response = await fetch(url.toString(), { headers: getAuthHeaders() });
       if (!response.ok) throw new Error('Failed to fetch queue data');
       const data = await response.json();
       setQueueData(data.data);
@@ -165,7 +166,7 @@ const ServiceRequestReport = () => {
   useEffect(() => {
     const fetchGraphData = async () => {
       try {
-        const response = await fetch(`${API_URL}/getGraphData`);
+        const response = await fetch(`${API_URL}/getGraphData`, { headers: getAuthHeaders() });
         if (!response.ok) throw new Error('Failed to fetch graph data');
         const data = await response.json();
         setGraphData((prevData) => ({ ...prevData, ...data.data }));
@@ -184,7 +185,7 @@ const ServiceRequestReport = () => {
         setIsQueueLoading(true);
         const url = new URL(`${API_URL}/getQueueData`);
         url.searchParams.append('owner_team', 'All');
-        const response = await fetch(url.toString());
+        const response = await fetch(url.toString(), { headers: getAuthHeaders() });
         if (!response.ok) throw new Error('Failed to fetch queue data');
         const data = await response.json();
         setQueueData(data.data);

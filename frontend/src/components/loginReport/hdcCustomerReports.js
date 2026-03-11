@@ -20,6 +20,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { format } from 'date-fns';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
 const HDCCustomerReports = () => {
     const [reports, setReports] = useState([]);
@@ -34,8 +35,7 @@ const HDCCustomerReports = () => {
     const limit = 10;
     const isMountedRef = useRef(true);
 
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
-    // const API_URL = 'http://localhost:3003/billing-reports';
+    const API_URL = getApiBaseUrl();
 
     const fetchReports = useCallback(async (page, start = '', end = '') => {
         setLoading(true);
@@ -44,7 +44,7 @@ const HDCCustomerReports = () => {
             if (start) url += `&startDate=${encodeURIComponent(start)}`;
             if (end) url += `&endDate=${encodeURIComponent(end)}`;
 
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: getAuthHeaders() });
             if (!response.ok) throw new Error('Failed to fetch reports');
             const data = await response.json();
             
@@ -103,7 +103,7 @@ const HDCCustomerReports = () => {
             if (appliedStartDate) url.searchParams.append('startDate', appliedStartDate);
             if (appliedEndDate) url.searchParams.append('endDate', appliedEndDate);
 
-            const response = await fetch(url.toString());
+            const response = await fetch(url.toString(), { headers: getAuthHeaders() });
             if (!response.ok) throw new Error('Export failed');
             const blob = await response.blob();
             const downloadUrl = window.URL.createObjectURL(blob);

@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from 'recharts';
 import { Refresh } from '@mui/icons-material';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
 const Dashboard = () => {
     const theme = useTheme();
@@ -26,8 +27,7 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const isSmallScreen = useMediaQuery('(max-width:600px)');
-    // const API_URL = 'http://localhost:3003/billing-reports';
-    const API_URL = `https://mdnrpt.medianet.mv/billing-reports`;
+    const API_URL = getApiBaseUrl();
 
     const fetchInitialData = async () => {
         try {
@@ -35,8 +35,8 @@ const Dashboard = () => {
             setError(null);
 
             const [metricsResponse, packageResponse] = await Promise.all([
-                fetch(`${API_URL}/metrics`),
-                fetch(`${API_URL}/package-distribution`)
+                fetch(`${API_URL}/metrics`, { headers: getAuthHeaders() }),
+                fetch(`${API_URL}/package-distribution`, { headers: getAuthHeaders() })
             ]);
 
             if (!metricsResponse.ok || !packageResponse.ok) {

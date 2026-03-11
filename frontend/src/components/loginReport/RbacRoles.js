@@ -19,6 +19,7 @@ import {
     TextField,
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
 const RbacRoles = () => {
     const [users, setUsers] = useState([]);
@@ -30,8 +31,7 @@ const RbacRoles = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [openModal, setOpenModal] = useState(false);
-    // const API_URL = 'http://localhost:3003';
-        const API_URL = 'https://mdnrpt.medianet.mv';
+    const API_URL = getApiBaseUrl().replace(/\/billing-reports$/, '');
 
     useEffect(() => {
         fetchUsers();
@@ -41,7 +41,7 @@ const RbacRoles = () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`${API_URL}/billing-reports/users`);
+            const response = await fetch(`${API_URL}/billing-reports/users`, { headers: getAuthHeaders() });
             if (!response.ok) throw new Error('Failed to fetch users');
             const data = await response.json();
             setUsers(data);
@@ -63,7 +63,7 @@ const RbacRoles = () => {
             const updatedRoles = [...new Set([...selectedUser.roles, roleToAdd])];
             const response = await fetch(`${API_URL}/billing-reports/users/${selectedUser._id}/roles`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ roles: updatedRoles }),
             });
             if (!response.ok) throw new Error('Failed to add role');
@@ -85,7 +85,7 @@ const RbacRoles = () => {
             const updatedRoles = selectedUser.roles.filter(role => role !== roleToRemove);
             const response = await fetch(`${API_URL}/billing-reports/users/${selectedUser._id}/roles`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ roles: updatedRoles }),
             });
             if (!response.ok) throw new Error('Failed to remove role');
@@ -104,6 +104,7 @@ const RbacRoles = () => {
         try {
             const response = await fetch(`${API_URL}/billing-reports/users/${id}`, {
                 method: 'DELETE',
+                headers: getAuthHeaders(),
             });
             if (!response.ok) throw new Error('Failed to delete user');
             fetchUsers();

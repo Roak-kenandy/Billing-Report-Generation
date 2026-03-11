@@ -5,18 +5,20 @@ const billingReportController = require('../controllers/billingReportsController
 const loginReportController = require('../controllers/loginReportController');
 const rbacController = require('../controllers/rbacController');
 const bulkUploadController = require('../controllers/bulkUploadController');
+const { authenticateToken } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
 const upload = multer({ dest: 'uploads/' });
 
+// ----- Public auth routes (no JWT required) -----
 router.post('/registerUser', loginReportController.registerUser);
-
 router.post('/login', loginReportController.loginUser);
-
 router.post('/forgot-password', loginReportController.forgotPassword);
-
 router.post('/reset-password', loginReportController.resetPassword);
+
+// ----- All routes below require valid JWT -----
+router.use(authenticateToken);
 
 router.get('/getReports', billingReportController.getReports);
 

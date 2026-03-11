@@ -25,6 +25,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { format } from 'date-fns';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
 const SubscribedDisconnectedReports = () => {
   const [reports, setReports] = useState([]);
@@ -64,8 +65,8 @@ const SubscribedDisconnectedReports = () => {
     setIsInitialized(true);
   }, [spRole]);
 
-  const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
-  // const API_URL = 'http://localhost:3003/billing-reports';
+  const API_URL = getApiBaseUrl();
+  // const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
   const isFetchingRef = useRef(false);
 
   // Memoize fetchReports
@@ -94,7 +95,7 @@ const SubscribedDisconnectedReports = () => {
 
         console.log('Constructed URL:', url); // Debug URL
 
-        const response = await fetch(url);
+        const response = await fetch(url, { headers: getAuthHeaders() });
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -219,7 +220,7 @@ const SubscribedDisconnectedReports = () => {
 
       console.log('CSV Download URL:', url); // Debug URL
 
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: getAuthHeaders() });
       if (!response.ok) throw new Error('Export failed');
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
