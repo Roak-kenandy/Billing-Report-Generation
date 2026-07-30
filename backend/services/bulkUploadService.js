@@ -14,15 +14,15 @@ const loginUser = async (email, password) => {
             email
         });
 
-        if(!user){
+        if (!user) {
             throw new Error('User not found');
         }
 
         // Compare the provided password with the hashed password stored in the database
         const isPasswordValid = await bcrypt.compare(password, user.password);
-        console.log(isPasswordValid,'isPasswordValid')
+        console.log(isPasswordValid, 'isPasswordValid')
 
-        if(!isPasswordValid){
+        if (!isPasswordValid) {
             throw new Error('Invalid password');
         }
 
@@ -41,7 +41,7 @@ const forgotPassword = async (email) => {
         // Check if the user exists
         const user = await UserLoginReports.findOne({ email });
 
-        console.log(user,'user email')
+        console.log(user, 'user email')
 
         if (!user) {
             throw new Error('User not found');
@@ -58,9 +58,9 @@ const forgotPassword = async (email) => {
         await user.save();
 
         // Send the reset token via email
-        const resetUrl = `https://mdnrpt.medianet.mv/reset-password/${resetToken}`;
+        const resetUrl = `http://10.10.6.254/reset-password/${resetToken}`;
 
-        console.log(process.env.EMAIL_USER,process.env.EMAIL_PASS,'email user and pass')
+        console.log(process.env.EMAIL_USER, process.env.EMAIL_PASS, 'email user and pass')
 
         const transporter = nodemailer.createTransport({
             service: 'gmail', // Use your email service
@@ -80,7 +80,7 @@ const forgotPassword = async (email) => {
                 If you did not request this, please ignore this email and your password will remain unchanged.\n`,
         };
 
-        console.log(mailOptions,'mail optionsS')
+        console.log(mailOptions, 'mail optionsS')
 
         await transporter.sendMail(mailOptions);
 
@@ -133,20 +133,20 @@ const processBulkUpload = async (filePath) => {
     const collection = mongoose.connection.db.collection('Journals');
 
     // Find contacts
-    const contacts = await collection.find({ 
+    const contacts = await collection.find({
         contact_code: { $in: [...new Set(contactCodes)] } // Deduplicate codes
-      }).toArray();
-      
-      // Create a map for quick lookup
-      const contactMap = new Map(contacts.map(c => [c.contact_code, c]));
-      
-      // Map each Excel row to a contact (using the first occurrence in the database)
-      const result = contactCodes.map(code => ({
+    }).toArray();
+
+    // Create a map for quick lookup
+    const contactMap = new Map(contacts.map(c => [c.contact_code, c]));
+
+    // Map each Excel row to a contact (using the first occurrence in the database)
+    const result = contactCodes.map(code => ({
         contact_id: contactMap.get(code)?.contact_id,
         contact_code: code
-      }));
+    }));
 
-      return result;
+    return result;
 };
 
 const processServiceBulk = async (filePath) => {
@@ -162,7 +162,7 @@ const processServiceBulk = async (filePath) => {
     const contactProfilesCollection = mongoose.connection.db.collection('ContactProfiles');
 
     // Find contacts from Journals collection to get contact_id
-    const contacts = await journalsCollection.find({ 
+    const contacts = await journalsCollection.find({
         contact_code: { $in: [...new Set(contactCodes)] } // Use cleaned codes
     }).toArray();
 
@@ -173,7 +173,7 @@ const processServiceBulk = async (filePath) => {
     const contactIds = contacts.map(c => c.contact_id).filter(Boolean);
 
     // Find contact profiles with custom_fields using contact_id
-    const contactProfiles = await contactProfilesCollection.find({ 
+    const contactProfiles = await contactProfilesCollection.find({
         contact_id: { $in: [...new Set(contactIds)] } // Deduplicate contact_ids
     }).toArray();
 
@@ -182,7 +182,7 @@ const processServiceBulk = async (filePath) => {
     contactProfiles.forEach(profile => {
         if (profile.custom_fields && Array.isArray(profile.custom_fields)) {
             // Filter valid custom_fields entries with key, value, and value_label
-            const validCustomFields = profile.custom_fields.filter(field => 
+            const validCustomFields = profile.custom_fields.filter(field =>
                 field.key && field.value && field.value_label
             );
             if (validCustomFields.length > 0) {
@@ -213,7 +213,7 @@ const processServiceBulk = async (filePath) => {
 
         return resultObj;
     });
-    console.log(result,'result of service bulk upload')
+    console.log(result, 'result of service bulk upload')
     return result;
 };
 
@@ -228,13 +228,13 @@ const processAddressBulk = async (filePath) => {
         .map(row => row['Contact Code'] ? String(row['Contact Code']).replace(/'/g, '').trim() : null)
         .filter(Boolean);
 
-        console.log(contactCodes,'contact codes in address bulk upload')
+    console.log(contactCodes, 'contact codes in address bulk upload')
 
     // Get Journals collection reference
     const journalsCollection = mongoose.connection.db.collection('Journals');
 
     // Find contacts from Journals collection to get contact_id
-    const contacts = await journalsCollection.find({ 
+    const contacts = await journalsCollection.find({
         contact_code: { $in: [...new Set(contactCodes)] } // Use deduplicated cleaned codes
     }).toArray();
 
@@ -272,18 +272,18 @@ const processDealerBulkUpload = async (filePath) => {
     // Find contacts
     const contacts = await collection.find({
         account_organisation_name: { $in: [...new Set(accountNumbers)] } // Deduplicate codes
-      }).toArray();
-      
-      // Create a map for quick lookup
-      const contactMap = new Map(contacts.map(c => [c.account_organisation_name, c]));
+    }).toArray();
 
-      
-      // Map each Excel row to a contact (using the first occurrence in the database)
-      const result = accountNumbers.map(code => ({
+    // Create a map for quick lookup
+    const contactMap = new Map(contacts.map(c => [c.account_organisation_name, c]));
+
+
+    // Map each Excel row to a contact (using the first occurrence in the database)
+    const result = accountNumbers.map(code => ({
         account_id: contactMap.get(code)?.account_id,
-      }));
+    }));
 
-      return result;
+    return result;
     // Return array of objects with contact_id property
     // return contacts.map(contact => ({ contact_id: contact.contact_id, contact_code: contact.contact_code }));
 };
@@ -292,7 +292,7 @@ const createBulkOperation = async (batch, file_name, date, type, status) => {
     try {
 
         const newReport = new BulkOperationReports({
-            batch, file_name, date,type, status
+            batch, file_name, date, type, status
         });
 
         await newReport.save();

@@ -1,12 +1,12 @@
 import axios from 'axios';
 import { getToken } from '../utils/auth';
 
-const baseUrl = process.env.REACT_APP_API_URL || 'https://mdnrpt.medianet.mv/billing-reports';
+const baseUrl = process.env.REACT_APP_API_URL || 'http://10.10.6.254/billing-reports';
 
 axios.interceptors.request.use((config) => {
-  const token = getToken();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
+    const token = getToken();
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
 });
 
 const uploadFile = async (file) => {
@@ -84,9 +84,9 @@ const getAllBulkOperations = async (page, limit, type) => {
     try {
 
         const response = await axios.get(
-            `${baseUrl}/get-bulk`,{
-                params: { page, limit, type }
-            }
+            `${baseUrl}/get-bulk`, {
+            params: { page, limit, type }
+        }
         );
         return response.data;
 

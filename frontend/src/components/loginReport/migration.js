@@ -40,8 +40,8 @@ const MigrationReports = () => {
     const [selectedIsland, setSelectedIsland] = useState('');
     const [appliedAtoll, setAppliedAtoll] = useState('');
     const [appliedIsland, setAppliedIsland] = useState('');
-    const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
-    // const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+    const API_URL = 'http://10.10.6.254/billing-reports';
+    // const API_URL = 'http://10.10.6.254/billing-reports';
 
     const TABLE_COLUMNS = [
         'Name',

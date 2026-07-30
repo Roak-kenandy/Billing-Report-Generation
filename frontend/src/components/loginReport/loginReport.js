@@ -177,7 +177,7 @@ const LoginReports = () => {
         setError('');
 
         try {
-            const response = await fetch(process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/login` : 'https://mdnrpt.medianet.mv/billing-reports/login', {
+            const response = await fetch(process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/login` : 'http://10.10.6.254/billing-reports/login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

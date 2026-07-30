@@ -24,7 +24,7 @@ export const clearAuth = () => {
 
 /** API base URL for billing-reports backend. */
 export const getApiBaseUrl = () =>
-  process.env.REACT_APP_API_URL || 'https://mdnrpt.medianet.mv/billing-reports';
+  process.env.REACT_APP_API_URL || 'http://10.10.6.254/billing-reports';
 
 /**
  * Returns headers object with Authorization: Bearer <token> for API requests.

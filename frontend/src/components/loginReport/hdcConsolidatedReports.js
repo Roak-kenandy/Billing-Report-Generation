@@ -24,7 +24,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { format } from 'date-fns';
 import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
-// const API_URL = process.env.REACT_APP_API_URL || 'https://mdnrpt.medianet.mv/billing-reports';
+// const API_URL = process.env.REACT_APP_API_URL || 'http://10.10.6.254/billing-reports';
 const API_URL = getApiBaseUrl();
 
 const HdcConsolidatedReports = () => {

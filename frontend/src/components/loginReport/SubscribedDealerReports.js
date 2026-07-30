@@ -70,7 +70,7 @@ const SubscribedDealerReports = () => {
     setIsInitialized(true);
   }, [spRole]);
 
-  // const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+  // const API_URL = 'http://10.10.6.254/billing-reports';
   const API_URL = getApiBaseUrl();
   const isFetchingRef = useRef(false);
 
@@ -153,10 +153,10 @@ const SubscribedDealerReports = () => {
       : '';
     const islandName = appliedIsland
       ? atolls
-          .find(a => a.atolls_id === appliedAtoll)
-          ?.islands.find(i => i.islands_id === appliedIsland)?.islands_name || ''
+        .find(a => a.atolls_id === appliedAtoll)
+        ?.islands.find(i => i.islands_id === appliedIsland)?.islands_name || ''
       : '';
-    
+
     fetchReports(
       pagination.page,
       pagination.limit,
@@ -287,7 +287,7 @@ const SubscribedDealerReports = () => {
   };
 
   // Get available islands for selected atoll
-  const availableIslands = selectedAtoll 
+  const availableIslands = selectedAtoll
     ? atolls.find(a => a.atolls_id === selectedAtoll)?.islands || []
     : [];
 

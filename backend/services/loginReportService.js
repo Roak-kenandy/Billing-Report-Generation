@@ -6,14 +6,14 @@ const nodemailer = require('nodemailer');
 // Function to register user
 const registerUser = async (name, email, password, designation) => {
     try {
-        console.log(name,'name service')
+        console.log(name, 'name service')
         const saltRounds = 10;
-        const hashedPassword = await bcrypt.hash(password, saltRounds); 
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
 
         const newUser = new UserLoginReports({
             name,
             email,
-            password: hashedPassword, 
+            password: hashedPassword,
             designation
         });
 
@@ -32,15 +32,15 @@ const loginUser = async (email, password) => {
             email
         });
 
-        if(!user){
+        if (!user) {
             throw new Error('User not found');
         }
 
         // Compare the provided password with the hashed password stored in the database
         const isPasswordValid = await bcrypt.compare(password, user.password);
-        console.log(isPasswordValid,'isPasswordValid')
+        console.log(isPasswordValid, 'isPasswordValid')
 
-        if(!isPasswordValid){
+        if (!isPasswordValid) {
             throw new Error('Invalid password');
         }
 
@@ -63,7 +63,7 @@ const forgotPassword = async (email) => {
         // Check if the user exists
         const user = await UserLoginReports.findOne({ email });
 
-        console.log(user,'user email')
+        console.log(user, 'user email')
 
         if (!user) {
             throw new Error('User not found');
@@ -80,9 +80,9 @@ const forgotPassword = async (email) => {
         await user.save();
 
         // Send the reset token via email
-        const resetUrl = `https://mdnrpt.medianet.mv/reports/reset-password/${resetToken}`;
+        const resetUrl = `http://10.10.6.254/reports/reset-password/${resetToken}`;
 
-        console.log(process.env.EMAIL_USER,process.env.EMAIL_PASS,'email user and pass')
+        console.log(process.env.EMAIL_USER, process.env.EMAIL_PASS, 'email user and pass')
 
         const transporter = nodemailer.createTransport({
             service: 'gmail', // Use your email service
@@ -102,7 +102,7 @@ const forgotPassword = async (email) => {
                 If you did not request this, please ignore this email and your password will remain unchanged.\n`,
         };
 
-        console.log(mailOptions,'mail optionsS')
+        console.log(mailOptions, 'mail optionsS')
 
         await transporter.sendMail(mailOptions);
 
@@ -148,4 +148,4 @@ module.exports = {
     registerUser,
     forgotPassword,
     resetPassword,
-  };
+};

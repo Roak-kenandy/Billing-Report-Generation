@@ -28,7 +28,7 @@ const RegisterUser = () => {
   const handleSubmit = async (event) => {
     event.preventDefault();
     try {
-      const response = await fetch('https://mdnrpt.medianet.mv/billing-reports/registerUser', {
+      const response = await fetch('http://10.10.6.254/billing-reports/registerUser', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -49,8 +49,8 @@ const RegisterUser = () => {
         setDesignation('');
 
         setTimeout(() => {
-            navigate('/login'); // Use navigate to redirect
-          }, 1000);
+          navigate('/login'); // Use navigate to redirect
+        }, 1000);
       } else {
         setError(data.message || 'Registration failed');
         setOpenSnackbar(true);

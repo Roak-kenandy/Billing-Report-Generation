@@ -29,7 +29,7 @@ const ResetPassword = () => {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const navigate = useNavigate();
-    const API_URL = `https://mdnrpt.medianet.mv/billing-reports`;
+    const API_URL = `http://10.10.6.254/billing-reports`;
 
     const validateForm = () => {
         let isValid = true;

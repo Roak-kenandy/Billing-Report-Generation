@@ -68,7 +68,7 @@ const DealerWiseCollection = () => {
   }, [spRole, serviceProvider]);
 
   const API_URL = getApiBaseUrl();
-  // const API_URL = 'https://mdnrpt.medianet.mv/billing-reports';
+  // const API_URL = 'http://10.10.6.254/billing-reports';
   const isFetchingRef = useRef(false);
 
   // Memoize fetchReports
@@ -136,10 +136,10 @@ const DealerWiseCollection = () => {
       : '';
     const islandName = appliedIsland
       ? atolls
-          .find(a => a.atolls_id === appliedAtoll)
-          ?.islands.find(i => i.islands_id === appliedIsland)?.islands_name || ''
+        .find(a => a.atolls_id === appliedAtoll)
+        ?.islands.find(i => i.islands_id === appliedIsland)?.islands_name || ''
       : '';
-    
+
     fetchReports(
       pagination.page,
       pagination.limit,
@@ -526,8 +526,8 @@ const DealerWiseCollection = () => {
                               backendKey === 'Service Status' && displayValue.includes('NOT_EFFECTIVE')
                                 ? '#ef4444'
                                 : backendKey === 'Service Status' && displayValue.includes('EFFECTIVE')
-                                ? '#22c55e'
-                                : '#475569',
+                                  ? '#22c55e'
+                                  : '#475569',
                             fontWeight: ['Customer Name'].includes(backendKey) ? 500 : 400,
                           }}
                         >
