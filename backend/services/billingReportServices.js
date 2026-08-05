@@ -6679,47 +6679,96 @@ const getQueueData = async (req, res) => {
 };
 
 
-const exportManualJournalReports = async (page, limit) => {
-  try {
-    const matchConditions = { "related_entity.transaction_type": "MANUAL_JOURNAL" };
-    const aggregationPipeline = [
-      { $match: matchConditions },
-      { $sort: { posted_date: -1 } }
-    ];
+const buildManualJournalMatch = (startDate, endDate) => {
+  const matchConditions = { "related_entity.transaction_type": "MANUAL_JOURNAL" };
 
-    // Apply pagination only if page and limit are provided
-    if (page !== undefined && limit !== undefined) {
-      const skip = (page - 1) * limit;
-      aggregationPipeline.push({ $skip: skip }, { $limit: limit });
+  if (startDate || endDate) {
+    matchConditions.posted_date = {};
+    if (startDate) {
+      matchConditions.posted_date.$gte = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
+    }
+    if (endDate) {
+      matchConditions.posted_date.$lte = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
+    }
+  }
+
+  return matchConditions;
+};
+
+const buildManualJournalPipeline = (matchConditions, page, limit) => {
+  const aggregationPipeline = [
+    { $match: matchConditions },
+    { $sort: { posted_date: -1 } },
+  ];
+
+  if (page !== undefined && limit !== undefined) {
+    const skip = (page - 1) * limit;
+    aggregationPipeline.push({ $skip: skip }, { $limit: limit });
+  }
+
+  aggregationPipeline.push({
+    $project: {
+      _id: 0,
+      "Account Number": "$account_number",
+      "Contact Name": "$contact_name",
+      "Posted Date": {
+        $dateToString: {
+          format: "%Y-%m-%d %H:%M:%S",
+          date: { $toDate: { $multiply: ["$posted_date", 1000] } },
+        },
+      },
+      "Action Type": "$account_type",
+      "Amount": { $toDouble: "$amount" },
+      "Remarks": { $ifNull: ["$notes", "N/A"] },
+      "Submitted By": { $ifNull: ["$submited_by_user_name", "N/A"] },
+    },
+  });
+
+  return aggregationPipeline;
+};
+
+const exportManualJournalReports = async (page, limit, startDate, endDate, isCSVExport = false) => {
+  try {
+    const matchConditions = buildManualJournalMatch(startDate, endDate);
+    const aggregationPipeline = buildManualJournalPipeline(matchConditions, page, limit);
+    const aggregateOptions = { maxTimeMS: 600000, allowDiskUse: true };
+
+    if (isCSVExport) {
+      const cursor = mongoose.connection.db.collection('Journals').aggregate(
+        aggregationPipeline,
+        { ...aggregateOptions, cursor: { batchSize: 1000 } }
+      );
+
+      const fields = [
+        'Account Number',
+        'Contact Name',
+        'Action Type',
+        'Amount',
+        'Posted Date',
+        'Remarks',
+        'Submitted By',
+      ];
+
+      async function* csvGenerator() {
+        yield fields.map((field) => `"${field}"`).join(',') + '\n';
+        for await (const doc of cursor) {
+          const csvRow = fields
+            .map((field) => `"${String(doc[field] ?? '').replace(/"/g, '""')}"`)
+            .join(',');
+          yield csvRow + '\n';
+        }
+      }
+
+      return { csvStream: csvGenerator() };
     }
 
-    aggregationPipeline.push({
-      $project: {
-        _id: 0,
-        "Account Number": "$account_number",
-        "Contact Name": "$contact_name",
-        "Posted Date": {
-          $dateToString: {
-            format: "%Y-%m-%d %H:%M:%S",
-            date: { $toDate: { $multiply: ["$posted_date", 1000] } }
-          }
-        },
-        "Action Type": "$account_type",
-        "Amount": { $toDouble: "$amount" },
-        "Remarks": { $ifNull: ["$notes", "N/A"] },
-        "Submitted By": { $ifNull: ["$submited_by_user_name", "N/A"] },
-        "Business Name": 1
-      }
-    });
-
-    const results = await mongoose.connection.db.collection('Journals')
-      .aggregate(aggregationPipeline, { maxTimeMS: 60000, allowDiskUse: true })
-      .toArray();
-
-    const total = await mongoose.connection.db.collection('Journals')
-      .countDocuments(matchConditions);
-
-    const csvData = parse(results); // Assuming 'parse' converts JSON to CSV string
+    const [results, total] = await Promise.all([
+      mongoose.connection.db.collection('Journals')
+        .aggregate(aggregationPipeline, aggregateOptions)
+        .toArray(),
+      mongoose.connection.db.collection('Journals')
+        .countDocuments(matchConditions),
+    ]);
 
     return {
       message: 'Billing Reports Data',
@@ -6728,13 +6777,14 @@ const exportManualJournalReports = async (page, limit) => {
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit)
+        totalPages: Math.ceil(total / limit),
       } : undefined,
-      csvData
     };
-
   } catch (error) {
     console.error('Error exporting manual journal report:', error);
+    if (error.name === 'MongoServerError' && error.code === 50) {
+      throw new Error('Operation timed out. Try narrowing the date range.');
+    }
     throw error;
   }
 };

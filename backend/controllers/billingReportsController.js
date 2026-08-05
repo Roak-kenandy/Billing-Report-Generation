@@ -657,38 +657,76 @@ const getQueueData = async (req, res) => {
 
 const exportManualJournalReports = async (req, res) => {
   try {
-    let page, limit;
-    const isCSVExport = req.query.export === 'csv'; // Check if it's a CSV export
+    const { startDate, endDate } = req.query;
+    const isCSVExport = req.query.export === 'csv';
 
-    if (!isCSVExport) {
-      // Parse page and limit for JSON requests (default to 1 and 10 if not provided)
-      page = parseInt(req.query.page, 10) || 1;
-      limit = parseInt(req.query.limit, 10) || 10;
-    } else {
-      // For CSV export, ignore pagination
-      page = undefined;
-      limit = undefined;
+    if (startDate && !isValidDate(startDate)) {
+      return res.status(400).json({
+        message: 'Invalid start date format. Please use YYYY-MM-DD format.',
+        error: 'INVALID_START_DATE',
+      });
     }
 
-    const result = await billingReportService.exportManualJournalReports(page, limit);
+    if (endDate && !isValidDate(endDate)) {
+      return res.status(400).json({
+        message: 'Invalid end date format. Please use YYYY-MM-DD format.',
+        error: 'INVALID_END_DATE',
+      });
+    }
+
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+      return res.status(400).json({
+        message: 'Start date cannot be later than end date.',
+        error: 'INVALID_DATE_RANGE',
+      });
+    }
+
+    let page;
+    let limit;
+
+    if (!isCSVExport) {
+      page = parseInt(req.query.page, 10) || 1;
+      limit = parseInt(req.query.limit, 10) || 10;
+    }
 
     if (isCSVExport) {
-      // Send CSV response
+      req.setTimeout(600000);
+      res.setTimeout(600000);
+
+      const result = await billingReportService.exportManualJournalReports(
+        undefined,
+        undefined,
+        startDate,
+        endDate,
+        true
+      );
+
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=manual-reports.csv');
-      res.send(result.csvData);
+
+      for await (const chunk of result.csvStream) {
+        res.write(chunk);
+      }
+      res.end();
     } else {
-      // Send JSON response with paginated data
+      const result = await billingReportService.exportManualJournalReports(
+        page,
+        limit,
+        startDate,
+        endDate,
+        false
+      );
+
       res.json({
         message: result.message,
         data: result.data,
-        pagination: result.pagination
+        pagination: result.pagination,
       });
     }
   } catch (error) {
     res.status(500).json({
       message: 'Error processing request',
-      error: error.message
+      error: error.message,
     });
   }
 };

@@ -14,40 +14,79 @@ import {
     useMediaQuery,
 } from '@mui/material';
 import { GetApp } from '@mui/icons-material';
+import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import ClearIcon from '@mui/icons-material/Clear';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
+
+const tableHeaders = [
+    'Account Number',
+    'Contact Name',
+    'Action Type',
+    'Amount',
+    'Posted Date',
+    'Remarks',
+    'Submitted By',
+];
 
 const ManualJournalReport = () => {
     const [reports, setReports] = useState([]);
     const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
     const [loading, setLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
+    const [appliedStartDate, setAppliedStartDate] = useState('');
+    const [appliedEndDate, setAppliedEndDate] = useState('');
     const isSmallScreen = useMediaQuery('(max-width:600px)');
     const API_URL = getApiBaseUrl();
 
-    const fetchReports = async (page, limit) => {
+    const formatDateParam = (date) => (date ? date.toISOString().split('T')[0] : '');
+
+    const fetchReports = async (page, limit, start = '', end = '') => {
         setLoading(true);
         try {
             let url = `${API_URL}/getManualJournalReports?page=${page}&limit=${limit}`;
+            if (start) url += `&startDate=${encodeURIComponent(start)}`;
+            if (end) url += `&endDate=${encodeURIComponent(end)}`;
+
             const response = await fetch(url, { headers: getAuthHeaders() });
+            if (!response.ok) throw new Error('Failed to fetch reports');
+
             const data = await response.json();
-            setReports(data.data);
-            setPagination(data.pagination);
+            setReports(data.data || []);
+            setPagination(data.pagination || { page, limit, total: 0, totalPages: 0 });
         } catch (err) {
             console.error('Error fetching reports:', err);
+            setReports([]);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        setPagination(prev => ({ ...prev, page: 1 }));
-    }, []);
+        fetchReports(pagination.page, pagination.limit, appliedStartDate, appliedEndDate);
+    }, [pagination.page, pagination.limit, appliedStartDate, appliedEndDate]);
 
-    useEffect(() => {
-        fetchReports(pagination.page, pagination.limit);
-    }, [pagination.page, pagination.limit]);
+    const handleFilter = () => {
+        if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+            alert('Start date cannot be after end date');
+            return;
+        }
+        setAppliedStartDate(formatDateParam(startDate));
+        setAppliedEndDate(formatDateParam(endDate));
+        setPagination((prev) => ({ ...prev, page: 1 }));
+    };
+
+    const handleClearFilter = () => {
+        setStartDate(null);
+        setEndDate(null);
+        setAppliedStartDate('');
+        setAppliedEndDate('');
+        setPagination((prev) => ({ ...prev, page: 1 }));
+    };
 
     const handlePageChange = (event, value) => {
         setPagination({ ...pagination, page: value });
@@ -55,29 +94,31 @@ const ManualJournalReport = () => {
 
     const handleDownloadCSV = async () => {
         try {
-          setIsDownloading(true);
-          const url = `${API_URL}/getManualJournalReports?export=csv`;
-          const response = await fetch(url, { headers: getAuthHeaders() });
-          
-          if (!response.ok) throw new Error('Export failed');
-          
-          const csvBlob = await response.blob();
-          const downloadUrl = window.URL.createObjectURL(csvBlob);
-          
-          const link = document.createElement('a');
-          link.href = downloadUrl;
-          link.setAttribute('download', 'manual_journal_reports.csv');
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          
-          window.URL.revokeObjectURL(downloadUrl);
+            setIsDownloading(true);
+            let url = `${API_URL}/getManualJournalReports?export=csv`;
+            if (appliedStartDate) url += `&startDate=${encodeURIComponent(appliedStartDate)}`;
+            if (appliedEndDate) url += `&endDate=${encodeURIComponent(appliedEndDate)}`;
+
+            const response = await fetch(url, { headers: getAuthHeaders() });
+            if (!response.ok) throw new Error('Export failed');
+
+            const csvBlob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(csvBlob);
+
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.setAttribute('download', 'manual_journal_reports.csv');
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+
+            window.URL.revokeObjectURL(downloadUrl);
         } catch (error) {
-          console.error('Export error:', error);
+            console.error('Export error:', error);
         } finally {
-          setIsDownloading(false);
+            setIsDownloading(false);
         }
-      };
+    };
 
     return (
         <Box
@@ -87,7 +128,7 @@ const ManualJournalReport = () => {
                 flexDirection: 'column',
                 height: 'calc(100vh - 37px)',
                 overflow: 'hidden',
-                background: '#f9fafb', // Light modern background
+                background: '#f9fafb',
             }}
         >
             <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -105,6 +146,76 @@ const ManualJournalReport = () => {
                         '& > *': { minWidth: isSmallScreen ? '100%' : 'auto' },
                     }}
                 >
+                    <DatePicker
+                        label="Start Date"
+                        value={startDate}
+                        onChange={(newValue) => setStartDate(newValue)}
+                        slotProps={{
+                            textField: {
+                                InputLabelProps: { shrink: true },
+                                sx: {
+                                    width: isSmallScreen ? '100%' : 180,
+                                    '& .MuiOutlinedInput-root': { borderRadius: 2, backgroundColor: '#f1f5f9' },
+                                },
+                            },
+                        }}
+                    />
+                    <DatePicker
+                        label="End Date"
+                        value={endDate}
+                        onChange={(newValue) => setEndDate(newValue)}
+                        slotProps={{
+                            textField: {
+                                InputLabelProps: { shrink: true },
+                                sx: {
+                                    width: isSmallScreen ? '100%' : 180,
+                                    '& .MuiOutlinedInput-root': { borderRadius: 2, backgroundColor: '#f1f5f9' },
+                                },
+                            },
+                        }}
+                    />
+                    <Button
+                        variant="contained"
+                        onClick={handleFilter}
+                        startIcon={<FilterAltIcon />}
+                        sx={{
+                            width: isSmallScreen ? '100%' : 'auto',
+                            height: 48,
+                            borderRadius: 2,
+                            backgroundColor: '#3b82f6',
+                            textTransform: 'none',
+                            fontWeight: 500,
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                                backgroundColor: '#2563eb',
+                                transform: 'translateY(-2px)',
+                            },
+                        }}
+                    >
+                        Filter
+                    </Button>
+                    <Button
+                        variant="outlined"
+                        onClick={handleClearFilter}
+                        startIcon={<ClearIcon />}
+                        sx={{
+                            width: isSmallScreen ? '100%' : 'auto',
+                            height: 48,
+                            borderRadius: 2,
+                            borderColor: '#e2e8f0',
+                            color: '#64748b',
+                            textTransform: 'none',
+                            fontWeight: 500,
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                                borderColor: '#3b82f6',
+                                color: '#3b82f6',
+                                transform: 'translateY(-2px)',
+                            },
+                        }}
+                    >
+                        Clear Filters
+                    </Button>
                     <Button
                         variant="contained"
                         startIcon={!isSmallScreen && <GetApp />}
@@ -157,9 +268,7 @@ const ManualJournalReport = () => {
                     <Table stickyHeader sx={{ minWidth: 1200 }}>
                         <TableHead>
                             <TableRow>
-                                {[
-                                    'Account Number','Contact Name', 'Action Type', 'Amount', 'Posted Date', 'Remarks', 'Submitted By'
-                                ].map((header) => (
+                                {tableHeaders.map((header) => (
                                     <TableCell
                                         key={header}
                                         sx={{
@@ -181,17 +290,23 @@ const ManualJournalReport = () => {
                             {loading ? (
                                 Array.from({ length: 10 }).map((_, index) => (
                                     <TableRow key={index}>
-                                        {Array.from({ length: 8 }).map((_, cellIndex) => (
+                                        {Array.from({ length: tableHeaders.length }).map((_, cellIndex) => (
                                             <TableCell key={cellIndex} sx={{ py: 2 }}>
                                                 <Skeleton variant="text" animation="wave" />
                                             </TableCell>
                                         ))}
                                     </TableRow>
                                 ))
+                            ) : reports.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={tableHeaders.length} sx={{ textAlign: 'center', py: 4, color: '#64748b' }}>
+                                        No data available
+                                    </TableCell>
+                                </TableRow>
                             ) : (
-                                reports.map((report) => (
+                                reports.map((report, index) => (
                                     <TableRow
-                                        key={report.id}
+                                        key={report.id || index}
                                         hover
                                         sx={{
                                             '&:last-child td': { borderBottom: 0 },
@@ -199,9 +314,7 @@ const ManualJournalReport = () => {
                                             '&:hover': { backgroundColor: '#f1f5f9' },
                                         }}
                                     >
-                                        {[
-                                            'Account Number','Contact Name', 'Action Type', 'Amount', 'Posted Date', 'Remarks', 'Submitted By'
-                                        ].map((key) => (
+                                        {tableHeaders.map((key) => (
                                             <TableCell
                                                 key={key}
                                                 sx={{
@@ -212,7 +325,6 @@ const ManualJournalReport = () => {
                                                     py: 2,
                                                     px: 2,
                                                     color: '#475569',
-                                                    fontWeight: ['Dealer Name'].includes(key) ? 500 : 400,
                                                 }}
                                             >
                                                 {report[key]}
