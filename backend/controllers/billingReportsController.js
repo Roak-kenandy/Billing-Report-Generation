@@ -1,5 +1,63 @@
 const billingReportService = require('../services/billingReportServices');
+const salesCrmReportsService = require('../services/salesCrmReportsService');
 const { Parser } = require('json2csv');
+
+const handleSalesCrmReport = (fetchReport, csvFilename) => async (req, res) => {
+  try {
+    const {
+      search,
+      startDate,
+      endDate,
+      atoll,
+      island,
+      page = 1,
+      limit = 10,
+      format = 'json',
+    } = req.query;
+
+    const response = await fetchReport({
+      search,
+      startDate,
+      endDate,
+      atoll,
+      island,
+      page,
+      limit,
+      format,
+    });
+
+    if (format === 'csv' || response.isCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=${csvFilename}`);
+      return res.send(response.csv);
+    }
+
+    return res.json({
+      data: response.data,
+      pagination: response.pagination,
+    });
+  } catch (error) {
+    const status = error.statusCode || (error.message.includes('MongoDB') ? 503 : 500);
+    return res.status(status).json({
+      message: error.message,
+    });
+  }
+};
+
+const exportActiveSubscriptionReport = handleSalesCrmReport(
+  salesCrmReportsService.exportActiveSubscriptionReport,
+  'active-subscription-report.csv'
+);
+
+const exportDisconnectedReport = handleSalesCrmReport(
+  salesCrmReportsService.exportDisconnectedReport,
+  'disconnected-report.csv'
+);
+
+const exportNewConnectionReport = handleSalesCrmReport(
+  salesCrmReportsService.exportNewConnectionReport,
+  'new-connection-report.csv'
+);
 
 const getReports = async (req, res) => {
   const { page = 1, limit = 10, search = '', startDate, endDate, atoll, island } = req.query;
@@ -1249,5 +1307,8 @@ module.exports = {
   exportRegistrationFinance,
   exportContactOrderCSVorJSON,
   exportOrderInvoiceCSVorJSON,
-  exportVipContactProfiles
+  exportVipContactProfiles,
+  exportActiveSubscriptionReport,
+  exportDisconnectedReport,
+  exportNewConnectionReport,
 }

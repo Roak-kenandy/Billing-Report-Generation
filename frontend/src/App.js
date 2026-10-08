@@ -17,6 +17,7 @@ import MtvRegisteredCustomer from './components/loginReport/MtvRegisteredCustome
 import ReferralCountReports from './components/loginReport/ReferralCountReports';
 import DeviceStatistics from './components/loginReport/DeviceStatistics';
 import SubscribedDealerReports from './components/loginReport/SubscribedDealerReports';
+import SalesCrmReport from './components/loginReport/SalesCrmReport';
 import SubscribedDisconnectedReports from './components/loginReport/SubscribedDisconnectedReport';
 import DealerWisecollection from './components/loginReport/DealerWiseCollection';
 import InvoiceReports from './components/loginReport/InvoiceReports';
@@ -79,6 +80,9 @@ function App() {
         <Route path="dealerWiseCollection" element={<DealerWisecollection />} />
         {/* <Route path="deviceNames" element={<DeviceNames />} /> */}
         {/* <Route path="dynamicReportBuilder" element={<DynamicReportBuilder />} /> */}
+        <Route path="sales/active-subscriptions" element={<SalesCrmReport />} />
+        <Route path="sales/disconnected" element={<SalesCrmReport />} />
+        <Route path="sales/new-connections" element={<SalesCrmReport />} />
         <Route path="customerReports" element={<CustomerReports />} />
         <Route path="customerNewReports" element={<MigrationReports />} />
         <Route path="invoiceReports" element={<InvoiceReports />} />

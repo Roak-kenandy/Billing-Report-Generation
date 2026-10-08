@@ -30,6 +30,10 @@ router.get('/customerReports', billingReportController.exportContactProfiles);
 
 router.get('/customerNewReports', billingReportController.exportMigrationReports);
 
+router.get('/sales-reports/active-subscriptions', billingReportController.exportActiveSubscriptionReport);
+router.get('/sales-reports/disconnected', billingReportController.exportDisconnectedReport);
+router.get('/sales-reports/new-connections', billingReportController.exportNewConnectionReport);
+
 router.get('/vipCustomerReports', billingReportController.exportVipContactProfiles);
 
 router.get('/hdcCustomerReports', billingReportController.exportHdcContactProfiles);
