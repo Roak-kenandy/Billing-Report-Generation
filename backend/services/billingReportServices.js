@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { parse } = require('json2csv');
-const { getMTVConnection } = require('../config/db');
+const { getCRMConnection, getMTVConnection } = require('../config/db');
 const csv = require('fast-csv');
 const stream = require('stream');
 const { Parser } = require('@json2csv/plainjs');
@@ -9,201 +9,11 @@ const { promisify } = require('util');
 const pipelineAsync = promisify(pipeline);
 
 
+const subscriptionReportsService = require('./subscriptionReportsService');
+
 const getReports = async (page, limit, search = '', startDate, endDate, atoll, island) => {
   try {
-    const skip = (page - 1) * limit;
-
-    // Calculate timestamps for date filtering
-    let startTimestamp, endTimestamp;
-    if (startDate) {
-      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
-    }
-    if (endDate) {
-      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
-    }
-
-    // Date filter for initial match (subscriptions with at least one matching service)
-    let dateFilter = {};
-    if (startDate || endDate) {
-      const elemMatchConditions = {};
-      if (startDate) {
-        elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
-      }
-      if (endDate) {
-        elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
-      }
-      dateFilter.services = { $elemMatch: elemMatchConditions };
-    }
-
-    // Date filter for individual services after unwind
-    let serviceDateFilter = {};
-    if (startDate) {
-      serviceDateFilter["services.service_terms.start_date"] = { $gte: startTimestamp };
-    }
-    if (endDate) {
-      serviceDateFilter["services.service_terms.end_date"] = { $lte: endTimestamp };
-    }
-
-    // Match stage for search, atoll, and island
-    let matchStage = { ...dateFilter };
-
-    if (search) {
-      matchStage.$text = { $search: search };
-    }
-
-    if (atoll) {
-      matchStage['joinedData2.location.province'] = atoll;
-    }
-
-    if (island) {
-      matchStage['joinedData2.location.city'] = island;
-    }
-
-    const aggregationPipeline = [
-      {
-        $lookup: {
-          from: 'ContactProfiles',
-          localField: 'contact_id',
-          foreignField: 'contact_id',
-          as: 'joinedData2',
-        }
-      },
-      { $match: matchStage },
-      { $unwind: "$services" },
-      { $match: serviceDateFilter },
-      { $skip: skip },
-      { $limit: limit },
-      {
-        $lookup: {
-          from: 'Devices',
-          localField: 'contact_id',
-          foreignField: 'ownership.id',
-          as: 'joinedData3',
-        }
-      },
-      {
-        $lookup: {
-          from: 'Orders',
-          localField: 'contact_id',
-          foreignField: 'contact_id',
-          as: 'ordersData',
-        }
-      },
-      {
-        $lookup: {
-          from: 'Journals',
-          localField: 'contact_id',
-          foreignField: 'contact_id',
-          as: 'joinedData4',
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          "Submitted By User": "$submited_by_user_name",
-          "Contact Code": {
-            $concat: [{ $toString: { $arrayElemAt: ['$joinedData4.contact_code', 0] } }]
-          },
-          "Device Code": {
-            $cond: {
-              if: { $eq: [{ $type: '$joinedData3.custom_fields.value' }, 'array'] },
-              then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData3.custom_fields.value', 0] }, 0] },
-              else: '$joinedData3.custom_fields.value',
-            }
-          },
-          "Customer Name": { $arrayElemAt: ['$joinedData2.profile.name', 0] },
-          "Customer Type": { $arrayElemAt: ['$joinedData2.profile.type', 0] },
-          "Customer Type 2": {
-            $cond: {
-              if: {
-                $or: [
-                  { $not: { $isArray: '$joinedData2.company_profile.industry_name' } },
-                  { $eq: [{ $size: { $ifNull: ['$joinedData2.company_profile.industry_name', []] } }, 0] }
-                ]
-              },
-              then: 'N/A',
-              else: { $arrayElemAt: ['$joinedData2.company_profile.industry_name', 0] }
-            }
-          },
-          "Payment Type": {
-            $cond: {
-              if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
-              then: 'QuickPay',
-              else: { $arrayElemAt: ['$ordersData.payment_method.type', 0] }
-            }
-          },
-          "Sales Model": { $arrayElemAt: ['$joinedData2.sales_model.name', 0] },
-          Area: {
-            $cond: {
-              if: { $eq: [{ $type: '$joinedData2.tags.name' }, 'array'] },
-              then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData2.tags.name', 0] }, 0] },
-              else: '$joinedData2.tags.name',
-            }
-          },
-          "Dealer": {
-            $cond: {
-              if: { $eq: [{ $type: '$joinedData2.custom_fields.value_label' }, 'array'] },
-              then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData2.custom_fields.value_label', 0] }, 0] },
-              else: '$joinedData2.custom_fields.value_label',
-            }
-          },
-          Mobile: { $arrayElemAt: ['$joinedData2.phone', 0] },
-          Ward: { $arrayElemAt: ['$joinedData2.location.address_line1', 0] },
-          Road: { $arrayElemAt: ['$joinedData2.location.address_line2', 0] },
-          Island: { $arrayElemAt: ['$joinedData2.location.city', 0] },
-          Atoll: { $arrayElemAt: ['$joinedData2.location.province', 0] },
-          STB: { $arrayElemAt: ['$joinedData3.product.name', 0] },
-          Status: "$services.state", // Direct access after unwind
-          Package: "$services.product.name",
-          Price: { $round: [{ $toDouble: "$services.price_terms.price" }, 2] },
-          "Start Date": {
-            $dateToString: {
-              format: "%d-%b-%Y",
-              date: { $toDate: { $multiply: [{ $toLong: "$services.service_terms.start_date" }, 1000] } }
-            }
-          },
-          "End Date": {
-            $dateToString: {
-              format: "%d-%b-%Y",
-              date: { $toDate: { $multiply: [{ $toLong: "$services.service_terms.end_date" }, 1000] } }
-            }
-          }
-        }
-      }
-    ];
-
-    // Fetch paginated results
-    const results = await mongoose.connection.db.collection('Subscriptions').aggregate(aggregationPipeline, { maxTimeMS: 600000, allowDiskUse: true }).toArray();
-
-    // Calculate total count of matching services
-    const countPipeline = [
-      {
-        $lookup: {
-          from: 'ContactProfiles',
-          localField: 'contact_id',
-          foreignField: 'contact_id',
-          as: 'joinedData2',
-        }
-      },
-      { $match: matchStage },
-      { $unwind: "$services" },
-      { $match: serviceDateFilter },
-      { $count: "total" }
-    ];
-
-    const totalResult = await mongoose.connection.db.collection('Subscriptions').aggregate(countPipeline).toArray();
-    const total = totalResult.length > 0 ? totalResult[0].total : 0;
-
-    return {
-      message: 'Billing Reports Data',
-      data: results,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    return await subscriptionReportsService.getReports(page, limit, search, startDate, endDate, atoll, island);
   } catch (err) {
     console.log('Error occurred while fetching!!', err);
     throw err;
@@ -212,284 +22,193 @@ const getReports = async (page, limit, search = '', startDate, endDate, atoll, i
 
 const exportReports = async (search, startDate, endDate, atoll, island) => {
   try {
-    // Calculate timestamps for date filtering
-    let startTimestamp, endTimestamp;
-    if (startDate) {
-      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
-    }
-    if (endDate) {
-      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
-    }
-
-    // Date filter for initial match (subscriptions with at least one matching service)
-    let dateFilter = {};
-    if (startDate || endDate) {
-      const elemMatchConditions = {};
-      if (startDate) {
-        elemMatchConditions['service_terms.start_date'] = { $gte: startTimestamp };
-      }
-      if (endDate) {
-        elemMatchConditions['service_terms.end_date'] = { $lte: endTimestamp };
-      }
-      dateFilter.services = { $elemMatch: elemMatchConditions };
-    }
-
-    // Date filter for individual services after unwind
-    let serviceDateFilter = {};
-    if (startDate) {
-      serviceDateFilter["services.service_terms.start_date"] = { $gte: startTimestamp };
-    }
-    if (endDate) {
-      serviceDateFilter["services.service_terms.end_date"] = { $lte: endTimestamp };
-    }
-
-    // Match stage for search, atoll, and island
-    let matchStage = { ...dateFilter };
-
-    if (search) {
-      matchStage.$text = { $search: search };
-    }
-
-    if (atoll) {
-      matchStage['joinedData2.location.province'] = atoll;
-    }
-
-    if (island) {
-      matchStage['joinedData2.location.city'] = island;
-    }
-
-    // Prepare your aggregation query
-    const aggregationQuery = [
-      {
-        $lookup: {
-          from: 'ContactProfiles',
-          localField: 'contact_id',
-          foreignField: 'contact_id',
-          as: 'joinedData2',
-        }
-      },
-      { $match: matchStage },
-      { $unwind: "$services" },
-      { $match: serviceDateFilter },
-      {
-        $lookup: {
-          from: 'Devices',
-          localField: 'contact_id',
-          foreignField: 'ownership.id',
-          as: 'joinedData3',
-        }
-      },
-      {
-        $lookup: {
-          from: 'Orders',
-          localField: 'contact_id',
-          foreignField: 'contact_id',
-          as: 'ordersData',
-        }
-      },
-      {
-        $lookup: {
-          from: 'Journals',
-          localField: 'contact_id',
-          foreignField: 'contact_id',
-          as: 'joinedData4',
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          "Submitted By User": "$submited_by_user_name",
-          "Contact Code": {
-            $concat: ['"', { $toString: { $arrayElemAt: ['$joinedData4.contact_code', 0] } }, '"']
-          },
-          "Device Code": {
-            $cond: {
-              if: { $eq: [{ $type: '$joinedData3.custom_fields.value' }, 'array'] },
-              then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData3.custom_fields.value', 0] }, 0] },
-              else: '$joinedData3.custom_fields.value',
-            }
-          },
-          "Customer Name": { $arrayElemAt: ['$joinedData2.profile.name', 0] },
-          "Customer Type": { $arrayElemAt: ['$joinedData2.profile.type', 0] },
-          "Customer Type 2": {
-            $cond: {
-              if: {
-                $or: [
-                  { $not: { $isArray: '$joinedData2.company_profile.industry_name' } },
-                  { $eq: [{ $size: { $ifNull: ['$joinedData2.company_profile.industry_name', []] } }, 0] }
-                ]
-              },
-              then: 'N/A',
-              else: { $arrayElemAt: ['$joinedData2.company_profile.industry_name', 0] }
-            }
-          },
-          "Payment Type": {
-            $cond: {
-              if: { $eq: [{ $arrayElemAt: ['$ordersData.payment_method.type', 0] }, 'ELECTRONIC_TRANSFER'] },
-              then: 'QuickPay',
-              else: { $arrayElemAt: ['$ordersData.payment_method.type', 0] }
-            }
-          },
-          "Sales Model": { $arrayElemAt: ['$joinedData2.sales_model.name', 0] },
-          "Available Balance": { $ifNull: [ { $toDouble: { $arrayElemAt: ['$joinedData2.account.balance', 0] } }, 0 ] },
-          "Service Provider": {
-            $let: {
-              vars: {
-                serviceProviderField: {
-                  $arrayElemAt: [
-                    {
-                      $filter: {
-                        input: { $ifNull: [{ $arrayElemAt: ['$joinedData2.custom_fields', 0] }, []] },
-                        as: 'field',
-                        cond: { $eq: ['$$field.key', 'service_provider'] }
-                      }
-                    },
-                    0
-                  ]
-                }
-              },
-              in: {
-                $cond: {
-                  if: { $ne: ['$$serviceProviderField', null] },
-                  then: '$$serviceProviderField.value_label',
-                  else: 'N/A'
-                }
-              }
-            }
-          },
-          "Wallet Code": {
-            $cond: {
-              if: { $and: [
-                { $ne: [{ $arrayElemAt: ['$joinedData2.wallet', 0] }, null] },
-                { $ne: [{ $arrayElemAt: ['$joinedData2.wallet.code', 0] }, null] }
-              ]},
-              then: { $arrayElemAt: ['$joinedData2.wallet.code', 0] },
-              else: 'N/A'
-            }
-          },
-          Area: {
-            $cond: {
-              if: { $eq: [{ $type: '$joinedData2.tags.name' }, 'array'] },
-              then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData2.tags.name', 0] }, 0] },
-              else: '$joinedData2.tags.name',
-            }
-          },
-          "Dealer": {
-            $cond: {
-              if: { $eq: [{ $type: '$joinedData2.custom_fields.value_label' }, 'array'] },
-              then: { $arrayElemAt: [{ $arrayElemAt: ['$joinedData2.custom_fields.value_label', 0] }, 0] },
-              else: '$joinedData2.custom_fields.value_label',
-            }
-          },
-          Mobile: { $arrayElemAt: ['$joinedData2.phone', 0] },
-          Ward: { $arrayElemAt: ['$joinedData2.location.address_line1', 0] },
-          Road: { $arrayElemAt: ['$joinedData2.location.address_line2', 0] },
-          Island: { $arrayElemAt: ['$joinedData2.location.city', 0] },
-          Atoll: { $arrayElemAt: ['$joinedData2.location.province', 0] },
-          STB: { $arrayElemAt: ['$joinedData3.product.name', 0] },
-          Status: "$services.state", // Direct access after unwind
-          Package: "$services.product.name",
-          Price: { $round: [{ $toDouble: "$services.price_terms.price" }, 2] },
-          "Start Date": {
-            $dateToString: {
-              format: "%d-%b-%Y",
-              date: { $toDate: { $multiply: [{ $toLong: "$services.service_terms.start_date" }, 1000] } }
-            }
-          },
-          "End Date": {
-            $dateToString: {
-              format: "%d-%b-%Y",
-              date: { $toDate: { $multiply: [{ $toLong: "$services.service_terms.end_date" }, 1000] } }
-            }
-          },
-          "Day Count from Cycle End Date to Report Extraction Date": {
-            $round: [
-              {
-                $divide: [
-                  {
-                    $subtract: [
-                      "$$NOW",
-                      {
-                        $toDate: {
-                          $multiply: [
-                            { $toLong: "$services.service_terms.end_date" },
-                            1000
-                          ]
-                        }
-                      }
-                    ]
-                  },
-                  86400000
-                ]
-              },
-              0
-            ]
-          }
-        }
-      }
-    ];
-
-    // Perform aggregation to fetch the data
-    const results = await mongoose.connection.db.collection('Subscriptions').aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true }).toArray();
-
-    // Process the results to convert Decimal128 to number (kept as fallback, though now handled in aggregation)
-    const processedResults = results.map(result => {
-      // Convert Available Balance from Decimal128 object to number (if somehow still present)
-      if (result["Available Balance"] && 
-          typeof result["Available Balance"] === 'object' && 
-          result["Available Balance"].$numberDecimal !== undefined) {
-        result["Available Balance"] = parseFloat(result["Available Balance"].$numberDecimal);
-      }
-      
-      // Also handle Price field if it's in Decimal128 format (if somehow still present)
-      if (result["Price"] && 
-          typeof result["Price"] === 'object' && 
-          result["Price"].$numberDecimal !== undefined) {
-        result["Price"] = parseFloat(result["Price"].$numberDecimal);
-      }
-      
-      return result;
-    });
-
-    // Convert the processed data to CSV format
-    const csvData = parse(processedResults);
-
-    return csvData;
-
+    return await subscriptionReportsService.exportReports(search, startDate, endDate, atoll, island);
   } catch (error) {
     console.error('Error exporting report:', error);
-    throw new Error('Error exporting report');
+    throw new Error(error.message || 'Error exporting report');
   }
 };
 
 
-const exportContactProfiles = async (search, startDate, endDate, atoll, island, page, limit, format, deviceProductNameFilter) => {
-  try {
-    // Calculate timestamps for date filtering
-    let startTimestamp, endTimestamp;
-    if (startDate) {
-      startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
-    }
-    if (endDate) {
-      endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
-    }
+const BILLING_BATCH_SIZE = 2500;
+const BILLING_CONCURRENCY = 6;
+const PAYMENT_METHOD_LABELS = { ELECTRONIC_TRANSFER: 'Quick Pay' };
+const SERVICE_STATE_ORDER = { EFFECTIVE: 0, PAUSED: 1, NOT_EFFECTIVE: 2, SWAPPED: 3, CANCELLED: 4 };
 
-    // Date filter for submited_date
-    let dateFilter = {};
-    if (startDate) {
-      dateFilter.submited_date = { $gte: startTimestamp };
+const toAmount = (value) => {
+  if (value == null) return 0;
+  const n = Number(value.toString());
+  return Number.isFinite(n) ? n : 0;
+};
+
+const formatMvr = (value) => `MVR ${value.toFixed(2)}`;
+
+const formatMaldivesDay = (seconds) =>
+  seconds ? new Date((Number(seconds) + 5 * 3600) * 1000).toISOString().slice(0, 10) : '';
+
+const formatPaymentMethod = (type) =>
+  type ? PAYMENT_METHOD_LABELS[type] || type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : '';
+
+// Adds per-contact subscription packages/amounts and posted payments to customer report rows.
+const attachSubscriptionsAndPayments = async (rows) => {
+  const contactIds = [...new Set(rows.map((row) => row.contact_id).filter(Boolean))];
+  const servicesByContact = new Map();
+  const paymentsByContact = new Map();
+  const db = mongoose.connection.db;
+
+  const batches = [];
+  for (let i = 0; i < contactIds.length; i += BILLING_BATCH_SIZE) {
+    batches.push(contactIds.slice(i, i + BILLING_BATCH_SIZE));
+  }
+
+  const loadBatch = async (batch) => {
+    const [subscriptions, payments] = await Promise.all([
+      db.collection('Subscriptions').find(
+        { contact_id: { $in: batch } },
+        {
+          projection: {
+            contact_id: 1,
+            'services.state': 1,
+            'services.product.name': 1,
+            'services.price_terms.price': 1,
+            'services.service_terms.start_date': 1,
+            'services.service_terms.end_date': 1,
+          },
+        }
+      ).toArray(),
+      db.collection('Events').find(
+        { contact_id: { $in: batch }, type: 'PAYMENT_POSTED' },
+        {
+          projection: {
+            contact_id: 1,
+            'payment_method.payment_method_type': 1,
+            'transaction.posted_date': 1,
+            'transaction.total_amount': 1,
+            'transaction.number': 1,
+          },
+        }
+      ).toArray(),
+    ]);
+
+    for (const sub of subscriptions) {
+      const list = servicesByContact.get(sub.contact_id) || [];
+      for (const svc of sub.services || []) {
+        if (!svc || svc.state === 'DRAFT') continue;
+        list.push(svc);
+      }
+      servicesByContact.set(sub.contact_id, list);
     }
-    if (endDate) {
-      dateFilter.submited_date = dateFilter.submited_date
-        ? { $gte: startTimestamp, $lte: endTimestamp }
-        : { $lte: endTimestamp };
+    for (const ev of payments) {
+      const list = paymentsByContact.get(ev.contact_id) || [];
+      list.push(ev);
+      paymentsByContact.set(ev.contact_id, list);
+    }
+  };
+
+  let next = 0;
+  const workers = Array.from({ length: Math.min(BILLING_CONCURRENCY, batches.length) }, async () => {
+    while (next < batches.length) {
+      await loadBatch(batches[next++]);
+    }
+  });
+  await Promise.all(workers);
+
+  return rows.map((row) => {
+    const services = (servicesByContact.get(row.contact_id) || []).slice().sort((a, b) => {
+      const byState = (SERVICE_STATE_ORDER[a.state] ?? 9) - (SERVICE_STATE_ORDER[b.state] ?? 9);
+      if (byState !== 0) return byState;
+      return (b.service_terms?.start_date || 0) - (a.service_terms?.start_date || 0);
+    });
+    const activeAmount = services
+      .filter((svc) => svc.state === 'EFFECTIVE')
+      .reduce((sum, svc) => sum + toAmount(svc.price_terms?.price), 0);
+
+    const payments = (paymentsByContact.get(row.contact_id) || [])
+      .slice()
+      .sort((a, b) => (b.transaction?.posted_date || 0) - (a.transaction?.posted_date || 0));
+    const totalPaid = payments.reduce((sum, p) => sum + toAmount(p.transaction?.total_amount), 0);
+    const lastPayment = payments[0];
+
+    return {
+      ...row,
+      'Subscriptions': services
+        .map((svc) => {
+          const range = [svc.service_terms?.start_date, svc.service_terms?.end_date]
+            .map(formatMaldivesDay)
+            .join(' to ');
+          return `${svc.product?.name || 'Unknown'} [${svc.state}] ${formatMvr(toAmount(svc.price_terms?.price))} (${range})`;
+        })
+        .join('; '),
+      'Active Subscription Amount': services.length ? formatMvr(activeAmount) : '',
+      'Payment Count': payments.length,
+      'Total Paid': payments.length ? formatMvr(totalPaid) : '',
+      'Last Payment Date': lastPayment ? formatMaldivesDay(lastPayment.transaction?.posted_date) : '',
+      'Last Payment Amount': lastPayment ? formatMvr(toAmount(lastPayment.transaction?.total_amount)) : '',
+      'Payments': payments
+        .map((p) => {
+          const parts = [
+            formatMaldivesDay(p.transaction?.posted_date),
+            formatMvr(toAmount(p.transaction?.total_amount)),
+            formatPaymentMethod(p.payment_method?.payment_method_type),
+            p.transaction?.number ? `#${p.transaction.number}` : '',
+          ].filter(Boolean);
+          return parts.join(' ');
+        })
+        .join('; '),
+    };
+  });
+};
+
+// Accepts 'YYYY-MM-DD' or any Date-parsable string and returns the Maldives (UTC+5) calendar day.
+const toMaldivesDay = (value) => {
+  const str = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  const ms = Date.parse(str);
+  if (Number.isNaN(ms)) return null;
+  return new Date(ms + 5 * 3600 * 1000).toISOString().slice(0, 10);
+};
+
+const maldivesDayStart = (value) => {
+  const day = toMaldivesDay(value);
+  return day ? Math.floor(Date.parse(`${day}T00:00:00+05:00`) / 1000) : undefined;
+};
+
+const maldivesDayEnd = (value) => {
+  const start = maldivesDayStart(value);
+  return start === undefined ? undefined : start + 86399;
+};
+
+/**
+ * options.customerReport: Sales "Customer Reports" mode – filters/sorts on profile.registration_date
+ * (the date shown as "Registered Date") and attaches subscriptions + payments to each row.
+ */
+const exportContactProfiles = async (search, startDate, endDate, atoll, island, page, limit, format, deviceProductNameFilter, options = {}) => {
+  try {
+    const { customerReport = false } = options;
+    const dateField = customerReport ? 'profile.registration_date' : 'submited_date';
+    const startTimestamp = startDate ? maldivesDayStart(startDate) : undefined;
+    const endTimestamp = endDate ? maldivesDayEnd(endDate) : undefined;
+
+    const dateFilter = {};
+    if (startTimestamp !== undefined || endTimestamp !== undefined) {
+      dateFilter[dateField] = {};
+      if (startTimestamp !== undefined) dateFilter[dateField].$gte = startTimestamp;
+      if (endTimestamp !== undefined) dateFilter[dateField].$lte = endTimestamp;
     }
 
     // Match stage for search, atoll, and island
     let matchStage = { ...dateFilter };
 
     if (search) {
-      matchStage.$text = { $search: search };
+      const term = String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const prefix = { $regex: `^${term}`, $options: 'i' };
+      matchStage.$or = [
+        { 'account.number': prefix },
+        { 'profile.code': prefix },
+        { phone: prefix },
+        { 'demographics.first_name': { $regex: term, $options: 'i' } },
+        { 'demographics.last_name': { $regex: term, $options: 'i' } },
+      ];
     }
 
     if (atoll) {
@@ -500,28 +219,45 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
       matchStage['location.city'] = island;
     }
 
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, parseInt(limit, 10) || 10);
+    const pageStages = format === 'json' ? [{ $skip: (pageNum - 1) * limitNum }, { $limit: limitNum }] : [];
+    const sortStages = customerReport ? [{ $sort: { 'profile.registration_date': -1, _id: -1 } }] : [];
+    const devicesLookup = {
+      $lookup: {
+        from: 'Devices',
+        localField: 'contact_id',
+        foreignField: 'ownership.id',
+        pipeline: [
+          {
+            $project: {
+              _id: 0,
+              'product.name': 1,
+              custom_fields: 1,
+              'provisioning.serial_number': 1,
+              serial_number: 1,
+              electronic_id: 1,
+            },
+          },
+        ],
+        as: 'joinedDataDevices',
+      },
+    };
+
+    // Without a device filter, paginate before the device lookup so only the requested page is joined.
+    const preProjectStages = deviceProductNameFilter
+      ? [
+          { $match: matchStage },
+          devicesLookup,
+          { $match: { 'joinedDataDevices.product.name': { $regex: deviceProductNameFilter, $options: 'i' } } },
+          ...sortStages,
+          ...pageStages,
+        ]
+      : [{ $match: matchStage }, ...sortStages, ...pageStages, devicesLookup];
+
     // Prepare aggregation query
     const aggregationQuery = [
-      { $match: matchStage },
-      {
-        $lookup: {
-          from: 'Devices',
-          localField: 'contact_id',
-          foreignField: 'ownership.id',
-          as: 'joinedDataDevices',
-        },
-      },
-      {
-        $lookup: {
-          from: 'Journals',
-          localField: 'contact_id',
-          foreignField: 'contact_id',
-          as: 'joinedDataJournals',
-        },
-      },
-      ...(deviceProductNameFilter
-        ? [{ $match: { 'joinedDataDevices.product.name': { $regex: deviceProductNameFilter, $options: 'i' } } }]
-        : []),
+      ...preProjectStages,
       {
         $project: {
           _id: 0,
@@ -543,7 +279,8 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
           'Registered Date': {
             $dateToString: {
               format: "%d-%m-%Y %H:%M:%S",
-              date: { $toDate: { $multiply: ["$profile.registration_date", 1000] } }
+              date: { $toDate: { $multiply: ["$profile.registration_date", 1000] } },
+              timezone: customerReport ? '+05:00' : 'UTC',
             }
           },
           'Address Line 1': { $ifNull: ['$location.address_line1', ''] },
@@ -562,6 +299,7 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
           Island: { $ifNull: ['$location.city', ''] },
           'Account Number': { $ifNull: ['$account.number', ''] },
           'Customer Type': { $ifNull: ['$profile.type', ''] },
+          'Customer Code': { $ifNull: ['$profile.code', ''] },
           'Sales Model': { $ifNull: ['$sales_model.name', ''] },
           'Account Balance': {
             $cond: {
@@ -843,38 +581,28 @@ const exportContactProfiles = async (search, startDate, endDate, atoll, island, 
     ];
 
     // Calculate total count for pagination (include device filter when applied)
-    const countPipeline = [
-      { $match: matchStage },
-      ...(deviceProductNameFilter
-        ? [
-            { $lookup: { from: 'Devices', localField: 'contact_id', foreignField: 'ownership.id', as: 'joinedDataDevices' } },
-            { $match: { 'joinedDataDevices.product.name': { $regex: deviceProductNameFilter, $options: 'i' } } },
-          ]
-        : []),
-      { $count: 'total' },
-    ];
-    const countResult = await mongoose.connection.db
-      .collection('ContactProfiles')
-      .aggregate(countPipeline, { maxTimeMS: 600000, allowDiskUse: true })
-      .toArray();
-    const total = countResult.length > 0 ? Number(countResult[0].total) : 0;
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.max(1, parseInt(limit, 10) || 10);
-    const totalPages = limitNum > 0 ? Math.max(1, Math.ceil(total / limitNum)) : 0;
+    const contactProfiles = mongoose.connection.db.collection('ContactProfiles');
+    const countPromise = deviceProductNameFilter
+      ? contactProfiles
+          .aggregate(
+            [
+              { $match: matchStage },
+              { $lookup: { from: 'Devices', localField: 'contact_id', foreignField: 'ownership.id', pipeline: [{ $project: { _id: 0, 'product.name': 1 } }], as: 'joinedDataDevices' } },
+              { $match: { 'joinedDataDevices.product.name': { $regex: deviceProductNameFilter, $options: 'i' } } },
+              { $count: 'total' },
+            ],
+            { maxTimeMS: 600000, allowDiskUse: true }
+          )
+          .toArray()
+          .then((rows) => (rows.length > 0 ? Number(rows[0].total) : 0))
+      : contactProfiles.countDocuments(matchStage, { maxTimeMS: 600000 });
 
-    // Add pagination to the aggregation query for JSON format
-    if (format === 'json') {
-      aggregationQuery.push(
-        { $skip: (pageNum - 1) * limitNum },
-        { $limit: limitNum }
-      );
-    }
-
-    // Perform aggregation to fetch the data
-    const results = await mongoose.connection.db
-      .collection('ContactProfiles')
-      .aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true })
-      .toArray();
+    const [total, rawResults] = await Promise.all([
+      countPromise,
+      contactProfiles.aggregate(aggregationQuery, { maxTimeMS: 600000, allowDiskUse: true }).toArray(),
+    ]);
+    const totalPages = Math.max(1, Math.ceil(total / limitNum));
+    const results = customerReport ? await attachSubscriptionsAndPayments(rawResults) : rawResults;
 
     // Initialize response object
     const response = {
@@ -2424,6 +2152,12 @@ const exportContactProfilesWithInvoice = async (search, startDate, endDate, atol
 
 const exportContactProfilesWithHdc = async (startDate, endDate, page, limit, format) => {
   try {
+    if (!startDate || !endDate) {
+      const err = new Error('startDate and endDate are required');
+      err.statusCode = 400;
+      throw err;
+    }
+
     // Validate and convert dates to UTC timestamps
     let startTimestamp, endTimestamp;
     if (startDate) {
@@ -2932,7 +2666,6 @@ const exportContactProfilesWithHdc = async (startDate, endDate, page, limit, for
         Name: profile.Name || '',
         'Customer Code': profile['Customer Code'] || '',
         'Account Number': profile['Account Number'] || '',
-        Country: profile.Country || '',
         'Account Classification': profile['Account Classification'] || '',
         'Contact Sales Model': profile['Contact Sales Model'] || '',
         Tags: profile.Tags || '',
@@ -9330,6 +9063,8 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
   };
 
   try {
+    const crmDb = getCRMConnection().db;
+
     // Calculate timestamps
     let startTimestamp, endTimestamp;
     if (startDate) {
@@ -9669,7 +9404,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
       
       try {
         // Get count
-        const countResult = await mongoose.connection.db
+        const countResult = await crmDb
           .collection('Orders')
           .aggregate(countPipeline, {
             maxTimeMS: 300000,
@@ -9684,7 +9419,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         const paginatedQuery = [...aggregationQuery, { $skip: skipNum }, { $limit: limitNum }];
         
         // Get paginated results
-        let rawResults = await mongoose.connection.db
+        let rawResults = await crmDb
           .collection('Orders')
           .aggregate(paginatedQuery, {
             maxTimeMS: 300000,
@@ -9709,7 +9444,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
         };
       } catch (countError) {
         // Fallback: Get all results and apply pagination manually
-        let rawResults = await mongoose.connection.db
+        let rawResults = await crmDb
           .collection('Orders')
           .aggregate(aggregationQuery, {
             maxTimeMS: 300000,
@@ -9741,7 +9476,7 @@ const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limi
       }
     } else {
       // For CSV or non-paginated JSON
-      let rawResults = await mongoose.connection.db
+      let rawResults = await crmDb
         .collection('Orders')
         .aggregate(aggregationQuery, {
           maxTimeMS: 300000,

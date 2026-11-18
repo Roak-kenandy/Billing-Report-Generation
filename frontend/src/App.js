@@ -17,11 +17,16 @@ import MtvRegisteredCustomer from './components/loginReport/MtvRegisteredCustome
 import ReferralCountReports from './components/loginReport/ReferralCountReports';
 import DeviceStatistics from './components/loginReport/DeviceStatistics';
 import SubscribedDealerReports from './components/loginReport/SubscribedDealerReports';
-import SalesCrmReport from './components/loginReport/SalesCrmReport';
 import SubscribedDisconnectedReports from './components/loginReport/SubscribedDisconnectedReport';
 import DealerWisecollection from './components/loginReport/DealerWiseCollection';
 import InvoiceReports from './components/loginReport/InvoiceReports';
 import HdcReports from './components/loginReport/HdcReports';
+import OrganizationDeviceReport from './components/loginReport/OrganizationDeviceReport';
+import ActiveSubscriptionCustomerReport from './components/loginReport/ActiveSubscriptionCustomerReport';
+import SubscriptionStateReport from './components/loginReport/SubscriptionStateReport';
+import InactiveCustomerGroupsReport from './components/loginReport/InactiveCustomerGroupsReport';
+import OttTagReport from './components/loginReport/OttTagReport';
+import BulkAccountTermination from './components/loginReport/BulkAccountTermination';
 import BulkService from './components/loginReport/BulkService';
 import HDCCustomerReports from './components/loginReport/hdcCustomerReports';
 import HdcCustomerInvocieReports from './components/loginReport/hdcCustomerInvoiceReports';
@@ -80,13 +85,16 @@ function App() {
         <Route path="dealerWiseCollection" element={<DealerWisecollection />} />
         {/* <Route path="deviceNames" element={<DeviceNames />} /> */}
         {/* <Route path="dynamicReportBuilder" element={<DynamicReportBuilder />} /> */}
-        <Route path="sales/active-subscriptions" element={<SalesCrmReport />} />
-        <Route path="sales/disconnected" element={<SalesCrmReport />} />
-        <Route path="sales/new-connections" element={<SalesCrmReport />} />
         <Route path="customerReports" element={<CustomerReports />} />
         <Route path="customerNewReports" element={<MigrationReports />} />
         <Route path="invoiceReports" element={<InvoiceReports />} />
         <Route path="hdcReports" element={<HdcReports/>} />
+        <Route path="organizationDeviceReport" element={<OrganizationDeviceReport />} />
+        <Route path="activeSubscriptionCustomers" element={<ActiveSubscriptionCustomerReport />} />
+        <Route path="subscriptionState" element={<SubscriptionStateReport />} />
+        <Route path="inactiveCustomerGroups" element={<InactiveCustomerGroupsReport />} />
+        <Route path="ottTagReport" element={<OttTagReport />} />
+        <Route path="bulkAccountTermination" element={<BulkAccountTermination />} />
         <Route path="bulkService" element={<BulkService/>} />
         <Route path="hdcCustomer" element={<HDCCustomerReports/>} />
         <Route path="hdcCustomerInvoiceReports" element={<HdcCustomerInvocieReports/>} />

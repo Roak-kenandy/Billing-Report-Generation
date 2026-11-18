@@ -30,10 +30,6 @@ router.get('/customerReports', billingReportController.exportContactProfiles);
 
 router.get('/customerNewReports', billingReportController.exportMigrationReports);
 
-router.get('/sales-reports/active-subscriptions', billingReportController.exportActiveSubscriptionReport);
-router.get('/sales-reports/disconnected', billingReportController.exportDisconnectedReport);
-router.get('/sales-reports/new-connections', billingReportController.exportNewConnectionReport);
-
 router.get('/vipCustomerReports', billingReportController.exportVipContactProfiles);
 
 router.get('/hdcCustomerReports', billingReportController.exportHdcContactProfiles);
@@ -41,6 +37,16 @@ router.get('/hdcCustomerReports', billingReportController.exportHdcContactProfil
 router.get('/invoiceReports', billingReportController.exportContactProfilesWithInvoiceController);
 
 router.get('/hdcReports', billingReportController.exportContactProfilesWithHdc);
+
+router.get('/crm-reports/organization-devices', billingReportController.exportOrganizationDeviceReport);
+
+router.get('/sales-reports/active-subscriptions', billingReportController.exportActiveSubscriptionReport);
+
+router.get('/sales-reports/subscription-state', billingReportController.exportSubscriptionStateReport);
+
+router.get('/sales-reports/inactive-customer-groups', billingReportController.exportInactiveCustomerGroupsReport);
+
+router.get('/sales-reports/ott-tag', billingReportController.exportOttTagReport);
 
 router.get("/hdcReportsClient", billingReportController.exportContactProfilesWithHdcClient);
 
@@ -100,6 +106,16 @@ router.post('/create-bulk', bulkUploadController.createBulkOperation);
 router.get('/get-bulk', bulkUploadController.getAllBulkOperations);
 
 router.get('/crm-dealers', bulkUploadController.getCrmDealerReports);
+
+const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+router.post('/bulk-account-termination/preview', memoryUpload.single('file'), bulkUploadController.previewBulkAccountTermination);
+router.get('/bulk-account-termination/preview/:previewId/csv', bulkUploadController.downloadBulkAccountTerminationPreview);
+router.get('/bulk-account-termination/jobs', bulkUploadController.listBulkAccountTerminationJobs);
+router.post('/bulk-account-termination/jobs', bulkUploadController.startBulkAccountTermination);
+router.get('/bulk-account-termination/jobs/:jobId', bulkUploadController.getBulkAccountTerminationJob);
+router.post('/bulk-account-termination/jobs/:jobId/stop', bulkUploadController.stopBulkAccountTerminationJob);
+router.get('/bulk-account-termination/jobs/:jobId/results.csv', bulkUploadController.downloadBulkAccountTerminationResults);
 
 //MTV Registered Customer
 router.get('/mtv/registered', billingReportController.mtvRegisteredCustomer);

@@ -6,6 +6,7 @@ const bulkOperationReportsSchema = new mongoose.Schema({
     date: { type: Number, required: false },
     type: { type: String, required: false },
     status: { type: String },
+    summary: { type: mongoose.Schema.Types.Mixed, required: false },
 });
 
 module.exports = mongoose.model("BulkOperationReport", bulkOperationReportsSchema, "BulkOperationReports");

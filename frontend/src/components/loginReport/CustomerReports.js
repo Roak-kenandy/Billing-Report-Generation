@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Table,
     TableBody,
@@ -16,6 +16,9 @@ import {
     InputLabel,
     Select,
     MenuItem,
+    TextField,
+    Alert,
+    Typography,
 } from '@mui/material';
 import { GetApp } from '@mui/icons-material';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
@@ -23,24 +26,55 @@ import ClearIcon from '@mui/icons-material/Clear';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { format } from 'date-fns';
 import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
+
+const toDayString = (date) => (date ? format(date, 'yyyy-MM-dd') : '');
+
+const COLUMNS = [
+    'Name',
+    'Customer Code',
+    'Phone',
+    'Registered Date',
+    'Account Number',
+    'Address Line 1',
+    'Address Line 2',
+    'Address Name',
+    'City',
+    'Country',
+    'Province',
+    'Atoll',
+    'Island',
+    'Service Provider',
+    'Device Code',
+    'Tags',
+    'Device Name',
+    'Subscriptions',
+    'Active Subscription Amount',
+    'Payment Count',
+    'Total Paid',
+    'Last Payment Date',
+    'Last Payment Amount',
+    'Payments',
+];
+
+const formatCell = (value) => (Array.isArray(value) ? value.join(', ') : value ?? '');
 
 const CustomerReports = () => {
     const [reports, setReports] = useState([]);
     const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
     const [searchTerm, setSearchTerm] = useState('');
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
-    const [appliedStartDate, setAppliedStartDate] = useState('');
-    const [appliedEndDate, setAppliedEndDate] = useState('');
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
     const isSmallScreen = useMediaQuery('(max-width:600px)');
     const [atolls, setAtolls] = useState([]);
     const [selectedAtoll, setSelectedAtoll] = useState('');
     const [selectedIsland, setSelectedIsland] = useState('');
-    const [appliedAtoll, setAppliedAtoll] = useState('');
-    const [appliedIsland, setAppliedIsland] = useState('');
+    const [appliedFilters, setAppliedFilters] = useState(null);
+    const [error, setError] = useState('');
+    const requestIdRef = useRef(0);
     const API_URL = getApiBaseUrl();
 
     useEffect(() => {
@@ -56,90 +90,91 @@ const CustomerReports = () => {
         fetchAtolls();
     }, []);
 
-    const fetchReports = async (page, limit, search = '', start = '', end = '', atoll = '', island = '') => {
-        setLoading(true);
-        try {
-            let url = `${API_URL}/customerReports?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}&format=json`;
-            if (start) url += `&startDate=${encodeURIComponent(start)}`;
-            if (end) url += `&endDate=${encodeURIComponent(end)}`;
-            if (atoll) {
-                const selectedAtollName = atolls.find(a => a.atolls_id === atoll)?.atolls_name;
-                if (selectedAtollName) url += `&atoll=${encodeURIComponent(selectedAtollName)}`;
-            }
-            if (island) {
-                const selectedAtollData = atolls.find(a => a.atolls_id === atoll);
-                const selectedIslandName = selectedAtollData?.islands.find(i => i.islands_id === island)?.islands_name;
-                if (selectedIslandName) url += `&island=${encodeURIComponent(selectedIslandName)}`;
-            }
+    const buildQuery = (filters) => {
+        const params = new URLSearchParams();
+        if (filters.search) params.append('search', filters.search);
+        params.append('startDate', toDayString(filters.startDate));
+        params.append('endDate', toDayString(filters.endDate));
+        const atollData = atolls.find(a => a.atolls_id === filters.atoll);
+        if (atollData) params.append('atoll', atollData.atolls_name);
+        const islandName = atollData?.islands.find(i => i.islands_id === filters.island)?.islands_name;
+        if (islandName) params.append('island', islandName);
+        return params;
+    };
 
-            const response = await fetch(url, { headers: getAuthHeaders() });
+    const fetchReports = async (page, filters) => {
+        const requestId = ++requestIdRef.current;
+        setLoading(true);
+        setError('');
+        try {
+            const params = buildQuery(filters);
+            params.append('page', page);
+            params.append('limit', pagination.limit);
+            params.append('format', 'json');
+            const response = await fetch(`${API_URL}/customerReports?${params.toString()}`, { headers: getAuthHeaders() });
             if (!response.ok) throw new Error('Failed to fetch reports');
             const data = await response.json();
-            setReports(data.data);
+            if (requestId !== requestIdRef.current) return;
+            setReports(data.data || []);
             setPagination(data.pagination);
         } catch (err) {
+            if (requestId !== requestIdRef.current) return;
             console.error('Error fetching reports:', err);
             setReports([]);
+            setError('Failed to load customer reports. Please try again.');
         } finally {
-            setLoading(false);
+            if (requestId === requestIdRef.current) setLoading(false);
         }
     };
 
     const handleFilter = () => {
-        setAppliedStartDate(startDate);
-        setAppliedEndDate(endDate);
-        setAppliedAtoll(selectedAtoll);
-        setAppliedIsland(selectedIsland);
-        setPagination(prev => ({ ...prev, page: 1 }));
+        if (!startDate || !endDate) {
+            setError('Please select both Start Date and End Date.');
+            return;
+        }
+        if (startDate > endDate) {
+            setError('Start Date must be on or before End Date.');
+            return;
+        }
+        const filters = {
+            search: searchTerm.trim(),
+            startDate,
+            endDate,
+            atoll: selectedAtoll,
+            island: selectedIsland,
+        };
+        setAppliedFilters(filters);
+        fetchReports(1, filters);
     };
 
     const handleClearFilter = () => {
-        setStartDate('');
-        setEndDate('');
-        setAppliedStartDate('');
-        setAppliedEndDate('');
+        requestIdRef.current++;
+        setStartDate(null);
+        setEndDate(null);
         setSelectedAtoll('');
         setSelectedIsland('');
-        setAppliedAtoll('');
-        setAppliedIsland('');
         setSearchTerm('');
-        setPagination(prev => ({ ...prev, page: 1 }));
+        setAppliedFilters(null);
+        setReports([]);
+        setError('');
+        setLoading(false);
+        setPagination(prev => ({ ...prev, page: 1, total: 0, totalPages: 0 }));
     };
-
-    useEffect(() => {
-        setPagination(prev => ({ ...prev, page: 1 }));
-    }, [searchTerm, appliedStartDate, appliedEndDate, appliedAtoll, appliedIsland]);
-
-    useEffect(() => {
-        fetchReports(pagination.page, pagination.limit, searchTerm, appliedStartDate, appliedEndDate, appliedAtoll, appliedIsland);
-    }, [pagination.page, pagination.limit, searchTerm, appliedStartDate, appliedEndDate, appliedAtoll, appliedIsland]);
 
     const handlePageChange = (event, value) => {
-        setPagination({ ...pagination, page: value });
-    };
-
-    const handleSearch = (event) => {
-        setSearchTerm(event.target.value);
-        setPagination({ ...pagination, page: 1 });
+        if (appliedFilters) fetchReports(value, appliedFilters);
     };
 
     const handleDownloadCSV = async () => {
+        if (!appliedFilters) {
+            setError('Apply a date filter before downloading.');
+            return;
+        }
         try {
             setIsDownloading(true);
-            let url = new URL(`${API_URL}/customerReports`, window.location.origin);
-            url.searchParams.append('search', searchTerm);
-            url.searchParams.append('format', 'csv');
-            if (appliedStartDate) url.searchParams.append('startDate', appliedStartDate);
-            if (appliedEndDate) url.searchParams.append('endDate', appliedEndDate);
-            if (appliedAtoll) {
-                const selectedAtollName = atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name;
-                if (selectedAtollName) url.searchParams.append('atoll', encodeURIComponent(selectedAtollName));
-            }
-            if (appliedIsland) {
-                const selectedAtollData = atolls.find(a => a.atolls_id === appliedAtoll);
-                const selectedIslandName = selectedAtollData?.islands.find(i => i.islands_id === appliedIsland)?.islands_name;
-                if (selectedIslandName) url.searchParams.append('island', encodeURIComponent(selectedIslandName));
-            }
+            const params = buildQuery(appliedFilters);
+            params.append('format', 'csv');
+            const url = `${API_URL}/customerReports?${params.toString()}`;
 
             const response = await fetch(url, { headers: getAuthHeaders() });
             if (!response.ok) throw new Error('Export failed');
@@ -217,6 +252,21 @@ const CustomerReports = () => {
                                         backgroundColor: '#f1f5f9',
                                     },
                                 },
+                            },
+                        }}
+                    />
+                    <TextField
+                        label="Search"
+                        placeholder="Account no, code, phone, name"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleFilter(); }}
+                        InputLabelProps={{ shrink: true }}
+                        sx={{
+                            width: isSmallScreen ? '100%' : 220,
+                            '& .MuiOutlinedInput-root': {
+                                borderRadius: 2,
+                                backgroundColor: '#f1f5f9',
                             },
                         }}
                     />
@@ -312,7 +362,7 @@ const CustomerReports = () => {
                         variant="contained"
                         startIcon={!isSmallScreen && <GetApp />}
                         onClick={handleDownloadCSV}
-                        disabled={isDownloading}
+                        disabled={isDownloading || !appliedFilters}
                         sx={{
                             width: isSmallScreen ? '100%' : 'auto',
                             height: 48,
@@ -331,6 +381,16 @@ const CustomerReports = () => {
                     </Button>
                 </Box>
             </LocalizationProvider>
+            {error && (
+                <Alert severity="warning" onClose={() => setError('')} sx={{ mb: 2 }}>
+                    {error}
+                </Alert>
+            )}
+            {appliedFilters && !loading && (
+                <Typography variant="body2" sx={{ mb: 1, color: '#64748b' }}>
+                    {pagination.total} customers registered from {toDayString(appliedFilters.startDate)} to {toDayString(appliedFilters.endDate)}
+                </Typography>
+            )}
             <Box
                 sx={{
                     flex: 1,
@@ -359,25 +419,7 @@ const CustomerReports = () => {
                     <Table stickyHeader sx={{ minWidth: 1200 }}>
                         <TableHead>
                             <TableRow>
-                                {[
-                                    'Name',
-                                    'Customer Code',
-                                    'Phone',
-                                    'Registered Date',
-                                    'Account Number',
-                                    'Address Line 1',
-                                    'Address Line 2',
-                                    'Address Name',
-                                    'City',
-                                    'Country',
-                                    'Province',
-                                    'Atoll',
-                                    'Island',
-                                    'Service Provider',
-                                    'Device Code',
-                                    'Tags',
-                                    'Device Name',
-                                ].map((header) => (
+                                {COLUMNS.map((header) => (
                                     <TableCell
                                         key={header}
                                         sx={{
@@ -399,13 +441,21 @@ const CustomerReports = () => {
                             {loading ? (
                                 Array.from({ length: 10 }).map((_, index) => (
                                     <TableRow key={index}>
-                                        {Array.from({ length: 13 }).map((_, cellIndex) => (
-                                            <TableCell key={cellIndex} sx={{ py: 2 }}>
+                                        {COLUMNS.map((column) => (
+                                            <TableCell key={column} sx={{ py: 2 }}>
                                                 <Skeleton variant="text" animation="wave" />
                                             </TableCell>
                                         ))}
                                     </TableRow>
                                 ))
+                            ) : reports.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={COLUMNS.length} sx={{ py: 6, textAlign: 'left', color: '#64748b' }}>
+                                        {appliedFilters
+                                            ? 'No customers found for the selected filters.'
+                                            : 'Select Start Date and End Date, then click Filter to load customers.'}
+                                    </TableCell>
+                                </TableRow>
                             ) : (
                                 reports.map((report, index) => (
                                     <TableRow
@@ -417,39 +467,22 @@ const CustomerReports = () => {
                                             '&:hover': { backgroundColor: '#f1f5f9' },
                                         }}
                                     >
-                                        {[
-                                            'Name',
-                                            'Customer Code',
-                                            'Phone',
-                                            'Registered Date',
-                                            'Account Number',
-                                            'Address Line 1',
-                                            'Address Line 2',
-                                            'Address Name',
-                                            'City',
-                                            'Country',
-                                            'Province',
-                                            'Atoll',
-                                            'Island',
-                                            'Service Provider',
-                                            'Device Code',
-                                            'Tags',
-                                            'Device Name'
-                                        ].map((key) => (
+                                        {COLUMNS.map((key) => (
                                             <TableCell
                                                 key={key}
+                                                title={String(formatCell(report[key]))}
                                                 sx={{
                                                     whiteSpace: 'nowrap',
                                                     overflow: 'hidden',
                                                     textOverflow: 'ellipsis',
-                                                    maxWidth: 200,
+                                                    maxWidth: key === 'Subscriptions' || key === 'Payments' ? 360 : 200,
                                                     py: 2,
                                                     px: 2,
                                                     color: '#475569',
                                                     fontWeight: key === 'Name' ? 500 : 400,
                                                 }}
                                             >
-                                                {report[key] || ''}
+                                                {formatCell(report[key])}
                                             </TableCell>
                                         ))}
                                     </TableRow>
@@ -469,7 +502,7 @@ const CustomerReports = () => {
             >
                 {loading ? (
                     <Skeleton variant="rectangular" width={200} height={40} sx={{ borderRadius: 2 }} />
-                ) : (
+                ) : pagination.total > 0 && (
                     <Pagination
                         count={pagination.totalPages}
                         page={pagination.page}

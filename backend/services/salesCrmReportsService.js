@@ -16,6 +16,14 @@ const CONTACT_PROJECTION = {
     created_by_user_name: 1,
 };
 
+const DEVICE_PROJECT = {
+    electronic_id: 1,
+    serial_number: 1,
+    'provisioning.serial_number': 1,
+    'product.name': 1,
+    custom_fields: 1,
+};
+
 const DEVICE_LOOKUP = {
     $lookup: {
         from: 'Devices',
@@ -23,15 +31,19 @@ const DEVICE_LOOKUP = {
         pipeline: [
             { $match: { $expr: { $eq: ['$ownership.id', '$$cid'] } } },
             { $limit: 1 },
-            {
-                $project: {
-                    electronic_id: 1,
-                    serial_number: 1,
-                    'provisioning.serial_number': 1,
-                    'product.name': 1,
-                    custom_fields: 1,
-                },
-            },
+            { $project: DEVICE_PROJECT },
+        ],
+        as: 'devices',
+    },
+};
+
+const ALL_DEVICES_LOOKUP = {
+    $lookup: {
+        from: 'Devices',
+        let: { cid: '$_id' },
+        pipeline: [
+            { $match: { $expr: { $eq: ['$ownership.id', '$$cid'] } } },
+            { $project: DEVICE_PROJECT },
         ],
         as: 'devices',
     },
@@ -78,6 +90,16 @@ const formatLegacyDate = (value) => {
     return `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
 };
 
+const formatLegacyDateOnly = (value) => {
+    if (value === null || value === undefined || value === '') return '';
+    const ts = Number(value);
+    if (!Number.isFinite(ts) || ts <= 0) return '';
+    // Maldives calendar day (UTC+5)
+    const date = new Date((ts + 5 * 3600) * 1000);
+    if (Number.isNaN(date.getTime())) return '';
+    return `${date.getUTCMonth() + 1}/${date.getUTCDate()}/${String(date.getUTCFullYear()).slice(-2)}`;
+};
+
 const getCustomField = (fields, key) => {
     if (!Array.isArray(fields)) return '';
     const field = fields.find((item) => item?.key === key);
@@ -91,8 +113,15 @@ const normalizePhone = (phone) => {
 
 const normalizeElectronicId = (value) => String(value || '').replace(/:/g, '');
 
-const getDeviceFields = (devices) => {
-    const device = Array.isArray(devices) && devices.length > 0 ? devices[0] : null;
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const formatMaldivesDate = (value) => {
+    const ts = Number(value);
+    if (!Number.isFinite(ts) || ts <= 0) return '';
+    return new Date((ts + 5 * 3600) * 1000).toISOString().slice(0, 10);
+};
+
+const mapSingleDeviceFields = (device) => {
     if (!device) {
         return {
             smartcardId: '',
@@ -104,7 +133,6 @@ const getDeviceFields = (devices) => {
             smartLabsSerial: '',
         };
     }
-
     const deviceFields = device.custom_fields || [];
     return {
         smartcardId: normalizeElectronicId(device.electronic_id)
@@ -117,6 +145,28 @@ const getDeviceFields = (devices) => {
         smartLabsId: getCustomField(deviceFields, 'smartlabs_id') || '',
         smartLabsSerial: getCustomField(deviceFields, 'smartlabs_serial') || '',
     };
+};
+
+const joinDeviceField = (devices, picker) => {
+    if (!Array.isArray(devices) || devices.length === 0) return '';
+    return devices
+        .map((device) => picker(mapSingleDeviceFields(device)))
+        .filter(Boolean)
+        .join(', ');
+};
+
+const getAllDeviceFields = (devices) => ({
+    smartcardId: joinDeviceField(devices, (d) => d.smartcardId),
+    settopboxId: joinDeviceField(devices, (d) => d.settopboxId),
+    barcode: joinDeviceField(devices, (d) => d.barcode),
+    clientId: joinDeviceField(devices, (d) => d.clientId),
+    stbType: joinDeviceField(devices, (d) => d.stbType),
+    deviceCount: Array.isArray(devices) ? devices.length : 0,
+});
+
+const getDeviceFields = (devices) => {
+    const device = Array.isArray(devices) && devices.length > 0 ? devices[0] : null;
+    return mapSingleDeviceFields(device);
 };
 
 const getAreaFromTags = (tags) => {
@@ -147,6 +197,7 @@ const buildContactMatchAfterLookup = ({ search, atoll, island }) => {
 
 const ACTIVE_SERVICE_STATES = ['EFFECTIVE', 'ACTIVE'];
 
+// Only packages that are still EFFECTIVE now, and whose date window overlapped the filter range.
 const buildActiveServiceElemMatch = (startTimestamp, endTimestamp) => ({
     state: 'EFFECTIVE',
     'service_terms.start_date': { $lte: endTimestamp },
@@ -240,6 +291,7 @@ const buildGroupedActivePipeline = ({
                 services: {
                     $push: {
                         product_name: '$services.product.name',
+                        state: '$services.state',
                         price: '$services.price_terms.price',
                         start_date: '$services.service_terms.start_date',
                         end_date: '$services.service_terms.end_date',
@@ -374,7 +426,7 @@ const mapGroupedEntry = (row) => ({
 });
 
 const mapActiveSubscriptionRow = (entry) => {
-    const devices = getDeviceFields(entry.devices);
+    const devices = getAllDeviceFields(entry.devices);
     const packages = [];
     const prices = [];
     let priceSum = 0;
@@ -386,16 +438,18 @@ const mapActiveSubscriptionRow = (entry) => {
         const price = Number(service?.price) || 0;
         prices.push(price);
         priceSum += price;
-        subscribedDates.push(formatLegacyDate(service?.start_date));
-        disconnectionDates.push(formatLegacyDate(service?.rated_up_to_date || service?.end_date));
+        subscribedDates.push(formatLegacyDateOnly(service?.start_date));
+        disconnectionDates.push(formatLegacyDateOnly(service?.rated_up_to_date || service?.end_date));
     });
 
     return {
         Account: entry.account?.number || '',
         Name: entry.profile?.name || '',
+        'Contact Code': entry.profile?.code || '',
         NIC: getCustomField(entry.custom_fields, 'id_number') || getCustomField(entry.custom_fields, 'id _number'),
         'Customer Type': entry.profile?.type || '',
         'Customers dealer': getCustomField(entry.custom_fields, 'service_provider'),
+        'Device Count': devices.deviceCount,
         'Smartcard ID': devices.smartcardId,
         'Settopbox ID': devices.settopboxId,
         Barcode: devices.barcode,
@@ -478,8 +532,10 @@ const fetchGroupedServiceReport = async (filters, reportType, mapRow) => {
         island: filters.island,
     });
 
+    const deviceLookup = reportType === 'active' ? ALL_DEVICES_LOOKUP : DEVICE_LOOKUP;
+
     if (isCsv) {
-        const pipeline = [...basePipeline, DEVICE_LOOKUP];
+        const pipeline = [...basePipeline, deviceLookup];
         const rows = await mongoose.connection.db.collection('Subscriptions')
             .aggregate(pipeline, AGG_OPTS).toArray();
         const results = rows.map((row) => mapRow(mapGroupedEntry(row)));
@@ -495,7 +551,7 @@ const fetchGroupedServiceReport = async (filters, reportType, mapRow) => {
                 data: [
                     { $skip: skip },
                     { $limit: limit },
-                    DEVICE_LOOKUP,
+                    deviceLookup,
                 ],
             },
         },
@@ -694,8 +750,136 @@ const exportNewConnectionReport = async (filters) => {
     };
 };
 
+const findContactIdsByAccountSearch = async (search) => {
+    const regex = { $regex: escapeRegex(search.trim()), $options: 'i' };
+    return mongoose.connection.db.collection('ContactProfiles').distinct('contact_id', {
+        $or: [
+            { 'account.number': regex },
+            { 'profile.name': regex },
+            { 'profile.code': regex },
+        ],
+    });
+};
+
+const exportSubscriptionStateReport = async (filters) => {
+    assertMongoConnected();
+    const page = parseInt(filters.page, 10) || 1;
+    const limit = parseInt(filters.limit, 10) || 10;
+    const isCsv = filters.format === 'csv';
+
+    const pipeline = [];
+    if (filters.search && filters.search.trim()) {
+        const contactIds = await findContactIdsByAccountSearch(filters.search);
+        pipeline.push({ $match: { contact_id: { $in: contactIds } } });
+    }
+
+    pipeline.push(
+        {
+            $project: {
+                contact_id: 1,
+                isEffective: { $in: ['EFFECTIVE', { $ifNull: ['$services.state', []] }] },
+                lastActive: {
+                    $max: {
+                        $map: {
+                            input: {
+                                $filter: {
+                                    input: { $ifNull: ['$services', []] },
+                                    as: 's',
+                                    cond: { $ne: ['$$s.state', 'DRAFT'] },
+                                },
+                            },
+                            as: 's',
+                            in: {
+                                $cond: [
+                                    { $eq: ['$$s.state', 'EFFECTIVE'] },
+                                    { $ifNull: ['$$s.rated_up_to_date', '$$s.service_terms.end_date'] },
+                                    {
+                                        $ifNull: [
+                                            '$$s.latest_not_effective_date',
+                                            { $ifNull: ['$$s.rated_up_to_date', '$$s.service_terms.end_date'] },
+                                        ],
+                                    },
+                                ],
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        {
+            $group: {
+                _id: '$contact_id',
+                isEffective: { $max: '$isEffective' },
+                lastActive: { $max: '$lastActive' },
+            },
+        },
+    );
+
+    if (filters.state === 'EFFECTIVE') {
+        pipeline.push({ $match: { isEffective: true } });
+    } else if (filters.state === 'NOT_EFFECTIVE') {
+        pipeline.push({ $match: { isEffective: false } });
+    }
+
+    pipeline.push({ $sort: { _id: 1 } });
+
+    const accountLookup = [
+        {
+            $lookup: {
+                from: 'ContactProfiles',
+                localField: '_id',
+                foreignField: 'contact_id',
+                pipeline: [{ $project: { _id: 0, 'account.number': 1, 'tags.name': 1 } }],
+                as: 'contact',
+            },
+        },
+    ];
+
+    const mapRow = (row) => ({
+        'Account Number': row.contact?.[0]?.account?.number || '',
+        State: row.isEffective ? 'EFFECTIVE' : 'NOT EFFECTIVE',
+        'Last Active Date': formatMaldivesDate(row.lastActive),
+        Tags: getAreaFromTags(row.contact?.[0]?.tags),
+    });
+
+    if (isCsv) {
+        const rows = await mongoose.connection.db.collection('Subscriptions')
+            .aggregate([...pipeline, ...accountLookup], AGG_OPTS).toArray();
+        const results = rows.map(mapRow);
+        return {
+            isCsv: true,
+            csv: parse(results, { fields: ['Account Number', 'State', 'Last Active Date', 'Tags'] }),
+            data: results,
+        };
+    }
+
+    const [facetResult] = await mongoose.connection.db.collection('Subscriptions')
+        .aggregate([
+            ...pipeline,
+            {
+                $facet: {
+                    meta: [{ $count: 'total' }],
+                    data: [{ $skip: (page - 1) * limit }, { $limit: limit }, ...accountLookup],
+                },
+            },
+        ], AGG_OPTS).toArray();
+
+    const total = facetResult?.meta?.[0]?.total || 0;
+    return {
+        isCsv: false,
+        data: (facetResult?.data || []).map(mapRow),
+        pagination: {
+            totalItems: total,
+            totalPages: Math.ceil(total / limit) || 1,
+            currentPage: page,
+            pageSize: limit,
+        },
+    };
+};
+
 module.exports = {
     exportActiveSubscriptionReport,
     exportDisconnectedReport,
     exportNewConnectionReport,
+    exportSubscriptionStateReport,
 };

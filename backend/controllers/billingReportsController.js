@@ -1,5 +1,8 @@
 const billingReportService = require('../services/billingReportServices');
 const salesCrmReportsService = require('../services/salesCrmReportsService');
+const organizationDeviceReportService = require('../services/organizationDeviceReportService');
+const inactiveCustomerGroupsReportService = require('../services/inactiveCustomerGroupsReportService');
+const ottTagReportService = require('../services/ottTagReportService');
 const { Parser } = require('json2csv');
 
 const handleSalesCrmReport = (fetchReport, csvFilename) => async (req, res) => {
@@ -10,6 +13,7 @@ const handleSalesCrmReport = (fetchReport, csvFilename) => async (req, res) => {
       endDate,
       atoll,
       island,
+      state,
       page = 1,
       limit = 10,
       format = 'json',
@@ -21,6 +25,7 @@ const handleSalesCrmReport = (fetchReport, csvFilename) => async (req, res) => {
       endDate,
       atoll,
       island,
+      state,
       page,
       limit,
       format,
@@ -59,10 +64,124 @@ const exportNewConnectionReport = handleSalesCrmReport(
   'new-connection-report.csv'
 );
 
+const exportSubscriptionStateReport = handleSalesCrmReport(
+  salesCrmReportsService.exportSubscriptionStateReport,
+  'subscription-state-report.csv'
+);
+
+const exportInactiveCustomerGroupsReport = async (req, res) => {
+  try {
+    const { group, search, refresh, page = 1, limit = 20, format = 'json' } = req.query;
+    const response = await inactiveCustomerGroupsReportService.exportInactiveCustomerGroupsReport({
+      group,
+      search,
+      refresh,
+      page,
+      limit,
+      format,
+    });
+
+    if (response.isCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=inactive-customer-groups-report.csv');
+      return res.send(response.csv);
+    }
+
+    return res.json({
+      data: response.data,
+      summary: response.summary,
+      pagination: response.pagination,
+    });
+  } catch (error) {
+    const status = error.statusCode || (error.message.includes('MongoDB') ? 503 : 500);
+    return res.status(status).json({ message: error.message });
+  }
+};
+
+const exportOttTagReport = async (req, res) => {
+  try {
+    const {
+      startDate,
+      endDate,
+      match,
+      search,
+      page = 1,
+      limit = 20,
+      format = 'json',
+    } = req.query;
+
+    const response = await ottTagReportService.exportOttTagReport({
+      startDate,
+      endDate,
+      match,
+      search,
+      page,
+      limit,
+      format,
+    });
+
+    if (response.isCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=ott-tag-report.csv');
+      return res.send(response.csv);
+    }
+
+    return res.json({
+      data: response.data,
+      summary: response.summary,
+      pagination: response.pagination,
+    });
+  } catch (error) {
+    const status = error.statusCode || (error.message.includes('MongoDB') ? 503 : 500);
+    return res.status(status).json({ message: error.message });
+  }
+};
+
+const exportOrganizationDeviceReport = async (req, res) => {
+  try {
+    const {
+      organizationName,
+      page = 1,
+      limit = 25,
+      format = 'json',
+    } = req.query;
+
+    const response = await organizationDeviceReportService.exportOrganizationDeviceReport({
+      organizationName,
+      page,
+      limit,
+      format,
+    });
+
+    if (format === 'csv' || response.isCsv) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader(
+        'Content-Disposition',
+        'attachment; filename=organization-device-report.csv'
+      );
+      return res.send(response.csv);
+    }
+
+    return res.json({
+      data: response.data,
+      pagination: response.pagination,
+      organizationName: response.organizationName,
+    });
+  } catch (error) {
+    const status = error.statusCode || (error.message.includes('MongoDB') ? 503 : 500);
+    return res.status(status).json({ message: error.message });
+  }
+};
+
 const getReports = async (req, res) => {
-  const { page = 1, limit = 10, search = '', startDate, endDate, atoll, island } = req.query;
-  const data = await billingReportService.getReports(parseInt(page), parseInt(limit), search, startDate, endDate, atoll, island);
-  res.send(data);
+  try {
+    const { page = 1, limit = 10, search = '', startDate, endDate, atoll, island } = req.query;
+    const data = await billingReportService.getReports(parseInt(page), parseInt(limit), search, startDate, endDate, atoll, island);
+    res.send(data);
+  } catch (error) {
+    const status = error.statusCode || 500;
+    res.status(status).json({ message: error.message || 'Error fetching subscription reports' });
+  }
 };
 
 const exportCSV = async (req, res) => {
@@ -72,13 +191,13 @@ const exportCSV = async (req, res) => {
     const csvData = await billingReportService.exportReports(search, startDate, endDate, atoll, island);
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=reports.csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=subscription-reports.csv');
     res.send(csvData);
-
   } catch (error) {
-    res.status(500).json({
-      message: 'Error exporting CSV',
-      error: error.message
+    const status = error.statusCode || 500;
+    res.status(status).json({
+      message: error.message || 'Error exporting CSV',
+      error: error.message,
     });
   }
 };
@@ -87,7 +206,7 @@ const exportContactProfiles = async (req, res) => {
   try {
     const { search, startDate, endDate, atoll, island, page = 1, limit = 10, format = 'json' } = req.query;
 
-    const data = await billingReportService.exportContactProfiles(search, startDate, endDate, atoll, island, page, limit, format);
+    const data = await billingReportService.exportContactProfiles(search, startDate, endDate, atoll, island, page, limit, format, undefined, { customerReport: true });
 
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
@@ -231,8 +350,9 @@ const exportContactProfilesWithHdc = async (req, res) => {
       });
     }
   } catch (error) {
-    res.status(500).json({
-      message: 'Error processing request',
+    const status = error.statusCode || 500;
+    res.status(status).json({
+      message: error.message || 'Error processing request',
       error: error.message,
     });
   }
@@ -1311,4 +1431,8 @@ module.exports = {
   exportActiveSubscriptionReport,
   exportDisconnectedReport,
   exportNewConnectionReport,
+  exportOrganizationDeviceReport,
+  exportSubscriptionStateReport,
+  exportInactiveCustomerGroupsReport,
+  exportOttTagReport,
 }

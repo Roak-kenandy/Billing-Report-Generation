@@ -1,4 +1,7 @@
 const bulkUploadService = require('../services/bulkUploadService');
+const bulkCancelCardSubscriptionService = require('../services/bulkCancelCardSubscriptionService');
+const bulkDhiraaguCreationService = require('../services/bulkDhiraaguCreationService');
+const bulkAccountTerminationService = require('../services/bulkAccountTerminationService');
 const CRM_BASE_URL = process.env.CRM_BASE_URL;
 const CRM_CONTACT_BASE_URL = process.env.CRM_CONTACT_BASE_URL;
 const API_KEY = process.env.CRM_API_KEY;
@@ -106,6 +109,29 @@ const uploadAddress = async (req, res) => {
     }
 };
 
+const ALLOWED_BULK_FILE_TYPES = [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv',
+    'application/csv',
+    'application/vnd.ms-excel',
+];
+
+const validateBulkUploadFile = (file) => {
+    if (!file) {
+        return 'No file uploaded';
+    }
+
+    const isAllowedType = ALLOWED_BULK_FILE_TYPES.includes(file.mimetype)
+        || file.originalname?.endsWith('.csv')
+        || file.originalname?.endsWith('.xlsx');
+
+    if (!isAllowedType) {
+        return 'Invalid file type. Please upload a CSV or Excel file';
+    }
+
+    return null;
+};
+
 const uploadDealerContacts = async (req, res) => {
     try {
         if (!req.file) {
@@ -139,7 +165,232 @@ const createBulkOperation = async (req, res) => {
     } catch (error) {
         return res.status(500).json({ message: error.message });
     }
-}
+};
+
+const previewCancelSubscriptions = async (req, res) => {
+    req.setTimeout(90 * 60 * 1000);
+    res.setTimeout(90 * 60 * 1000);
+
+    try {
+        const validationError = validateBulkUploadFile(req.file);
+        if (validationError) {
+            return res.status(400).json({ message: validationError });
+        }
+
+        const preview = await bulkUploadService.processCancelSubscriptionsPreview(
+            req.file.path,
+            req.file.mimetype
+        );
+
+        return res.status(200).json({
+            message: 'Subscription cancellation preview generated successfully',
+            ...preview,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+const bulkCancelSubscriptions = async (req, res) => {
+    req.setTimeout(90 * 60 * 1000);
+    res.setTimeout(90 * 60 * 1000);
+
+    try {
+        const validationError = validateBulkUploadFile(req.file);
+        if (validationError) {
+            return res.status(400).json({ message: validationError });
+        }
+
+        const result = await bulkUploadService.processCancelSubscriptions(
+            req.file.path,
+            req.file.mimetype
+        );
+
+        return res.status(200).json({
+            message: 'Subscription cancellation completed',
+            partial: result.total_errors > 0,
+            ...result,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+const previewCancelCardSubscriptions = async (req, res) => {
+    req.setTimeout(90 * 60 * 1000);
+    res.setTimeout(90 * 60 * 1000);
+
+    try {
+        const validationError = validateBulkUploadFile(req.file);
+        if (validationError) {
+            return res.status(400).json({ message: validationError });
+        }
+
+        const preview = await bulkCancelCardSubscriptionService.processCancelCardSubscriptionsPreview(
+            req.file.path,
+            req.file.mimetype
+        );
+
+        return res.status(200).json({
+            message: 'Card subscription cancellation preview generated successfully',
+            ...preview,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+const bulkCancelCardSubscriptions = async (req, res) => {
+    req.setTimeout(90 * 60 * 1000);
+    res.setTimeout(90 * 60 * 1000);
+
+    try {
+        const validationError = validateBulkUploadFile(req.file);
+        if (validationError) {
+            return res.status(400).json({ message: validationError });
+        }
+
+        const result = await bulkCancelCardSubscriptionService.processCancelCardSubscriptions(
+            req.file.path,
+            req.file.mimetype
+        );
+
+        return res.status(200).json({
+            message: 'Card subscription cancellation completed',
+            partial: result.total_errors > 0,
+            ...result,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+const previewDhiraaguBulkCreation = async (req, res) => {
+    req.setTimeout(90 * 60 * 1000);
+    res.setTimeout(90 * 60 * 1000);
+
+    try {
+        const validationError = validateBulkUploadFile(req.file);
+        if (validationError) {
+            return res.status(400).json({ message: validationError });
+        }
+
+        const preview = await bulkDhiraaguCreationService.processDhiraaguBulkPreview(
+            req.file.path,
+            req.file.mimetype
+        );
+
+        return res.status(200).json({
+            message: 'Dhiraagu bulk creation preview generated successfully',
+            ...preview,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+const bulkDhiraaguCreation = async (req, res) => {
+    req.setTimeout(90 * 60 * 1000);
+    res.setTimeout(90 * 60 * 1000);
+
+    try {
+        const validationError = validateBulkUploadFile(req.file);
+        if (validationError) {
+            return res.status(400).json({ message: validationError });
+        }
+
+        const result = await bulkDhiraaguCreationService.processDhiraaguBulkCreation(
+            req.file.path,
+            req.file.mimetype
+        );
+
+        return res.status(200).json({
+            message: 'Dhiraagu bulk creation completed',
+            partial: result.total_errors > 0,
+            ...result,
+        });
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+const TERMINATION_ROLES = ['admin', 'sales'];
+
+const getUserRoles = (user) => {
+    const roles = Array.isArray(user?.roles) ? user.roles : String(user?.roles || '').split(',');
+    return roles.map((role) => String(role?.name || role).trim().toLowerCase()).filter(Boolean);
+};
+
+const requireTerminationRole = (req, res) => {
+    if (getUserRoles(req.user).some((role) => TERMINATION_ROLES.includes(role))) return true;
+    res.status(403).json({ message: 'Only Admin or Sales users can terminate accounts' });
+    return false;
+};
+
+const sendServiceError = (res, error) => res.status(error.statusCode || 500).json({ message: error.message });
+
+const previewBulkAccountTermination = async (req, res) => {
+    if (!requireTerminationRole(req, res)) return;
+    req.setTimeout(10 * 60 * 1000);
+
+    try {
+        const validationError = validateBulkUploadFile(req.file);
+        if (validationError) {
+            return res.status(400).json({ message: validationError });
+        }
+        const preview = await bulkAccountTerminationService.createPreview(req.file.buffer, req.file.originalname);
+        return res.status(200).json(preview);
+    } catch (error) {
+        console.error('Account termination preview error:', error);
+        return sendServiceError(res, error);
+    }
+};
+
+const downloadBulkAccountTerminationPreview = (req, res) => {
+    const csv = bulkAccountTerminationService.getPreviewCsv(req.params.previewId);
+    if (csv === null) return res.status(404).json({ message: 'Preview expired or not found' });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=account-termination-preview.csv');
+    return res.send(csv);
+};
+
+const startBulkAccountTermination = async (req, res) => {
+    if (!requireTerminationRole(req, res)) return;
+    try {
+        const { previewId } = req.body || {};
+        if (!previewId) return res.status(400).json({ message: 'previewId is required' });
+        const job = await bulkAccountTerminationService.startJob({
+            previewId,
+            startedBy: req.user?.email || req.user?.userId || '',
+        });
+        return res.status(202).json(job);
+    } catch (error) {
+        return sendServiceError(res, error);
+    }
+};
+
+const listBulkAccountTerminationJobs = (req, res) => res.json({ jobs: bulkAccountTerminationService.listJobs() });
+
+const getBulkAccountTerminationJob = (req, res) => {
+    const job = bulkAccountTerminationService.getJob(req.params.jobId);
+    if (!job) return res.status(404).json({ message: 'Job not found (it may have finished more than 24 hours ago or the server restarted)' });
+    return res.json(job);
+};
+
+const stopBulkAccountTerminationJob = (req, res) => {
+    if (!requireTerminationRole(req, res)) return;
+    const job = bulkAccountTerminationService.stopJob(req.params.jobId);
+    if (!job) return res.status(404).json({ message: 'Job not found' });
+    return res.json(job);
+};
+
+const downloadBulkAccountTerminationResults = (req, res) => {
+    const csv = bulkAccountTerminationService.getJobResultsCsv(req.params.jobId);
+    if (csv === null) return res.status(404).json({ message: 'Job not found' });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=account-termination-results-${req.params.jobId}.csv`);
+    return res.send(csv);
+};
 
 const getAllBulkOperations = async (req, res) => {
     try {
@@ -351,5 +602,18 @@ module.exports = {
     updateAddress,
     uploadServiceBulk,
     updateContactAddress,
-    uploadAddress
+    uploadAddress,
+    previewCancelSubscriptions,
+    bulkCancelSubscriptions,
+    previewCancelCardSubscriptions,
+    bulkCancelCardSubscriptions,
+    previewDhiraaguBulkCreation,
+    bulkDhiraaguCreation,
+    previewBulkAccountTermination,
+    downloadBulkAccountTerminationPreview,
+    startBulkAccountTermination,
+    listBulkAccountTerminationJobs,
+    getBulkAccountTerminationJob,
+    stopBulkAccountTerminationJob,
+    downloadBulkAccountTerminationResults,
 };

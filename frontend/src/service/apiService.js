@@ -122,4 +122,85 @@ const uploadServiceBulk = async (file) => {
     }
 };
 
-export { uploadFile, createOperationRecord, getAllBulkOperations, uploadDealerFile, uploadServiceBulk };
+const BULK_REQUEST_TIMEOUT_MS = 90 * 60 * 1000;
+
+const uploadBulkFile = async (endpoint, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await axios.post(`${baseUrl}/${endpoint}`, formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        },
+        timeout: BULK_REQUEST_TIMEOUT_MS,
+        validateStatus: (status) => status >= 200 && status < 300,
+    });
+
+    return response.data;
+};
+
+const previewCancelSubscriptions = async (file) => uploadBulkFile('upload-cancel-subscriptions-preview', file);
+
+const bulkCancelSubscriptions = async (file) => uploadBulkFile('bulk-cancel-subscriptions', file);
+
+const previewCancelCardSubscriptions = async (file) => uploadBulkFile('upload-cancel-card-subscriptions-preview', file);
+
+const bulkCancelCardSubscriptions = async (file) => uploadBulkFile('bulk-cancel-card-subscriptions', file);
+
+const previewDhiraaguBulkCreation = async (file) => uploadBulkFile('upload-dhiraagu-bulk-preview', file);
+
+const bulkDhiraaguCreation = async (file) => uploadBulkFile('bulk-dhiraagu-creation', file);
+
+const previewBulkAccountTermination = async (file) => uploadBulkFile('bulk-account-termination/preview', file);
+
+const startBulkAccountTermination = async (previewId) => {
+    const response = await axios.post(`${baseUrl}/bulk-account-termination/jobs`, { previewId });
+    return response.data;
+};
+
+const getBulkAccountTerminationJob = async (jobId) => {
+    const response = await axios.get(`${baseUrl}/bulk-account-termination/jobs/${jobId}`);
+    return response.data;
+};
+
+const listBulkAccountTerminationJobs = async () => {
+    const response = await axios.get(`${baseUrl}/bulk-account-termination/jobs`);
+    return response.data.jobs || [];
+};
+
+const stopBulkAccountTerminationJob = async (jobId) => {
+    const response = await axios.post(`${baseUrl}/bulk-account-termination/jobs/${jobId}/stop`);
+    return response.data;
+};
+
+const downloadBulkAccountTerminationCsv = async (path, fileName) => {
+    const response = await axios.get(`${baseUrl}/bulk-account-termination/${path}`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+};
+
+export {
+    uploadFile,
+    createOperationRecord,
+    getAllBulkOperations,
+    uploadDealerFile,
+    uploadServiceBulk,
+    previewCancelSubscriptions,
+    bulkCancelSubscriptions,
+    previewCancelCardSubscriptions,
+    bulkCancelCardSubscriptions,
+    previewDhiraaguBulkCreation,
+    bulkDhiraaguCreation,
+    previewBulkAccountTermination,
+    startBulkAccountTermination,
+    getBulkAccountTerminationJob,
+    listBulkAccountTerminationJobs,
+    stopBulkAccountTerminationJob,
+    downloadBulkAccountTerminationCsv,
+};

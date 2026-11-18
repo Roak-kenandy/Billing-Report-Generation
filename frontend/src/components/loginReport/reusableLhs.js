@@ -51,6 +51,7 @@ const ReusableLhs = () => {
 
     const financialReportItems = [
         { name: 'Subscription Reports', path: '/subscription', icon: <DescriptionIcon /> },
+        { name: 'Active Subscription Customer Report', path: '/activeSubscriptionCustomers', icon: <DescriptionIcon /> },
         { name: 'Dealer Reports', path: '/dealer', icon: <PeopleIcon /> },
         { name: 'Collection Reports', path: '/collection', icon: <MonetizationOnIcon /> },
         { name: 'Bulk Uploads', path: '/bulkUploads', icon: <CloudUploadIcon /> },
@@ -58,6 +59,7 @@ const ReusableLhs = () => {
         { name: 'Manual Journal Reports', path: '/manualJournal', icon: <BookIcon /> },
         { name: 'Invoice Reports', path: '/invoiceReports', icon: <DescriptionIcon /> },
         { name: 'HDC Reports', path: '/hdcReports', icon: <DescriptionIcon /> },
+        { name: 'Organization Device Report', path: '/organizationDeviceReport', icon: <DescriptionIcon /> },
         { name: 'Service Provider Bulk', path: '/bulkService', icon: <CloudUploadIcon />},
         { name: 'Registration Reports', path: '/registrationInformation', icon: <DescriptionIcon /> },
         { name: 'Order Reports', path: '/orderReports', icon: <DescriptionIcon /> },
@@ -69,9 +71,10 @@ const ReusableLhs = () => {
         { name: 'Service Request Reports', path: '/serviceRequest', icon: <SupportAgentIcon /> },
         { name: 'Customer Reports', path: '/customerReports', icon: <SupportAgentIcon /> },
         { name: 'Migration Reports', path: '/customerNewReports', icon: <SupportAgentIcon /> },
-        { name: 'Active Subscription Report', path: '/sales/active-subscriptions', icon: <DescriptionIcon /> },
-        { name: 'Disconnected Report', path: '/sales/disconnected', icon: <DescriptionIcon /> },
-        { name: 'New Connection Report', path: '/sales/new-connections', icon: <DescriptionIcon /> },
+        { name: 'Subscription State Report', path: '/subscriptionState', icon: <DescriptionIcon /> },
+        { name: 'Inactive Customer Groups', path: '/inactiveCustomerGroups', icon: <DescriptionIcon /> },
+        { name: 'OTT Tag Report', path: '/ottTagReport', icon: <DescriptionIcon /> },
+        { name: 'Bulk Account Termination', path: '/bulkAccountTermination', icon: <DescriptionIcon /> },
     ];
 
         const rbacReportItems = [

@@ -2,6 +2,8 @@ const UserLoginReports = require('../models/UserLoginReports');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const { isMongoConnected } = require('../config/db');
+const { authenticateCrmOnlyDevLogin } = require('../utils/crmOnlyAuth');
 
 // Function to register user
 const registerUser = async (name, email, password, designation) => {
@@ -25,6 +27,20 @@ const registerUser = async (name, email, password, designation) => {
 };
 
 const loginUser = async (email, password) => {
+    const crmOnlyLogin = authenticateCrmOnlyDevLogin(email, password);
+    if (crmOnlyLogin?.user) {
+        return crmOnlyLogin.user;
+    }
+    if (crmOnlyLogin?.error) {
+        throw new Error(crmOnlyLogin.error);
+    }
+
+    if (!isMongoConnected()) {
+        throw new Error(
+            'MongoDB is not connected. Set CRM_ONLY_DEV_LOGIN_EMAIL and CRM_ONLY_DEV_LOGIN_PASSWORD in backend/.env, or connect Atlas.'
+        );
+    }
+
     try {
         console.log(email, password);
         //Find the user with the email

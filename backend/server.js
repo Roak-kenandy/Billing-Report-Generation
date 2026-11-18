@@ -72,9 +72,41 @@
 
 
 const app = require('./app');
+const db = require('./config/db');
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+async function startServer() {
+  try {
+    console.log('Starting backend...');
+    const dbStatus = await db.connectDB();
+
+    const server = app.listen(PORT, () => {
+      if (dbStatus.connected) {
+        console.log(`Server is running on port ${PORT}`);
+      } else {
+        console.log(`Server is running on port ${PORT} (CRM-only mode — MongoDB not connected)`);
+      }
+    });
+
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`\nPort ${PORT} is already in use. Stop the other backend process first:`);
+        console.error(`  lsof -i :${PORT}`);
+        console.error(`  kill <PID>\n`);
+        process.exit(1);
+      }
+      console.error('Server failed to start:', error.message);
+      process.exit(1);
+    });
+
+    server.timeout = 90 * 60 * 1000;
+    server.keepAliveTimeout = 90 * 60 * 1000 + 1000;
+    server.headersTimeout = 90 * 60 * 1000 + 2000;
+  } catch (error) {
+    console.error('Failed to start server:', error.message);
+    process.exit(1);
+  }
+}
+
+startServer();

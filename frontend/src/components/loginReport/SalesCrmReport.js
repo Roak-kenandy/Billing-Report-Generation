@@ -35,7 +35,7 @@ const REPORT_CONFIG = {
     endpoint: 'sales-reports/active-subscriptions',
     csvFilename: 'active-subscription-report.csv',
     columns: [
-      'Account', 'Name', 'NIC', 'Customer Type', 'Customers dealer', 'Smartcard ID',
+      'Account', 'Name', 'Contact Code', 'NIC', 'Customer Type', 'Customers dealer', 'Device Count', 'Smartcard ID',
       'Settopbox ID', 'Barcode', 'Client ID', 'STB Type', 'Available credit', 'Contact',
       'Area', 'Atoll', 'Island', 'Ward', 'Street', 'Inst. Address', 'Floor', 'Apartment',
       'Packages', 'Package price', 'Price Sum', 'Subscribed dates', 'Disconnection dates',

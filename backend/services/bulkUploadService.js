@@ -1,12 +1,546 @@
 const xlsx = require('xlsx');
+const fs = require('fs');
 const mongoose = require('mongoose');
 const BulkOperationReports = require('../models/bulkOperationReports');
 const UserLoginReports = require('../models/UserLoginReports');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const {
+    chunkArray,
+    runWithConcurrency,
+    createConcurrentPool,
+    fetchWithRetry,
+} = require('../utils/bulkProcessingUtils');
+const { isMongoConnected } = require('../config/db');
+const { authenticateCrmOnlyDevLogin } = require('../utils/crmOnlyAuth');
+
+const CRM_BASE_URL = process.env.CRM_BASE_URL;
+const CRM_API_KEY = process.env.CRM_API_KEY;
+
+const BULK_CANCEL_CONCURRENCY = Number(process.env.BULK_CANCEL_CONCURRENCY) || 3;
+const BULK_CANCEL_CRM_CONCURRENCY = Number(process.env.BULK_CANCEL_CRM_CONCURRENCY) || 5;
+const BULK_CANCEL_SERVICE_CONCURRENCY = Number(process.env.BULK_CANCEL_SERVICE_CONCURRENCY) || 2;
+const BULK_CANCEL_MONGO_BATCH_SIZE = Number(process.env.BULK_CANCEL_MONGO_BATCH_SIZE) || 500;
+const BULK_CANCEL_PREVIEW_LIMIT = Number(process.env.BULK_CANCEL_PREVIEW_LIMIT) || 100;
+const BULK_CANCEL_RESULTS_LIMIT = Number(process.env.BULK_CANCEL_RESULTS_LIMIT) || 100;
+const BULK_CANCEL_RETRY_ATTEMPTS = Number(process.env.BULK_CANCEL_RETRY_ATTEMPTS) || 5;
+
+const crmHeaders = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    api_key: CRM_API_KEY,
+};
+
+const crmRequestPool = createConcurrentPool(BULK_CANCEL_CRM_CONCURRENCY);
+
+const CONTACT_CODE_HEADERS = ['Contact Code', 'contactcode', 'contact_code', 'ContactCode'];
+
+const normalizeContactCode = (value) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return String(Math.trunc(value));
+    }
+    return String(value).replace(/'/g, '').trim();
+};
+
+const getContactCodeFromRow = (row) => {
+    for (const header of CONTACT_CODE_HEADERS) {
+        if (row[header] !== undefined && row[header] !== null && row[header] !== '') {
+            return normalizeContactCode(row[header]);
+        }
+    }
+
+    const firstValue = Object.values(row)[0];
+    return normalizeContactCode(firstValue);
+};
+
+const parseContactCodesFromFile = (filePath, mimetype) => {
+    const isCsv = mimetype === 'text/csv'
+        || mimetype === 'application/csv'
+        || mimetype === 'application/vnd.ms-excel'
+        || filePath.endsWith('.csv');
+
+    const workbook = isCsv
+        ? xlsx.read(fs.readFileSync(filePath, 'utf8'), { type: 'string' })
+        : xlsx.readFile(filePath);
+
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const data = xlsx.utils.sheet_to_json(worksheet);
+
+    return [...new Set(
+        data
+            .map(getContactCodeFromRow)
+            .filter(Boolean)
+    )];
+};
+
+const lookupContactByCodeFromCrm = async (contactCode) => {
+    const normalizedCode = normalizeContactCode(contactCode);
+    if (!normalizedCode) {
+        return null;
+    }
+
+    const query = new URLSearchParams({
+        size: '10',
+        page: '1',
+        include_metrics: 'true',
+        search_value: normalizedCode,
+        include_total: 'true',
+    });
+
+    const data = await fetchCrmJson(
+        `${CRM_BASE_URL}/contacts?${query.toString()}`,
+        { method: 'GET' }
+    );
+
+    const contacts = data.content || [];
+    const exactMatch = contacts.find(
+        (contact) => normalizeContactCode(contact.code) === normalizedCode
+    );
+
+    return exactMatch || null;
+};
+
+const resolveContactIdsFromCrm = async (contactCodes) => runWithConcurrency(
+    contactCodes,
+    BULK_CANCEL_CRM_CONCURRENCY,
+    async (code) => {
+        try {
+            const contact = await lookupContactByCodeFromCrm(code);
+
+            return {
+                contact_code: code,
+                contact_id: contact?.id || null,
+                contact_name: contact?.name || null,
+            };
+        } catch (error) {
+            console.warn(`[Bulk Cancel] CRM lookup failed for contact code ${code}: ${error.message}`);
+            return {
+                contact_code: code,
+                contact_id: null,
+                contact_name: null,
+            };
+        }
+    }
+);
+
+const resolveContactIdsFromProfiles = async (contactCodes) => {
+    if (isMongoConnected()) {
+        const uniqueCodes = [...new Set(contactCodes)];
+        const contactProfilesCollection = mongoose.connection.db.collection('ContactProfiles');
+        const contactMap = new Map();
+
+        const codeBatches = chunkArray(uniqueCodes, BULK_CANCEL_MONGO_BATCH_SIZE);
+
+        for (const batch of codeBatches) {
+            const profiles = await contactProfilesCollection.find({
+                'profile.code': { $in: batch },
+            }).toArray();
+
+            profiles.forEach((profile) => {
+                contactMap.set(normalizeContactCode(profile.profile?.code), {
+                    contact_id: profile.profile?.id || profile.contact_id,
+                    contact_name: profile.profile?.name || null,
+                });
+            });
+        }
+
+        return contactCodes.map((code) => ({
+            contact_code: code,
+            contact_id: contactMap.get(code)?.contact_id || null,
+            contact_name: contactMap.get(code)?.contact_name || null,
+        }));
+    }
+
+    return resolveContactIdsFromCrm(contactCodes);
+};
+
+const fetchCrmJson = async (url, options = {}) => {
+    const response = await crmRequestPool(() => fetchWithRetry(url, {
+        ...options,
+        headers: crmHeaders,
+    }, {
+        retries: BULK_CANCEL_RETRY_ATTEMPTS,
+        minTimeout: 2000,
+        maxTimeout: 15000,
+        onRetry: ({ attempt, status, url: retryUrl }) => {
+            console.warn(`CRM retry ${attempt} for ${retryUrl}${status ? ` (${status})` : ''}`);
+        },
+    }));
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        const message = data.message || data.error || `CRM request failed (${response.status})`;
+        throw new Error(message);
+    }
+
+    return data;
+};
+
+const fetchAllCrmPages = async (buildUrl) => {
+    let page = 1;
+    let hasMore = true;
+    const allContent = [];
+
+    while (hasMore) {
+        const data = await fetchCrmJson(buildUrl(page));
+        allContent.push(...(data.content || []));
+        hasMore = Boolean(data.paging?.has_more);
+        page += 1;
+    }
+
+    return allContent;
+};
+
+const CANCELLABLE_SERVICE_STATES = ['NOT_EFFECTIVE', 'DRAFT'];
+
+const parseNumericBalance = (value) => {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === 'object' && value.$numberDecimal) {
+        return Number(value.$numberDecimal);
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const getAccountBalances = (account) => {
+    const balanceFields = [
+        'balance',
+        'current_balance',
+        'account_balance',
+        'available_balance',
+        'outstanding_balance',
+        'ar_balance',
+        'overdue_amount',
+    ];
+
+    const balances = balanceFields.map((field) => parseNumericBalance(account?.[field]));
+    const total = balances.reduce((sum, amount) => sum + Math.abs(amount), 0);
+
+    return {
+        totalAbsoluteBalance: total,
+        primaryBalance: parseNumericBalance(account?.balance),
+        overdueAmount: parseNumericBalance(account?.overdue_amount),
+    };
+};
+
+const isZeroBalanceAccount = (account) => {
+    const { totalAbsoluteBalance } = getAccountBalances(account);
+    return totalAbsoluteBalance < 0.01;
+};
+
+const fetchAccountById = async (accountId) => fetchCrmJson(`${CRM_BASE_URL}/accounts/${accountId}`);
+
+const getPrimaryAccountIdForContact = async (contactId) => {
+    const data = await fetchCrmJson(`${CRM_BASE_URL}/contacts/${contactId}/accounts?size=50&page=1`);
+    const accounts = data.content || [];
+    if (accounts.length === 0) {
+        return null;
+    }
+
+    const primary = accounts.find((account) => account.is_primary);
+    return (primary || accounts[0]).id;
+};
+
+const getContactSubscriptions = async (contactId) => {
+    return fetchAllCrmPages((page) =>
+        `${CRM_BASE_URL}/contacts/${contactId}/subscriptions?size=100&page=${page}&include_terms=true&include_billing_info=true&include_future_info=true`
+    );
+};
+
+const getSubscriptionServices = async (contactId, subscriptionId) => {
+    return fetchAllCrmPages((page) =>
+        `${CRM_BASE_URL}/contacts/${contactId}/services?size=100&page=${page}&subscription_id=${subscriptionId}&include_future_info=true`
+    );
+};
+
+const getCancellableServices = (services) =>
+    services.filter((service) => CANCELLABLE_SERVICE_STATES.includes(service.state));
+
+const cancelService = async (serviceId) => {
+    return fetchCrmJson(`${CRM_BASE_URL}/services/${serviceId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+            action: 'CANCEL',
+            category_id: null,
+            scheduled_date: null,
+        }),
+    });
+};
+
+const buildContactCancellationPreview = async (contact) => {
+    const contactPreview = {
+        contact_code: contact.contact_code,
+        contact_id: contact.contact_id,
+        contact_name: contact.contact_name,
+        account_id: null,
+        account_number: null,
+        balance: null,
+        status: contact.contact_id ? 'ready' : 'contact_not_found',
+        subscriptions: [],
+        errors: [],
+    };
+
+    if (!contact.contact_id) {
+        return contactPreview;
+    }
+
+    try {
+        const accountId = await getPrimaryAccountIdForContact(contact.contact_id);
+
+        if (!accountId) {
+            contactPreview.status = 'account_not_found';
+            contactPreview.errors.push('No CRM account linked to this contact');
+            return contactPreview;
+        }
+
+        contactPreview.account_id = accountId;
+
+        const account = await fetchAccountById(accountId);
+        const { primaryBalance, overdueAmount } = getAccountBalances(account);
+
+        contactPreview.account_number = account?.number || null;
+        contactPreview.balance = primaryBalance;
+
+        if (!isZeroBalanceAccount(account)) {
+            contactPreview.status = 'has_balance';
+            contactPreview.errors.push(
+                `Account balance must be zero (balance: ${primaryBalance}, overdue: ${overdueAmount})`
+            );
+            return contactPreview;
+        }
+    } catch (error) {
+        contactPreview.status = 'error';
+        contactPreview.errors.push(error.message);
+        return contactPreview;
+    }
+
+    try {
+        const subscriptions = await getContactSubscriptions(contact.contact_id);
+
+        for (const subscription of subscriptions) {
+            const services = await getSubscriptionServices(contact.contact_id, subscription.id);
+            const cancellableServices = getCancellableServices(services);
+
+            if (cancellableServices.length === 0) {
+                continue;
+            }
+
+            contactPreview.subscriptions.push({
+                subscription_id: subscription.id,
+                subscription_code: subscription.code,
+                state: subscription.state,
+                services: cancellableServices.map((service) => ({
+                    service_id: service.id,
+                    product_name: service.product?.name || null,
+                    sku: service.product?.sku || null,
+                    state: service.state,
+                })),
+            });
+        }
+    } catch (error) {
+        contactPreview.status = 'error';
+        contactPreview.errors.push(error.message);
+    }
+
+    return contactPreview;
+};
+
+const executeContactCancellation = async (contactPreview) => {
+    const contactResult = {
+        contact_code: contactPreview.contact_code,
+        contact_id: contactPreview.contact_id,
+        contact_name: contactPreview.contact_name,
+        cancelled_services: [],
+        skipped: [],
+        errors: [...(contactPreview.errors || [])],
+    };
+
+    if (
+        !contactPreview.contact_id
+        || contactPreview.status === 'error'
+        || contactPreview.status === 'has_balance'
+        || contactPreview.status === 'account_not_found'
+    ) {
+        return contactResult;
+    }
+
+    const cancelTasks = [];
+
+    for (const subscription of contactPreview.subscriptions) {
+        for (const service of subscription.services) {
+            cancelTasks.push({ subscription, service });
+        }
+    }
+
+    await runWithConcurrency(cancelTasks, BULK_CANCEL_SERVICE_CONCURRENCY, async ({ subscription, service }) => {
+        try {
+            await cancelService(service.service_id);
+            contactResult.cancelled_services.push({
+                subscription_id: subscription.subscription_id,
+                subscription_code: subscription.subscription_code,
+                service_id: service.service_id,
+                product_name: service.product_name,
+                sku: service.sku,
+                state: service.state,
+            });
+        } catch (error) {
+            contactResult.errors.push({
+                subscription_id: subscription.subscription_id,
+                service_id: service.service_id,
+                error: error.message,
+            });
+        }
+    });
+
+    return contactResult;
+};
+
+const processContactsWithConcurrency = async (contacts, handler, label) => {
+    let processedCount = 0;
+
+    return runWithConcurrency(contacts, BULK_CANCEL_CONCURRENCY, async (contact, index) => {
+        try {
+            return await handler(contact, index);
+        } catch (error) {
+            return {
+                contact_code: contact.contact_code,
+                contact_id: contact.contact_id,
+                contact_name: contact.contact_name,
+                cancelled_services: [],
+                skipped: [],
+                errors: [error.message],
+            };
+        } finally {
+            processedCount += 1;
+            if (processedCount % 100 === 0 || processedCount === contacts.length) {
+                console.log(`[Bulk Cancel] ${label}: ${processedCount}/${contacts.length} contacts processed`);
+            }
+        }
+    });
+};
+
+const summarizeCancellationPreview = (preview) => ({
+    total_contacts: preview.length,
+    contacts_with_services_to_cancel: preview.filter((item) => item.subscriptions.length > 0).length,
+    total_services_to_cancel: preview.reduce(
+        (sum, item) => sum + item.subscriptions.reduce(
+            (subscriptionSum, subscription) => subscriptionSum + subscription.services.length,
+            0
+        ),
+        0
+    ),
+    contacts_not_found: preview.filter((item) => item.status === 'contact_not_found').length,
+    contacts_with_balance: preview.filter((item) => item.status === 'has_balance').length,
+    contacts_account_not_found: preview.filter((item) => item.status === 'account_not_found').length,
+    contacts_with_errors: preview.filter((item) => item.status === 'error').length,
+});
+
+const truncateList = (items, limit) => {
+    if (items.length <= limit) {
+        return {
+            items,
+            truncated: false,
+            total: items.length,
+        };
+    }
+
+    return {
+        items: items.slice(0, limit),
+        truncated: true,
+        total: items.length,
+    };
+};
+
+const processCancelSubscriptionsPreview = async (filePath, mimetype) => {
+    const contactCodes = parseContactCodesFromFile(filePath, mimetype);
+
+    if (contactCodes.length === 0) {
+        throw new Error('No contact codes found in the uploaded file');
+    }
+
+    const contacts = await resolveContactIdsFromProfiles(contactCodes);
+    const preview = await processContactsWithConcurrency(
+        contacts,
+        buildContactCancellationPreview,
+        'Preview'
+    );
+
+    const summary = summarizeCancellationPreview(preview);
+    const { items, truncated, total } = truncateList(preview, BULK_CANCEL_PREVIEW_LIMIT);
+
+    return {
+        ...summary,
+        preview: items,
+        preview_truncated: truncated,
+        preview_total: total,
+        preview_limit: BULK_CANCEL_PREVIEW_LIMIT,
+        processing: {
+            contact_concurrency: BULK_CANCEL_CONCURRENCY,
+            crm_concurrency: BULK_CANCEL_CRM_CONCURRENCY,
+            service_concurrency: BULK_CANCEL_SERVICE_CONCURRENCY,
+            contact_lookup: isMongoConnected() ? 'mongodb_contact_profiles' : 'crm_contacts_search',
+        },
+    };
+};
+
+const processCancelSubscriptions = async (filePath, mimetype) => {
+    const contactCodes = parseContactCodesFromFile(filePath, mimetype);
+
+    if (contactCodes.length === 0) {
+        throw new Error('No contact codes found in the uploaded file');
+    }
+
+    const contacts = await resolveContactIdsFromProfiles(contactCodes);
+    const results = await processContactsWithConcurrency(
+        contacts,
+        async (contact) => {
+            const preview = await buildContactCancellationPreview(contact);
+            return executeContactCancellation(preview);
+        },
+        'Cancel'
+    );
+
+    const { items, truncated, total } = truncateList(results, BULK_CANCEL_RESULTS_LIMIT);
+
+    return {
+        total_contacts: results.length,
+        total_cancelled: results.reduce((sum, item) => sum + (item?.cancelled_services?.length || 0), 0),
+        total_errors: results.reduce((sum, item) => sum + (item?.errors?.length || 0), 0),
+        contacts_not_found: results.filter((item) => !item.contact_id).length,
+        results: items,
+        results_truncated: truncated,
+        results_total: total,
+        results_limit: BULK_CANCEL_RESULTS_LIMIT,
+        processing: {
+            contact_concurrency: BULK_CANCEL_CONCURRENCY,
+            crm_concurrency: BULK_CANCEL_CRM_CONCURRENCY,
+            service_concurrency: BULK_CANCEL_SERVICE_CONCURRENCY,
+            contact_lookup: isMongoConnected() ? 'mongodb_contact_profiles' : 'crm_contacts_search',
+        },
+    };
+};
 
 const loginUser = async (email, password) => {
+    const crmOnlyLogin = authenticateCrmOnlyDevLogin(email, password);
+    if (crmOnlyLogin?.user) {
+        return {
+            userName: crmOnlyLogin.user.userName,
+            email: crmOnlyLogin.user.email,
+        };
+    }
+    if (crmOnlyLogin?.error) {
+        throw new Error(crmOnlyLogin.error);
+    }
+
+    if (!isMongoConnected()) {
+        throw new Error(
+            'MongoDB is not connected. Set CRM_ONLY_DEV_LOGIN_EMAIL and CRM_ONLY_DEV_LOGIN_PASSWORD in backend/.env, or connect Atlas.'
+        );
+    }
+
     try {
         console.log(email, password);
         //Find the user with the email
@@ -289,8 +823,14 @@ const processDealerBulkUpload = async (filePath) => {
 };
 
 const createBulkOperation = async (batch, file_name, date, type, status) => {
-    try {
+    if (!isMongoConnected()) {
+        return {
+            message: 'Bulk history not saved (MongoDB not connected)',
+            skipped: true,
+        };
+    }
 
+    try {
         const newReport = new BulkOperationReports({
             batch, file_name, date, type, status
         });
@@ -303,6 +843,15 @@ const createBulkOperation = async (batch, file_name, date, type, status) => {
 };
 
 const getAllBulkOperations = async (page = 1, limit = 10, type) => {
+    if (!isMongoConnected()) {
+        return {
+            reports: [],
+            currentPage: page,
+            totalPages: 0,
+            totalRecords: 0,
+        };
+    }
+
     try {
         const skip = (page - 1) * limit;
         const query = {};
@@ -334,5 +883,7 @@ module.exports = {
     resetPassword,
     processDealerBulkUpload,
     processServiceBulk,
-    processAddressBulk
+    processAddressBulk,
+    processCancelSubscriptionsPreview,
+    processCancelSubscriptions,
 };

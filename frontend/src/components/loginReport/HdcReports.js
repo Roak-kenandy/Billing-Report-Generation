@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Table,
   TableBody,
@@ -12,12 +12,8 @@ import {
   Box,
   Skeleton,
   useMediaQuery,
-  Snackbar,
   Alert,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel,
+  Typography,
 } from '@mui/material';
 import { GetApp } from '@mui/icons-material';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
@@ -30,165 +26,148 @@ import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
 
 const API_URL = getApiBaseUrl();
 
+const TABLE_HEADERS = [
+  'Name',
+  'Customer Code',
+  'Account Number',
+  'Account Classification',
+  'Contact Sales Model',
+  'Tags',
+  'Address Name',
+  'Address Line1',
+  'Address Line2',
+  'City',
+  'Service Provider',
+  'Invoiced Service',
+  'Invoice Number',
+  'Reference Numbers',
+  'Posted Date',
+  'Issued Date',
+  'Due Date',
+  'Payment Methods',
+  'Total Default Currency',
+  'Total Net Amount',
+  'Total Discount',
+  'Total Tax',
+  'Currency',
+  'Total Amount',
+  'Exchange Rate',
+];
+
 const HdcReports = () => {
   const [reports, setReports] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
-  const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
-  const [appliedStartDate, setAppliedStartDate] = useState('');
-  const [appliedEndDate, setAppliedEndDate] = useState('');
+  const [appliedFilters, setAppliedFilters] = useState(null);
+  const [filtersApplied, setFiltersApplied] = useState(false);
+  const [error, setError] = useState('');
   const isSmallScreen = useMediaQuery('(max-width:600px)');
-  const [atolls, setAtolls] = useState([]);
-  const [selectedAtoll, setSelectedAtoll] = useState('');
-  const [selectedIsland, setSelectedIsland] = useState('');
-  const [appliedAtoll, setAppliedAtoll] = useState('');
-  const [appliedIsland, setAppliedIsland] = useState('');
-  const [error, setError] = useState(null);
-  const [islands, setIslands] = useState([]);
+  const isFetchingRef = useRef(false);
 
-  const tableHeaders = [
-    'Name',
-    'Customer Code',
-    'Account Number',
-    'Country',
-    'Account Classification',
-    'Contact Sales Model',
-    'Tags',
-    'Address Name',
-    'Address Line1',
-    'Address Line2',
-    'City',
-    'Invoiced Service',
-    'Service Provider',
-    'Invoice Number',
-    'Invoice Reference Number',
-    'Posted Date',
-    'Issued Date',
-    'Due Date',
-    'Total Default Currency',
-    'Total Net Amount',
-    'Total Discount',
-    'Total Tax',
-    'Currency',
-    'Total Amount',
-    'Exchange Rate',
-    'Payment Method'
-  ];
+  const buildQuery = useCallback((filters, page, limit, format) => {
+    let url = `${API_URL}/hdcReports?page=${page}&limit=${limit}&format=${format}`;
+    url += `&startDate=${encodeURIComponent(filters.startDate)}`;
+    url += `&endDate=${encodeURIComponent(filters.endDate)}`;
+    return url;
+  }, []);
 
-
-
-  const formatDateToUTC = (date) => {
-    if (!date || isNaN(new Date(date).getTime())) return '';
-    // Convert to UTC date string
-    return format(date, 'yyyy-MM-dd');
-  };
-
-  const fetchReports = async (page, limit, search = '', start = '', end = '', atoll = '', island = '') => {
+  const fetchReports = useCallback(async (filters, page, limit) => {
+    if (!filters || isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setLoading(true);
+    setError('');
     try {
-      let url = `${API_URL}/hdcReports?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}&format=json`;
-      if (start) url += `&startDate=${encodeURIComponent(start)}`;
-      if (end) url += `&endDate=${encodeURIComponent(end)}`;
-      if (atoll) {
-        const selectedAtollName = atolls.find(a => a.atolls_id === atoll)?.atolls_name;
-        if (selectedAtollName) url += `&atoll=${encodeURIComponent(selectedAtollName)}`;
-      }
-      if (island) {
-        const selectedAtollData = atolls.find(a => a.atolls_id === atoll);
-        const selectedIslandName = selectedAtollData?.islands.find(i => i.islands_id === island)?.islands_name;
-        if (selectedIslandName) url += `&island=${encodeURIComponent(selectedIslandName)}`;
-      }
-
-      const response = await fetch(url, { headers: getAuthHeaders() });
-      if (!response.ok) throw new Error('Failed to fetch reports');
+      const response = await fetch(buildQuery(filters, page, limit, 'json'), {
+        headers: getAuthHeaders(),
+      });
       const data = await response.json();
-      setReports(data.data);
-      setPagination(data.pagination);
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch reports');
+      }
+      setReports(data.data || []);
+      setPagination({
+        page,
+        limit,
+        total: data.pagination?.total || 0,
+        totalPages: data.pagination?.totalPages || 0,
+      });
     } catch (err) {
-      console.error('Error fetching reports:', err);
       setReports([]);
+      setError(err.message);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
-  };
+  }, [buildQuery]);
+
+  useEffect(() => {
+    if (!filtersApplied || !appliedFilters) return;
+    fetchReports(appliedFilters, pagination.page, pagination.limit);
+  }, [filtersApplied, appliedFilters, pagination.page, pagination.limit, fetchReports]);
 
   const handleFilter = () => {
-    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-      setError('Start date cannot be after end date');
+    if (!startDate || !endDate) {
+      setError('Start date and end date are required.');
       return;
     }
-    setAppliedStartDate(formatDateToUTC(startDate));
-    setAppliedEndDate(formatDateToUTC(endDate));
-    setAppliedAtoll(selectedAtoll);
-    setAppliedIsland(selectedIsland);
-    setPagination(prev => ({ ...prev, page: 1 }));
+    if (new Date(startDate) > new Date(endDate)) {
+      setError('Start date cannot be after end date.');
+      return;
+    }
+
+    setError('');
+    setAppliedFilters({
+      startDate: format(startDate, 'yyyy-MM-dd'),
+      endDate: format(endDate, 'yyyy-MM-dd'),
+    });
+    setFiltersApplied(true);
+    setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
   const handleClearFilter = () => {
     setStartDate(null);
     setEndDate(null);
-    setAppliedStartDate('');
-    setAppliedEndDate('');
-    setSelectedAtoll('');
-    setSelectedIsland('');
-    setAppliedAtoll('');
-    setAppliedIsland('');
-    setSearchTerm('');
-    setPagination(prev => ({ ...prev, page: 1 }));
+    setAppliedFilters(null);
+    setFiltersApplied(false);
+    setReports([]);
+    setError('');
+    setPagination({ page: 1, limit: 10, total: 0, totalPages: 0 });
   };
 
-  useEffect(() => {
-    setPagination(prev => ({ ...prev, page: 1 }));
-  }, [searchTerm, appliedStartDate, appliedEndDate, appliedAtoll, appliedIsland]);
-
-  useEffect(() => {
-    fetchReports(pagination.page, pagination.limit, searchTerm, appliedStartDate, appliedEndDate, appliedAtoll, appliedIsland);
-  }, [pagination.page, pagination.limit, searchTerm, appliedStartDate, appliedEndDate, appliedAtoll, appliedIsland, atolls]);
-
-  const handlePageChange = (event, value) => {
-    setPagination({ ...pagination, page: value });
-  };
-
-  const handleSearch = (event) => {
-    setSearchTerm(event.target.value);
-    setPagination({ ...pagination, page: 1 });
+  const handlePageChange = (_, value) => {
+    setPagination((prev) => ({ ...prev, page: value }));
   };
 
   const handleDownloadCSV = async () => {
-    try {
-      setIsDownloading(true);
-      let url = new URL(`${API_URL}/hdcReports`, window.location.origin);
-      url.searchParams.append('search', searchTerm);
-      url.searchParams.append('format', 'csv');
-      if (appliedStartDate) url.searchParams.append('startDate', encodeURIComponent(appliedStartDate));
-      if (appliedEndDate) url.searchParams.append('endDate', encodeURIComponent(appliedEndDate));
-      if (appliedAtoll) {
-        const selectedAtollName = atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name;
-        if (selectedAtollName) url.searchParams.append('atoll', encodeURIComponent(selectedAtollName));
-      }
-      if (appliedIsland) {
-        const selectedAtollData = atolls.find(a => a.atolls_id === appliedAtoll);
-        const selectedIslandName = selectedAtollData?.islands.find(i => i.islands_id === appliedIsland)?.islands_name;
-        if (selectedIslandName) url.searchParams.append('island', encodeURIComponent(selectedIslandName));
-      }
+    if (!appliedFilters) {
+      setError('Select start and end date, then click Filter before downloading.');
+      return;
+    }
 
-      const response = await fetch(url, { headers: getAuthHeaders() });
-      if (!response.ok) throw new Error('Export failed');
+    setIsDownloading(true);
+    setError('');
+    try {
+      const response = await fetch(buildQuery(appliedFilters, 1, 10, 'csv'), {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || 'Export failed');
+      }
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
-
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.setAttribute('download', 'customer-reports.csv');
+      link.setAttribute('download', 'hdc-report.csv');
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(downloadUrl);
-    } catch (error) {
-      console.error('Export error:', error);
+    } catch (err) {
+      setError(err.message);
     } finally {
       setIsDownloading(false);
     }
@@ -205,16 +184,31 @@ const HdcReports = () => {
         background: '#f9fafb',
       }}
     >
-      <Snackbar
-        open={!!error}
-        autoHideDuration={6000}
-        onClose={() => setError(null)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert onClose={() => setError(null)} severity="error" sx={{ width: '100%' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 600, color: '#1e3a8a' }}>
+          HDC Reports
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<GetApp />}
+          disabled={isDownloading || !filtersApplied}
+          onClick={handleDownloadCSV}
+          sx={{ backgroundColor: '#22c55e' }}
+        >
+          {isDownloading ? 'Exporting...' : 'Download CSV'}
+        </Button>
+      </Box>
+
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Select a start and end date, then click Filter to load the report (posted date range).
+      </Alert>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
-      </Snackbar>
+      )}
+
       <LocalizationProvider dateAdapter={AdapterDateFns}>
         <Box
           sx={{
@@ -222,7 +216,7 @@ const HdcReports = () => {
             gap: 2,
             flexWrap: 'wrap',
             alignItems: 'center',
-            mb: 3,
+            mb: 2,
             p: 2,
             backgroundColor: '#ffffff',
             borderRadius: 2,
@@ -231,106 +225,38 @@ const HdcReports = () => {
           }}
         >
           <DatePicker
-            label="Start Date"
+            label="Start Date *"
             value={startDate}
-            onChange={(newValue) => setStartDate(newValue)}
+            onChange={setStartDate}
             slotProps={{
               textField: {
+                size: 'small',
+                required: true,
                 InputLabelProps: { shrink: true },
-                sx: {
-                  width: isSmallScreen ? '100%' : 180,
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                    backgroundColor: '#f1f5f9',
-                  },
-                },
               },
             }}
           />
           <DatePicker
-            label="End Date"
+            label="End Date *"
             value={endDate}
-            onChange={(newValue) => setEndDate(newValue)}
+            onChange={setEndDate}
             slotProps={{
               textField: {
+                size: 'small',
+                required: true,
                 InputLabelProps: { shrink: true },
-                sx: {
-                  width: isSmallScreen ? '100%' : 180,
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                    backgroundColor: '#f1f5f9',
-                  },
-                },
               },
             }}
           />
-          
-          
-          <Button
-            variant="contained"
-            onClick={handleFilter}
-            startIcon={<FilterAltIcon />}
-            sx={{
-              width: isSmallScreen ? '100%' : 'auto',
-              height: 48,
-              borderRadius: 2,
-              backgroundColor: '#3b82f6',
-              textTransform: 'none',
-              fontWeight: 500,
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                backgroundColor: '#2563eb',
-                transform: 'translateY(-2px)',
-              },
-            }}
-          >
+          <Button variant="contained" onClick={handleFilter} startIcon={<FilterAltIcon />}>
             Filter
           </Button>
-          <Button
-            variant="outlined"
-            onClick={handleClearFilter}
-            startIcon={<ClearIcon />}
-            sx={{
-              width: isSmallScreen ? '100%' : 'auto',
-              height: 48,
-              borderRadius: 2,
-              borderColor: '#e2e8f0',
-              color: '#64748b',
-              textTransform: 'none',
-              fontWeight: 500,
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                borderColor: '#3b82f6',
-                color: '#3b82f6',
-                transform: 'translateY(-2px)',
-              },
-            }}
-          >
-            Clear Filters
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={!isSmallScreen && <GetApp />}
-            onClick={handleDownloadCSV}
-            disabled={isDownloading}
-            sx={{
-              width: isSmallScreen ? '100%' : 'auto',
-              height: 48,
-              borderRadius: 2,
-              backgroundColor: '#22c55e',
-              textTransform: 'none',
-              fontWeight: 500,
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                backgroundColor: '#16a34a',
-                transform: 'translateY(-2px)',
-              },
-            }}
-          >
-            {isDownloading ? 'Exporting...' : isSmallScreen ? <GetApp /> : 'Download'}
+          <Button variant="outlined" onClick={handleClearFilter} startIcon={<ClearIcon />}>
+            Clear
           </Button>
         </Box>
       </LocalizationProvider>
+
       <Box
         sx={{
           flex: 1,
@@ -346,20 +272,14 @@ const HdcReports = () => {
             height: '100%',
             overflow: 'auto',
             borderRadius: 2,
-            '&::-webkit-scrollbar': {
-              height: 6,
-              width: 6,
-            },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: '#94a3b8',
-              borderRadius: 3,
-            },
+            '&::-webkit-scrollbar': { height: 6, width: 6 },
+            '&::-webkit-scrollbar-thumb': { backgroundColor: '#94a3b8', borderRadius: 3 },
           }}
         >
-          <Table stickyHeader sx={{ minWidth: 1200 }}>
+          <Table stickyHeader size="small" sx={{ minWidth: 2200 }}>
             <TableHead>
               <TableRow>
-                {tableHeaders.map((header) => (
+                {TABLE_HEADERS.map((header) => (
                   <TableCell
                     key={header}
                     sx={{
@@ -378,42 +298,51 @@ const HdcReports = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {loading ? (
-                Array.from({ length: 10 }).map((_, index) => (
+              {!filtersApplied ? (
+                <TableRow>
+                  <TableCell colSpan={TABLE_HEADERS.length} align="center" sx={{ py: 4, color: '#64748b' }}>
+                    Choose dates and click Filter to load data.
+                  </TableCell>
+                </TableRow>
+              ) : loading ? (
+                Array.from({ length: 8 }).map((_, index) => (
                   <TableRow key={index}>
-                    {tableHeaders.map((_, cellIndex) => (
-                      <TableCell key={cellIndex} sx={{ py: 2 }}>
+                    {TABLE_HEADERS.map((header) => (
+                      <TableCell key={header} sx={{ py: 1.5 }}>
                         <Skeleton variant="text" animation="wave" />
                       </TableCell>
                     ))}
                   </TableRow>
                 ))
+              ) : reports.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={TABLE_HEADERS.length} align="center" sx={{ py: 4, color: '#64748b' }}>
+                    No records found for the selected filters.
+                  </TableCell>
+                </TableRow>
               ) : (
                 reports.map((report, index) => (
                   <TableRow
-                    key={index}
+                    key={`${report['Account Number'] || index}-${report['Invoice Number'] || index}`}
                     hover
-                    sx={{
-                      '&:last-child td': { borderBottom: 0 },
-                      transition: 'background-color 0.2s ease',
-                      '&:hover': { backgroundColor: '#f1f5f9' },
-                    }}
+                    sx={{ '&:hover': { backgroundColor: '#f1f5f9' } }}
                   >
-                    {tableHeaders.map((key) => (
+                    {TABLE_HEADERS.map((key) => (
                       <TableCell
                         key={key}
                         sx={{
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
-                          maxWidth: 200,
-                          py: 2,
+                          maxWidth: 220,
+                          py: 1.5,
                           px: 2,
                           color: '#475569',
                           fontWeight: key === 'Name' ? 500 : 400,
                         }}
+                        title={report[key] != null ? String(report[key]) : ''}
                       >
-                        {report[key] || ''}
+                        {report[key] ?? ''}
                       </TableCell>
                     ))}
                   </TableRow>
@@ -423,39 +352,23 @@ const HdcReports = () => {
           </Table>
         </TableContainer>
       </Box>
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          mt: 3,
-          pb: 2,
-        }}
-      >
-        {loading ? (
-          <Skeleton variant="rectangular" width={200} height={40} sx={{ borderRadius: 2 }} />
-        ) : (
-          <Pagination
-            count={pagination.totalPages}
-            page={pagination.page}
-            onChange={handlePageChange}
-            color="primary"
-            showFirstButton
-            showLastButton
-            sx={{
-              '& .MuiPaginationItem-root': {
-                fontSize: '0.875rem',
-                borderRadius: 1,
-                transition: 'all 0.3s ease',
-                '&:hover': { backgroundColor: '#e2e8f0' },
-              },
-              '& .Mui-selected': {
-                backgroundColor: '#3b82f6 !important',
-                color: '#ffffff',
-              },
-            }}
-          />
-        )}
-      </Box>
+
+      {filtersApplied && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2, pb: 1 }}>
+          {loading ? (
+            <Skeleton variant="rectangular" width={200} height={40} sx={{ borderRadius: 2 }} />
+          ) : (
+            <Pagination
+              count={pagination.totalPages || 1}
+              page={pagination.page}
+              onChange={handlePageChange}
+              color="primary"
+              showFirstButton
+              showLastButton
+            />
+          )}
+        </Box>
+      )}
     </Box>
   );
 };

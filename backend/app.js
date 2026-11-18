@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const db = require('./config/db');
 const billingReportRoutes = require('./routes/billingReportRoutes');
 const compression = require('compression');
 
@@ -11,10 +10,6 @@ app.use(cors());
 
 //Middleware to parse JSON
 app.use(express.json());    //This is a built-in middleware function in Express. It parses incoming requests with JSON payloads and is based on body-parser.
-
-//Connect to MongoDB Atlas
-db.connectDB();
-
 
 app.use(
   compression({
