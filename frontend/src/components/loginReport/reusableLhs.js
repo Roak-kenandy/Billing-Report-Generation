@@ -69,7 +69,6 @@ const ReusableLhs = () => {
     const salesReportItems = [
         { name: 'Service Request Reports', path: '/serviceRequest', icon: <SupportAgentIcon /> },
         { name: 'Customer Reports', path: '/customerReports', icon: <SupportAgentIcon /> },
-        { name: 'Migration Reports', path: '/customerNewReports', icon: <SupportAgentIcon /> },
         { name: 'Subscription State Report', path: '/subscriptionState', icon: <DescriptionIcon /> },
         { name: 'Inactive Customer Groups', path: '/inactiveCustomerGroups', icon: <DescriptionIcon /> },
         { name: 'OTT Tag Report', path: '/ottTagReport', icon: <DescriptionIcon /> },

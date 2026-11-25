@@ -39,7 +39,6 @@ import RegistrationReports from './components/loginReport/RegistrationReports';
 // import DeviceNames from './components/loginReport/DeviceNames';
 // import DynamicReportBuilder from './components/loginReport/DynamicReportBuilder';
 import CustomerReports from './components/loginReport/CustomerReports';
-import MigrationReports from './components/loginReport/migration';
 import { ToastContainer, Flip } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 // import RbacPermissions from "./components/loginReport/RbacPermissions";
@@ -84,7 +83,6 @@ function App() {
         {/* <Route path="deviceNames" element={<DeviceNames />} /> */}
         {/* <Route path="dynamicReportBuilder" element={<DynamicReportBuilder />} /> */}
         <Route path="customerReports" element={<CustomerReports />} />
-        <Route path="customerNewReports" element={<MigrationReports />} />
         <Route path="invoiceReports" element={<InvoiceReports />} />
         <Route path="hdcReports" element={<HdcReports/>} />
         <Route path="organizationDeviceReport" element={<OrganizationDeviceReport />} />
