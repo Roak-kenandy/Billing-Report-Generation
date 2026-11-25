@@ -67,10 +67,19 @@ const ManualJournalReport = () => {
     };
 
     useEffect(() => {
+        if (!appliedStartDate || !appliedEndDate) {
+            setReports([]);
+            setLoading(false);
+            return;
+        }
         fetchReports(pagination.page, pagination.limit, appliedStartDate, appliedEndDate);
     }, [pagination.page, pagination.limit, appliedStartDate, appliedEndDate]);
 
     const handleFilter = () => {
+        if (!startDate || !endDate) {
+            alert('Select both a start date and an end date.');
+            return;
+        }
         if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
             alert('Start date cannot be after end date');
             return;

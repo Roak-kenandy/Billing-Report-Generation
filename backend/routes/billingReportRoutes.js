@@ -122,10 +122,6 @@ router.get('/mtv/registered', billingReportController.mtvRegisteredCustomer);
 
 router.get('/mtv/registered/count', billingReportController.getReferralCountReport);
 
-router.get('/devices/statistics', billingReportController.getDeviceStatistics);
-
-router.get('/devices/statistics/export', billingReportController.exportDeviceStatistics);
-
 router.get('/devices/names', billingReportController.getDeviceNames);
 
 router.get('/vip/tags', billingReportController.getVipTags);

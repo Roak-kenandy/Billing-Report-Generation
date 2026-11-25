@@ -4,6 +4,7 @@ const organizationDeviceReportService = require('../services/organizationDeviceR
 const inactiveCustomerGroupsReportService = require('../services/inactiveCustomerGroupsReportService');
 const ottTagReportService = require('../services/ottTagReportService');
 const { Parser } = require('json2csv');
+const { sendCsv } = require('../utils/sendCsv');
 
 const handleSalesCrmReport = (fetchReport, csvFilename) => async (req, res) => {
   try {
@@ -34,7 +35,7 @@ const handleSalesCrmReport = (fetchReport, csvFilename) => async (req, res) => {
     if (format === 'csv' || response.isCsv) {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename=${csvFilename}`);
-      return res.send(response.csv);
+      return sendCsv(res, response.csv);
     }
 
     return res.json({
@@ -84,7 +85,7 @@ const exportInactiveCustomerGroupsReport = async (req, res) => {
     if (response.isCsv) {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=inactive-customer-groups-report.csv');
-      return res.send(response.csv);
+      return sendCsv(res, response.csv);
     }
 
     return res.json({
@@ -123,7 +124,7 @@ const exportOttTagReport = async (req, res) => {
     if (response.isCsv) {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=ott-tag-report.csv');
-      return res.send(response.csv);
+      return sendCsv(res, response.csv);
     }
 
     return res.json({
@@ -159,7 +160,7 @@ const exportOrganizationDeviceReport = async (req, res) => {
         'Content-Disposition',
         'attachment; filename=organization-device-report.csv'
       );
-      return res.send(response.csv);
+      return sendCsv(res, response.csv);
     }
 
     return res.json({
@@ -192,7 +193,7 @@ const exportCSV = async (req, res) => {
 
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=subscription-reports.csv');
-    res.send(csvData);
+    sendCsv(res, csvData);
   } catch (error) {
     const status = error.statusCode || 500;
     res.status(status).json({
@@ -211,7 +212,7 @@ const exportContactProfiles = async (req, res) => {
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=customer-reports.csv');
-      res.send(data.csv);
+      sendCsv(res, data.csv);
     } else {
       res.json({
         data: data.results,
@@ -244,7 +245,7 @@ const exportMigrationReports = async (req, res) => {
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=migration-reports.csv');
-      res.send(data.csv);
+      sendCsv(res, data.csv);
     } else {
       res.json({
         data: data.results,
@@ -268,7 +269,7 @@ const exportVipContactProfiles = async (req, res) => {
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=customer-reports.csv');
-      res.send(data.csv);
+      sendCsv(res, data.csv);
     } else {
       res.json({
         data: data.results,
@@ -294,7 +295,7 @@ const exportHdcContactProfiles = async (req, res) => {
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=hdc-customer-reports.csv');
-      res.send(data.csv);
+      sendCsv(res, data.csv);
     } else {
       res.json({
         data: data.results,
@@ -318,7 +319,7 @@ const exportContactProfilesWithInvoiceController = async (req, res) => {
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=customer-invoice-reports.csv');
-      res.send(data.csv);
+      sendCsv(res, data.csv);
     } else {
       res.json({
         data: data.results,
@@ -342,7 +343,7 @@ const exportContactProfilesWithHdc = async (req, res) => {
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=customer-hdc-reports.csv');
-      res.send(data.csv);
+      sendCsv(res, data.csv);
     } else {
       res.json({
         data: data.results,
@@ -372,8 +373,10 @@ const exportContactProfilesWithHdcClient = async (req, res) => {
     );
 
     if (format === 'csv') {
-      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename=customer-hdc-reports.csv');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.setHeader('Cache-Control', 'no-store');
 
       for await (const chunk of data.csvStream) {
         res.write(chunk);
@@ -401,8 +404,10 @@ const exportConsolidatedContactProfilesWithHdcClient = async (req, res) => {
     );
 
     if (format === 'csv') {
-      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename=customer-hdc-reports.csv');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.setHeader('Cache-Control', 'no-store');
 
       for await (const chunk of data.csvStream) {
         res.write(chunk);
@@ -459,7 +464,7 @@ const exportCustomerCSVorJSON = async (req, res) => {
     if (response.isCsv) {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=customer_reports.csv');
-      res.send(response.data);
+      return sendCsv(res, response.data);
     } else {
       res.status(200).json({
         data: response.data,
@@ -494,7 +499,7 @@ const exportCustomerReportsNotEffective = async (req, res) => {
     if (response.isCsv) {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=customer_disconnected_reports.csv');
-      res.send(response.data);
+      return sendCsv(res, response.data);
     } else {
       res.status(200).json({
         data: response.data,
@@ -571,7 +576,7 @@ const exportCustomerReportsNotEffective = async (req, res) => {
 
 //       res.setHeader('Content-Type', 'text/csv');
 //       res.setHeader('Content-Disposition', 'attachment; filename=reports.csv');
-//       res.send(csvData);
+//       sendCsv(res, csvData);
 //     } else {
 //       const jobId = uuidv4();
 //       console.log('Queuing asynchronous export:', { search, startDate, endDate, atoll, island, jobId });
@@ -625,7 +630,7 @@ const exportCustomerCollection = async (req, res) => {
       const csvHeader = 'Posted Date,Name,Phone,Atoll,Island,Ward,Road,Address,Account Number,Service Price,Submitted By,Dealer,Receipt ID,Payment Type\n';
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=customer_wise_collection.csv');
-      res.send(csvHeader + csvData);
+      sendCsv(res, csvHeader + csvData);
     } else {
       res.status(200).json({
         data: response.data,
@@ -693,7 +698,7 @@ const exportCustomerDealerWiseCollection = async (req, res) => {
 
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=customer_wise_collection.csv');
-      res.send(csvHeader + csvData);
+      sendCsv(res, csvHeader + csvData);
     } else {
       res.status(200).json({
         data: response.data,
@@ -749,15 +754,14 @@ const exportCollectionReports = async (req, res) => {
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename=reports-${new Date().toISOString().split('T')[0]}.csv`);
-      res.send(result);
+      sendCsv(res, result);
     } else {
       res.json(result);
     }
   } catch (error) {
     console.error('Error in exportCollectionReports controller:', error);
-    res.status(500).json({
-      message: 'Error fetching reports',
-      error: error.message
+    res.status(error.statusCode || 500).json({
+      message: error.message || 'Error fetching reports',
     });
   }
 };
@@ -783,7 +787,7 @@ const serviceRequestReports = async (req, res) => {
 
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=service-request-reports.csv');
-    res.send(csvData);
+    sendCsv(res, csvData);
 
   } catch (error) {
     res.status(500).json({
@@ -998,7 +1002,7 @@ const exportDealerReports = async (req, res) => {
 
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=reports.csv');
-    res.send(csvData);
+    sendCsv(res, csvData);
 
   } catch (error) {
     res.status(500).json({
@@ -1124,7 +1128,7 @@ const getDeviceNames = async (req, res) => {
     // Set response headers for CSV download
     res.header('Content-Type', 'text/csv');
     res.attachment('device_statistics.csv');
-    return res.send(csv);
+    return sendCsv(res, csv);
   } catch (err) {
     res.status(500).send({ message: 'Error exporting device statistics', error: err.message });
   }
@@ -1159,7 +1163,7 @@ const exportDeviceStatistics = async (req, res) => {
     // Set response headers for CSV download
     res.header('Content-Type', 'text/csv');
     res.attachment('device_statistics.csv');
-    return res.send(csv);
+    return sendCsv(res, csv);
   } catch (err) {
     res.status(500).send({ message: 'Error exporting device statistics', error: err.message });
   }
@@ -1172,7 +1176,7 @@ const getVipTags = async (req, res) => {
 
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=vip_reports.csv');
-    res.send(csvData);
+    sendCsv(res, csvData);
 
   } catch (error) {
     res.status(500).json({
@@ -1223,7 +1227,7 @@ const exportDealerCSVorJSON = async (req, res) => {
     if (response.isCsv) {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=dealer_information.csv');
-      res.send(response.data);
+      return sendCsv(res, response.data);
     } else {
       res.status(200).json({
         data: response.data,
@@ -1247,7 +1251,7 @@ const exportServiceStartDates = async (req, res) => {
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=service-start-dates.csv');
-      res.send(data.csv);
+      sendCsv(res, data.csv);
     } else {
       res.json({
         data: data.results,
@@ -1277,7 +1281,7 @@ const exportRegistrationCSVorJSON = async (req, res) => {
     if (response.isCsv) {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=registration_information.csv');
-      res.send(response.data);
+      return sendCsv(res, response.data);
     } else {
       res.status(200).json({
         data: response.data,
@@ -1310,7 +1314,7 @@ const exportRegistrationFinance = async (req, res) => {
         "Content-Disposition",
         "attachment; filename=registration_information.csv"
       );
-      return res.send(response.data);
+      return sendCsv(res, response.data);
     }
 
     res.status(200).json({
@@ -1340,7 +1344,7 @@ const exportContactOrderCSVorJSON = async (req, res) => {
     if (response.isCsv) {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=contact_order_information.csv');
-      res.send(response.data);
+      return sendCsv(res, response.data);
     } else {
       res.status(200).json({
         data: response.data,
@@ -1371,7 +1375,7 @@ const exportOrderInvoiceCSVorJSON = async (req, res) => {
     if (response.isCsv) {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=contact_order_information.csv');
-      res.send(response.data);
+      return sendCsv(res, response.data);
     } else {
       res.status(200).json({
         data: response.data,

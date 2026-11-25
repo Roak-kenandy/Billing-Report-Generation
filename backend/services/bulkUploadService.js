@@ -661,7 +661,14 @@ const processBulkUpload = async (filePath) => {
     const data = xlsx.utils.sheet_to_json(worksheet);
 
     // Extract contact codes
-    const contactCodes = data.map(row => row['Contact Code']).filter(Boolean);
+    const contactCodes = data
+        .map((row) => {
+            const value = row['Contact Code'];
+            if (value === null || value === undefined || value === '') return null;
+            if (typeof value === 'number' && Number.isFinite(value)) return String(Math.trunc(value));
+            return String(value).replace(/'/g, '').trim();
+        })
+        .filter(Boolean);
 
     // Get native collection reference
     const collection = mongoose.connection.db.collection('Journals');
@@ -672,7 +679,7 @@ const processBulkUpload = async (filePath) => {
     }).toArray();
 
     // Create a map for quick lookup
-    const contactMap = new Map(contacts.map(c => [c.contact_code, c]));
+    const contactMap = new Map(contacts.map(c => [String(c.contact_code).trim(), c]));
 
     // Map each Excel row to a contact (using the first occurrence in the database)
     const result = contactCodes.map(code => ({

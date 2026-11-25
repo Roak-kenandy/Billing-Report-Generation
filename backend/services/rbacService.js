@@ -1,3 +1,4 @@
+const bcrypt = require('bcrypt');
 const UserLoginReports = require('../models/UserLoginReports');
 
 class RbacService {
@@ -11,10 +12,40 @@ class RbacService {
         return await UserLoginReports.findById(id).select('-password');
     }
 
-    // Create a new user
-    async createUser(userData) {
-        const user = new UserLoginReports(userData);
-        return await user.save();
+    async createUser({ name, email, password, roles = [] }) {
+        const trimmedName = String(name || '').trim();
+        const trimmedEmail = String(email || '').trim().toLowerCase();
+        const roleList = Array.isArray(roles) ? roles.filter(Boolean) : [];
+
+        if (!trimmedName || !trimmedEmail || !password) {
+            const err = new Error('Name, email, and password are required.');
+            err.statusCode = 400;
+            throw err;
+        }
+        if (String(password).length < 8) {
+            const err = new Error('Password must be at least 8 characters.');
+            err.statusCode = 400;
+            throw err;
+        }
+
+        const existing = await UserLoginReports.findOne({ email: trimmedEmail });
+        if (existing) {
+            const err = new Error('A user with this email already exists.');
+            err.statusCode = 409;
+            throw err;
+        }
+
+        const user = new UserLoginReports({
+            name: trimmedName,
+            email: trimmedEmail,
+            password: await bcrypt.hash(String(password), 10),
+            roles: roleList,
+        });
+        await user.save();
+
+        const saved = user.toObject();
+        delete saved.password;
+        return saved;
     }
 
     // Update user roles

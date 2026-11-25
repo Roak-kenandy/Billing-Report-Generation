@@ -114,6 +114,10 @@ const HdcCustomerInvoiceReports = () => {
   };
 
   const handleFilter = () => {
+    if (!postedStartDate || !postedEndDate) {
+      setError('Select both a posted start date and a posted end date.');
+      return;
+    }
     if (postedStartDate && postedEndDate && new Date(postedStartDate) > new Date(postedEndDate)) {
       setError('Posted start date cannot be after posted end date');
       return;
@@ -153,6 +157,11 @@ const HdcCustomerInvoiceReports = () => {
   }, [searchTerm, appliedPostedStartDate, appliedPostedEndDate, appliedDueStartDate, appliedDueEndDate, appliedAtoll, appliedIsland]);
 
   useEffect(() => {
+    if (!appliedPostedStartDate || !appliedPostedEndDate) {
+      setReports([]);
+      setLoading(false);
+      return;
+    }
     fetchReports(
       pagination.page,
       pagination.limit,

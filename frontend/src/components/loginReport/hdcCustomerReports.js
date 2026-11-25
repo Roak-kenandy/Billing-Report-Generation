@@ -70,6 +70,13 @@ const HDCCustomerReports = () => {
 
     useEffect(() => {
         isMountedRef.current = true;
+        if (!appliedStartDate || !appliedEndDate) {
+            setReports([]);
+            setLoading(false);
+            return () => {
+                isMountedRef.current = false;
+            };
+        }
         fetchReports(pagination.page, appliedStartDate, appliedEndDate);
         
         return () => {
@@ -78,6 +85,10 @@ const HDCCustomerReports = () => {
     }, [fetchReports, pagination.page, appliedStartDate, appliedEndDate]);
 
     const handleFilter = () => {
+        if (!startDate || !endDate) {
+            alert('Select both a start date and an end date.');
+            return;
+        }
         setAppliedStartDate(startDate ? format(startDate, 'yyyy-MM-dd') : '');
         setAppliedEndDate(endDate ? format(endDate, 'yyyy-MM-dd') : '');
         setPagination(prev => ({ ...prev, page: 1 }));

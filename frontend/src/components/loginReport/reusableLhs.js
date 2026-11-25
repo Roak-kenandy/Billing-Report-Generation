@@ -43,7 +43,6 @@ const ReusableLhs = () => {
     const [openRbacSubmenu, setOpenRbacSubmenu] = useState(false);
     const [openHdcSubmenu, setOpenHdcSubmenu] = useState(false);
     const [openMtvRegisterSubmenu, setOpenMtvregisterSubmenu] = useState(false);
-    const [openDeviceSubmenu, setOpenDeviceSubmenu] = useState(false);
     const [openDealerMenu, setOpenDealerMenu] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [userRoles, setUserRoles] = useState([]);
@@ -92,11 +91,6 @@ const ReusableLhs = () => {
         { name: 'Registered Referral Counts', path: '/mtv/registered/counts', icon: <BarChartIcon /> },
     ];
 
-    const deviceStatistics = [
-        { name: 'Device Statistics', path: '/device/statistics', icon: <BarChartIcon /> },
-        { name: 'Device Names', path: '/deviceNames', icon: <BarChartIcon /> },
-    ];
-
     const dealerReports = [
         { name: 'Subscribed Dealer Reports', path: '/subscribed/dealers', icon: <BarChartIcon /> },
         { name: 'Subscribed Disconnected Reports', path: '/subscribed/disconnected', icon: <BarChartIcon /> },
@@ -123,7 +117,6 @@ const ReusableLhs = () => {
         setOpenRbacSubmenu(JSON.parse(localStorage.getItem('rbacSubmenuOpen')) || false);
         setOpenHdcSubmenu(JSON.parse(localStorage.getItem('hdcSubmenuOpen')) || false);
         setOpenMtvregisterSubmenu(JSON.parse(localStorage.getItem('mtvRegisterSubmenuOpen')) || false);
-        setOpenDeviceSubmenu(JSON.parse(localStorage.getItem('openDeviceSubmenu')) || false);
         setOpenDealerMenu(JSON.parse(localStorage.getItem('openDealersSubmenu')) || false);
 
         // Set selected index based on current path
@@ -133,7 +126,6 @@ const ReusableLhs = () => {
             ...salesReportItems,
             ...rbacReportItems,
             ...mtvRegisterReportItems,
-            ...deviceStatistics,
             ...dealerReports,
             ...hdcReportItems
         ];
@@ -153,9 +145,6 @@ const ReusableLhs = () => {
         } else if (mtvRegisterReportItems.some(item => item.path === location.pathname)) {
             setOpenMtvregisterSubmenu(true);
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(true));
-        } else if (deviceStatistics.some(item => item.path === location.pathname)) {
-            setOpenDeviceSubmenu(true);
-            localStorage.setItem('openDeviceSubmenu', JSON.stringify(true));
         } else if (dealerReports.some(item => item.path === location.pathname)) {
             setOpenDealerMenu(true);
             localStorage.setItem('openDealersSubmenu', JSON.stringify(true));
@@ -187,7 +176,7 @@ const ReusableLhs = () => {
     const handleLogout = () => {
         clearAuth();
         sessionStorage.clear();
-        ['financialSubmenuOpen', 'salesSubmenuOpen', 'rbacSubmenuOpen', 'hdcSubmenuOpen', 'mtvRegisterSubmenuOpen', 'openDeviceSubmenu', 'openDealersSubmenu'].forEach(k => localStorage.removeItem(k));
+        ['financialSubmenuOpen', 'salesSubmenuOpen', 'rbacSubmenuOpen', 'hdcSubmenuOpen', 'mtvRegisterSubmenuOpen', 'openDealersSubmenu'].forEach(k => localStorage.removeItem(k));
         window.location.href = '/reports/login';
     };
 
@@ -202,13 +191,11 @@ const ReusableLhs = () => {
             setOpenSalesSubmenu(false);
             setOpenRbacSubmenu(false);
             setOpenMtvregisterSubmenu(false);
-            setOpenDeviceSubmenu(false);
             setOpenDealerMenu(false);
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
-            localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
             localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
         } else if (menu === 'sales') {
             const newState = !openSalesSubmenu;
@@ -216,13 +203,11 @@ const ReusableLhs = () => {
             setOpenFinancialSubmenu(false);
             setOpenRbacSubmenu(false);
             setOpenMtvregisterSubmenu(false);
-            setOpenDeviceSubmenu(false);
             setOpenDealerMenu(false);
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
-            localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
             localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
         } else if (menu === 'rbac') {
             const newState = !openRbacSubmenu;
@@ -230,13 +215,11 @@ const ReusableLhs = () => {
             setOpenFinancialSubmenu(false);
             setOpenSalesSubmenu(false);
             setOpenMtvregisterSubmenu(false);
-            setOpenDeviceSubmenu(false);
             setOpenDealerMenu(false);
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
-            localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
             localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
         } else if (menu === 'hdc') {
             const newState = !openHdcSubmenu;
@@ -245,13 +228,11 @@ const ReusableLhs = () => {
             setOpenFinancialSubmenu(false);
             setOpenSalesSubmenu(false);
             setOpenMtvregisterSubmenu(false);
-            setOpenDeviceSubmenu(false);
             setOpenDealerMenu(false);
             localStorage.setItem('hdcSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
-            localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
             localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
         }
@@ -261,38 +242,20 @@ const ReusableLhs = () => {
             setOpenFinancialSubmenu(false);
             setOpenSalesSubmenu(false);
             setOpenRbacSubmenu(false);
-            setOpenDeviceSubmenu(false);
             setOpenDealerMenu(false);
             localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(newState));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
-            localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
-            localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
-        } else if (menu === 'openDevice') {
-            const newState = !openDeviceSubmenu;
-            setOpenDeviceSubmenu(newState);
-            setOpenFinancialSubmenu(false);
-            setOpenSalesSubmenu(false);
-            setOpenRbacSubmenu(false);
-            setOpenMtvregisterSubmenu(false);
-            setOpenDealerMenu(false);
-            localStorage.setItem('openDeviceSubmenu', JSON.stringify(newState));
-            localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
-            localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
-            localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
-            localStorage.setItem('mtvRegisterSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('openDealersSubmenu', JSON.stringify(false));
         } else if (menu === 'openDealer') {
             const newState = !openDealerMenu;
             setOpenDealerMenu(newState);
-            setOpenDeviceSubmenu(false);
             setOpenFinancialSubmenu(false);
             setOpenSalesSubmenu(false);
             setOpenRbacSubmenu(false);
             setOpenMtvregisterSubmenu(false);
             localStorage.setItem('openDealersSubmenu', JSON.stringify(newState));
-            localStorage.setItem('openDeviceSubmenu', JSON.stringify(false));
             localStorage.setItem('financialSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('salesSubmenuOpen', JSON.stringify(false));
             localStorage.setItem('rbacSubmenuOpen', JSON.stringify(false));
@@ -307,7 +270,6 @@ const ReusableLhs = () => {
     const canViewRbacManagement = !isServiceProvider && userRoles.includes('Admin');
     const canViewHDC = !isServiceProvider && userRoles.includes('Admin') || !isServiceProvider && userRoles.includes('HDC');
     const canViewMtvUsersManagement = !isServiceProvider && (userRoles.includes('Admin') || userRoles.includes('Sales'));
-    const canViewDeviceStatistics = !isServiceProvider && userRoles.includes('Admin');
     const canViewDealerReports = userRoles.includes('Admin') || userRoles.includes('Finance') || userRoles.includes('Sales') || isServiceProvider;
     const canViewDashboard = !isServiceProvider && !userRoles.includes('HDC');;
 
@@ -349,7 +311,7 @@ const ReusableLhs = () => {
                                 color: '#e0e7ff',
                             }}
                         >
-                            Reports
+                            Medianet Billing
                         </Typography>
                     )}
                     <IconButton onClick={toggleSidebar} sx={{ color: '#e0e7ff' }}>
@@ -629,86 +591,6 @@ const ReusableLhs = () => {
                             </>
                         )}
 
-                        {/* Device Statistics Section */}
-                        {canViewDeviceStatistics && (
-                            <>
-                                <ListItemButton
-                                    onClick={() => handleSubmenuToggle('openDevice')}
-                                    sx={{
-                                        py: 1.5,
-                                        mx: 1,
-                                        borderRadius: 2,
-                                        transition: 'all 0.3s ease',
-                                        '&:hover': {
-                                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                                        },
-                                        backgroundColor: openDeviceSubmenu ? 'rgba(255, 255, 255, 0.05)' : 'inherit',
-                                    }}
-                                >
-                                    <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
-                                        <AssignmentIcon />
-                                    </ListItemIcon>
-                                    {isSidebarOpen && (
-                                        <>
-                                            <ListItemText
-                                                primary="Device Statistics"
-                                                primaryTypographyProps={{ fontWeight: 500 }}
-                                            />
-                                            {openDeviceSubmenu ? (
-                                                <ExpandLess sx={{ color: '#93c5fd' }} />
-                                            ) : (
-                                                <ExpandMore sx={{ color: '#93c5fd' }} />
-                                            )}
-                                        </>
-                                    )}
-                                </ListItemButton>
-
-                                <Collapse in={openDeviceSubmenu && isSidebarOpen} timeout="auto" unmountOnExit>
-                                    {deviceStatistics.map((item, index) => (
-                                        <ListItemButton
-                                            key={item.name}
-                                            selected={location?.pathname === item.path}
-                                            onClick={() => handleListItemClick(
-                                                index + financialReportItems.length + salesReportItems.length + mtvRegisterReportItems.length + 1,
-                                                item.path
-                                            )}
-                                            component={Link}
-                                            to={item.path}
-                                            sx={{
-                                                pl: isSidebarOpen ? 5 : 1,
-                                                py: 1.2,
-                                                mx: 1,
-                                                borderRadius: 2,
-                                                transition: 'all 0.3s ease',
-                                                '&:hover': {
-                                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                                                    transform: isSidebarOpen ? 'translateX(5px)' : 'none',
-                                                },
-                                                '&.Mui-selected': {
-                                                    backgroundColor: '#3b82f6',
-                                                    color: '#ffffff',
-                                                    '&:hover': { backgroundColor: '#2563eb' },
-                                                },
-                                            }}
-                                        >
-                                            <ListItemIcon sx={{ color: '#e0e7ff', minWidth: '40px' }}>
-                                                {item.icon}
-                                            </ListItemIcon>
-                                            {isSidebarOpen && (
-                                                <ListItemText
-                                                    primary={item.name}
-                                                    primaryTypographyProps={{
-                                                        fontSize: 14,
-                                                        fontWeight: 400,
-                                                    }}
-                                                />
-                                            )}
-                                        </ListItemButton>
-                                    ))}
-                                </Collapse>
-                            </>
-                        )}
-
                         {/* Dealer Reports Section */}
                         {canViewDealerReports && (
                             <>
@@ -751,7 +633,7 @@ const ReusableLhs = () => {
                                             onClick={() => handleListItemClick(
                                                 isServiceProvider
                                                     ? index
-                                                    : index + financialReportItems.length + salesReportItems.length + mtvRegisterReportItems.length + deviceStatistics.length + 1,
+                                                    : index + financialReportItems.length + salesReportItems.length + mtvRegisterReportItems.length + 1,
                                                 item.path
                                             )}
                                             component={Link}
@@ -832,7 +714,7 @@ const ReusableLhs = () => {
                                             key={item.name}
                                             selected={location?.pathname === item.path}
                                             onClick={() => handleListItemClick(
-                                                index + financialReportItems.length + salesReportItems.length + mtvRegisterReportItems.length + deviceStatistics.length + dealerReports.length + 1,
+                                                index + financialReportItems.length + salesReportItems.length + mtvRegisterReportItems.length + dealerReports.length + 1,
                                                 item.path
                                             )}
                                             component={Link}
@@ -912,7 +794,7 @@ const ReusableLhs = () => {
                                             key={item.name}
                                             selected={location?.pathname === item.path}
                                             onClick={() => handleListItemClick(
-                                                index + financialReportItems.length + salesReportItems.length + mtvRegisterReportItems.length + deviceStatistics.length + dealerReports.length + 1,
+                                                index + financialReportItems.length + salesReportItems.length + mtvRegisterReportItems.length + dealerReports.length + 1,
                                                 item.path
                                             )}
                                             component={Link}
@@ -1021,7 +903,7 @@ const ReusableLhs = () => {
                     flexGrow: 1,
                     width: isSidebarOpen ? '80%' : 'calc(100% - 60px)',
                     overflowY: 'auto',
-                    backgroundColor: '#f9fafb',
+                    backgroundColor: '#f4f6fb',
                     p: 3,
                     display: 'flex',
                     flexDirection: 'column',

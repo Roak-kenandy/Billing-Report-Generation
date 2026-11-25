@@ -84,6 +84,11 @@ const RegistrationReports = () => {
 
   // Fetch reports when dependencies change
   useEffect(() => {
+    if (!appliedStartDate || !appliedEndDate) {
+      setReports([]);
+      setLoading(false);
+      return;
+    }
     fetchReports(
       pagination.page,
       pagination.limit,
@@ -99,6 +104,10 @@ const RegistrationReports = () => {
   ]);
 
   const handleFilter = () => {
+    if (!startDate || !endDate) {
+      alert('Select both a start date and an end date.');
+      return;
+    }
     setAppliedStartDate(startDate ? startDate.toISOString().split('T')[0] : '');
     setAppliedEndDate(endDate ? endDate.toISOString().split('T')[0] : '');
     setPagination(prev => ({ ...prev, page: 1 }));

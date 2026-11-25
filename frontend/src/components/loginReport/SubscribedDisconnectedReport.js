@@ -126,7 +126,12 @@ const SubscribedDisconnectedReports = () => {
 
   // Updated useEffect to wait for initialization before fetching
   useEffect(() => {
-    if (!isInitialized) return; // Don't fetch until spIsland is initialized
+    if (!isInitialized) return;
+    if (!appliedStartDate || !appliedEndDate) {
+      setReports([]);
+      setLoading(false);
+      return;
+    }
 
     const atollName = appliedAtoll
       ? atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name || ''
@@ -164,6 +169,10 @@ const SubscribedDisconnectedReports = () => {
   ]);
 
   const handleFilter = () => {
+    if (!startDate || !endDate) {
+      alert('Select both a start date and an end date.');
+      return;
+    }
     setAppliedStartDate(startDate ? startDate.toISOString().split('T')[0] : '');
     setAppliedEndDate(endDate ? endDate.toISOString().split('T')[0] : '');
     setAppliedAtoll(selectedAtoll);

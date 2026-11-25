@@ -57,6 +57,10 @@ const MtvRegisteredCustomer = () => {
     };
 
     const handleFilter = () => {
+        if (!startDate || !endDate) {
+            alert('Select both a start date and an end date.');
+            return;
+        }
         setAppliedStartDate(startDate);
         setAppliedEndDate(endDate);
         setPagination(prev => ({ ...prev, page: 1 }));
@@ -76,6 +80,11 @@ const MtvRegisteredCustomer = () => {
     }, [searchTerm, appliedStartDate, appliedEndDate]);
 
     useEffect(() => {
+        if (!appliedStartDate || !appliedEndDate) {
+            setReports([]);
+            setLoading(false);
+            return;
+        }
         fetchReports(pagination.page, pagination.limit, searchTerm, appliedStartDate, appliedEndDate);
     }, [pagination.page, pagination.limit, searchTerm, appliedStartDate, appliedEndDate]);
 

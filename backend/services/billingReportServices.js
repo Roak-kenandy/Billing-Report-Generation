@@ -11,6 +11,14 @@ const pipelineAsync = promisify(pipeline);
 
 const subscriptionReportsService = require('./subscriptionReportsService');
 
+const assertDateRange = (startDate, endDate) => {
+  if (!startDate || !endDate) {
+    const err = new Error('Start date and end date are required.');
+    err.statusCode = 400;
+    throw err;
+  }
+};
+
 const getReports = async (page, limit, search = '', startDate, endDate, atoll, island) => {
   try {
     return await subscriptionReportsService.getReports(page, limit, search, startDate, endDate, atoll, island);
@@ -184,6 +192,7 @@ const maldivesDayEnd = (value) => {
  */
 const exportContactProfiles = async (search, startDate, endDate, atoll, island, page, limit, format, deviceProductNameFilter, options = {}) => {
   try {
+    assertDateRange(startDate, endDate);
     const { customerReport = false } = options;
     const dateField = customerReport ? 'profile.registration_date' : 'submited_date';
     const startTimestamp = startDate ? maldivesDayStart(startDate) : undefined;
@@ -977,6 +986,7 @@ const exportMigrationReports = async (search, startDate, endDate, atoll, island,
 
 const exportVipContactProfiles = async (search, startDate, endDate, atoll, island, page, limit, format) => {
   try {
+    assertDateRange(startDate, endDate);
     // Calculate timestamps for date filtering
     const startTimestamp = startDate ? Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000) : null;
     const endTimestamp = endDate ? Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000) : null;
@@ -1134,6 +1144,7 @@ const exportVipContactProfiles = async (search, startDate, endDate, atoll, islan
 
 const exportHdcContactProfiles = async (startDate, endDate, page, limit, format) => {
   try {
+    assertDateRange(startDate, endDate);
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
 
@@ -1294,6 +1305,7 @@ const exportHdcContactProfiles = async (startDate, endDate, page, limit, format)
 
 const exportContactProfilesWithInvoice = async (search, startDate, endDate, atoll, island, page, limit, format) => {
   try {
+    assertDateRange(startDate, endDate);
     // Validate input dates
     if (startDate && isNaN(new Date(startDate).getTime())) {
       throw new Error('Invalid startDate format');
@@ -2751,6 +2763,7 @@ const exportContactProfilesWithHdcClient = async (
   format = 'json'
 ) => {
   try {
+    assertDateRange(postedStartDate, postedEndDate);
     // For CSV, ignore pagination
     if (format === 'csv') {
       page = 1;
@@ -3330,6 +3343,7 @@ const exportConsolidatedContactProfilesWithHdcClient = async (
   format = 'json'
 ) => {
   try {
+    assertDateRange(postedStartDate, postedEndDate);
     // Ensure page and limit are numbers
     const parsedPage = Math.max(1, parseInt(page, 10));
     const parsedLimit = Math.min(500, Math.max(1, parseInt(limit, 10)));
@@ -3692,6 +3706,7 @@ const exportConsolidatedContactProfilesWithHdcClient = async (
 
 const exportCustomerReports = async (search, startDate, endDate, atoll, island, format, page, limit, serviceProvider, spIsland) => {
   try {
+    assertDateRange(startDate, endDate);
     console.log(spIsland, 'sp island owner');
     // Calculate timestamps for date filtering
     let startTimestamp, endTimestamp;
@@ -4091,6 +4106,7 @@ const exportCustomerReports = async (search, startDate, endDate, atoll, island, 
 
 const exportCustomerReportsNotEffective = async (search, startDate, endDate, atoll, island, format, page, limit, serviceProvider, spIsland) => {
   try {
+    assertDateRange(startDate, endDate);
     // Calculate timestamps for date filtering
     let startTimestamp, endTimestamp;
     if (startDate) {
@@ -4509,6 +4525,7 @@ const exportCustomerCollection = async (
   island
 ) => {
   try {
+    assertDateRange(startDate, endDate);
     let startTimestamp, endTimestamp;
     if (startDate) startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
     if (endDate) endTimestamp = Math.floor(new Date(endDate).setUTCHours(23, 59, 59, 999) / 1000);
@@ -4963,6 +4980,7 @@ const exportCustomerDealerWiseCollection = async (
   spIsland
 ) => {
   try {
+    assertDateRange(startDate, endDate);
     // Date filter
     let startTimestamp, endTimestamp;
     if (startDate) startTimestamp = Math.floor(new Date(startDate).setUTCHours(0, 0, 0, 0) / 1000);
@@ -5329,6 +5347,7 @@ const exportCustomerDealerWiseCollection = async (
 const exportDealerReports = async (startDate, endDate, dealerName) => {
 
   try {
+    assertDateRange(startDate, endDate);
     // Prepare the match stage for filtering
     let matchStage = {};
     if (startDate) {
@@ -5450,6 +5469,11 @@ const exportDealerReports = async (startDate, endDate, dealerName) => {
 
 const exportCollectionReports = async ({ page = 1, limit = 50, search, atoll, island, startDate, endDate, format = 'json' }) => {
   try {
+    if (!startDate || !endDate) {
+      const err = new Error('Start date and end date are required.');
+      err.statusCode = 400;
+      throw err;
+    }
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 50;
     const skip = (pageNum - 1) * limitNum;
@@ -5482,22 +5506,12 @@ const exportCollectionReports = async ({ page = 1, limit = 50, search, atoll, is
       pipeline: [
         {
           $match: {
-            $expr: {
-              $and: [
-                { $eq: ['$contact_id', '$$contactId'] },
-                { $eq: ['$type', 'PAYMENT_POSTED'] },
-                { $ne: ['$payment_method', null] },
-                ...(Object.keys(dateMatchCondition).length > 0
-                  ? [
-                      {
-                        $match: {
-                          'transaction.posted_date': dateMatchCondition,
-                        },
-                      },
-                    ]
-                  : []),
-              ],
-            },
+            $expr: { $eq: ['$contact_id', '$$contactId'] },
+            type: 'PAYMENT_POSTED',
+            payment_method: { $ne: null },
+            ...(Object.keys(dateMatchCondition).length > 0
+              ? { 'transaction.posted_date': dateMatchCondition }
+              : {}),
           },
         },
         {
@@ -5510,7 +5524,6 @@ const exportCollectionReports = async ({ page = 1, limit = 50, search, atoll, is
             user_name: '$submited_by_user_name',
           },
         },
-        { $limit: limitNum }, // Limit documents in lookup
       ],
       as: 'payments',
     };
@@ -5521,28 +5534,16 @@ const exportCollectionReports = async ({ page = 1, limit = 50, search, atoll, is
       pipeline: [
         {
           $match: {
-            $expr: {
-              $and: [
-                { $eq: ['$contact_id', '$$contactId'] },
-                { $eq: ['$related_entity.transaction_type', 'MANUAL_JOURNAL'] },
-                ...(Object.keys(dateMatchCondition).length > 0
-                  ? [
-                      {
-                        $match: {
-                          submited_date: {
-                            $gte: dateMatchCondition.$gte
-                              ? new Date(dateMatchCondition.$gte * 1000)
-                              : undefined,
-                            $lte: dateMatchCondition.$lte
-                              ? new Date(dateMatchCondition.$lte * 1000)
-                              : undefined,
-                          },
-                        },
-                      },
-                    ]
-                  : []),
-              ],
-            },
+            $expr: { $eq: ['$contact_id', '$$contactId'] },
+            'related_entity.transaction_type': 'MANUAL_JOURNAL',
+            ...(Object.keys(dateMatchCondition).length > 0
+              ? {
+                  submited_date: {
+                    ...(dateMatchCondition.$gte ? { $gte: new Date(dateMatchCondition.$gte * 1000) } : {}),
+                    ...(dateMatchCondition.$lte ? { $lte: new Date(dateMatchCondition.$lte * 1000) } : {}),
+                  },
+                }
+              : {}),
           },
         },
         {
@@ -5574,7 +5575,6 @@ const exportCollectionReports = async ({ page = 1, limit = 50, search, atoll, is
             contact_name: '$contact_name', // Include contact_name from Journals
           },
         },
-        { $limit: limitNum }, // Limit documents in lookup
       ],
       as: 'journals',
     };
@@ -6462,6 +6462,7 @@ const buildManualJournalPipeline = (matchConditions, page, limit) => {
 
 const exportManualJournalReports = async (page, limit, startDate, endDate, isCSVExport = false) => {
   try {
+    assertDateRange(startDate, endDate);
     const matchConditions = buildManualJournalMatch(startDate, endDate);
     const aggregationPipeline = buildManualJournalPipeline(matchConditions, page, limit);
     const aggregateOptions = { maxTimeMS: 600000, allowDiskUse: true };
@@ -7117,6 +7118,7 @@ const getAtollsData = async () => {
 
 const getAllDealerReports = async (page = 1, limit = 10, startDate, endDate, dealerName) => {
   try {
+    assertDateRange(startDate, endDate);
     // Prepare the match stage for filtering
     let matchStage = {};
     if (startDate) {
@@ -7280,6 +7282,7 @@ const getDealerNames = async () => {
 
 const getMtvUserReports = async (page, limit, startDate, endDate) => {
   try {
+    assertDateRange(startDate, endDate);
     let dateFilter = {};
     // Convert MM/DD/YYYY to Date object
     const parseDate = (dateStr, isEnd = false) => {
@@ -8223,6 +8226,7 @@ const exportServiceStartDates = async (search, startDate, endDate, atoll, island
 
 const exportRegistrationReports = async (startDate, endDate, format, page, limit) => {
   try {
+    assertDateRange(startDate, endDate);
     // Calculate timestamps for date filtering
     let startTimestamp, endTimestamp;
     if (startDate) {
@@ -8394,6 +8398,7 @@ const { getMySQLConnection } = require("../config/db");
 
 const exportRegistrationFinance = async (startDate, endDate, format, page, limit) => {
   try {
+    assertDateRange(startDate, endDate);
     const pool = getMySQLConnection();
 
     // Handle date filtering on createdAt
@@ -8509,6 +8514,7 @@ const exportRegistrationFinance = async (startDate, endDate, format, page, limit
 
 const exportContactOrderReports = async (startDate, endDate, format, page, limit) => {
   try {
+    assertDateRange(startDate, endDate);
     // Calculate timestamps
     let startTimestamp, endTimestamp;
     if (startDate) {
@@ -9028,6 +9034,7 @@ const exportContactOrderReports = async (startDate, endDate, format, page, limit
 // };
 
 const exportInvoiceOrdersReports = async (startDate, endDate, format, page, limit) => {
+  assertDateRange(startDate, endDate);
   const getSubmitters = async (entityId) => {
     let allContent = [];
     let currentPage = 1;

@@ -1,5 +1,7 @@
 const rbacService = require('../services/rbacService');
 
+const isAdmin = (req) => (req.user?.roles || []).includes('Admin');
+
 class RbacController {
     async getUsers(req, res) {
         try {
@@ -22,10 +24,13 @@ class RbacController {
 
     async createUser(req, res) {
         try {
+            if (!isAdmin(req)) {
+                return res.status(403).json({ message: 'Only an Admin can add users. Log in again if this is unexpected.' });
+            }
             const user = await rbacService.createUser(req.body);
             res.status(201).json(user);
         } catch (error) {
-            res.status(400).json({ message: error.message });
+            res.status(error.statusCode || 400).json({ message: error.message });
         }
     }
 

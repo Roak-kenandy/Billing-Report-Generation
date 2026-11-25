@@ -16,185 +16,190 @@ import {
     InputLabel,
     Select,
     MenuItem,
+    Alert,
+    Typography,
 } from '@mui/material';
-import {  GetApp } from '@mui/icons-material';
-import FilterAltIcon from "@mui/icons-material/FilterAlt";
+import { GetApp } from '@mui/icons-material';
+import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import ClearIcon from '@mui/icons-material/Clear';
-import { getApiBaseUrl, getAuthHeaders, clearAuth } from '../../utils/auth';
+import { format } from 'date-fns';
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
+
+const COLUMNS = [
+    'Customer Name',
+    'Account',
+    'Area',
+    'Dealer',
+    'Ward',
+    'Road',
+    'Island',
+    'Atoll',
+    'Payment Method',
+    'Posted Date',
+    'Total Amount',
+    'Amount',
+    'GST',
+    'Reference Number',
+    'User Name',
+];
+
+const EMPTY_PAGINATION = { page: 1, limit: 20, total: 0, totalPages: 0 };
 
 const Collection = () => {
     const [reports, setReports] = useState([]);
-    const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
-    const [searchTerm, setSearchTerm] = useState('');
-    const [loading, setLoading] = useState(true);
+    const [pagination, setPagination] = useState(EMPTY_PAGINATION);
+    const [loading, setLoading] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
-    const [appliedStartDate, setAppliedStartDate] = useState('');
-    const [appliedEndDate, setAppliedEndDate] = useState('');
+    const [error, setError] = useState('');
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
+    const [appliedFilters, setAppliedFilters] = useState(null);
     const isSmallScreen = useMediaQuery('(max-width:600px)');
     const [atolls, setAtolls] = useState([]);
     const [selectedAtoll, setSelectedAtoll] = useState('');
     const [selectedIsland, setSelectedIsland] = useState('');
-    const [appliedAtoll, setAppliedAtoll] = useState('');
-    const [appliedIsland, setAppliedIsland] = useState('');
     const API_URL = getApiBaseUrl();
 
-    // Fetch atolls and islands data
     useEffect(() => {
         const fetchAtolls = async () => {
             try {
                 const response = await fetch(`${API_URL}/getAtolls`, { headers: getAuthHeaders() });
                 const data = await response.json();
-                setAtolls(data.data);
+                setAtolls(data.data || []);
             } catch (err) {
                 console.error('Error fetching atolls:', err);
             }
         };
         fetchAtolls();
-    }, []);
+    }, [API_URL]);
 
-    // Fetch reports from the backend
-    const fetchReports = async (page, limit, search = '', start = '', end = '') => {
+    const buildParams = (filters, page, limit, csv) => {
+        const params = new URLSearchParams();
+        params.set('startDate', filters.startDate);
+        params.set('endDate', filters.endDate);
+        params.set('page', String(page));
+        params.set('limit', String(limit));
+        if (csv) params.set('format', 'csv');
+        if (filters.atoll) params.set('atoll', filters.atoll);
+        if (filters.island) params.set('island', filters.island);
+        return params;
+    };
+
+    const fetchReports = async (filters, page, limit) => {
         setLoading(true);
+        setError('');
         try {
-            let url = `${API_URL}/getReports?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
-            if (start) url += `&startDate=${encodeURIComponent(start)}`;
-            if (end) url += `&endDate=${encodeURIComponent(end)}`;
-
-            // Pass the names instead of IDs
-            if (appliedAtoll) {
-                const selectedAtollName = atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name;
-                if (selectedAtollName) {
-                    url += `&atoll=${encodeURIComponent(selectedAtollName)}`;
-                }
-            }
-
-            if (appliedIsland) {
-                const selectedAtollData = atolls.find(a => a.atolls_id === appliedAtoll);
-                const selectedIslandName = selectedAtollData?.islands.find(i => i.islands_id === appliedIsland)?.islands_name;
-                if (selectedIslandName) {
-                    url += `&island=${encodeURIComponent(selectedIslandName)}`;
-                }
-            }
-
-            const response = await fetch(url, { headers: getAuthHeaders() });
+            const response = await fetch(
+                `${API_URL}/getCollectionReports?${buildParams(filters, page, limit).toString()}`,
+                { headers: getAuthHeaders() }
+            );
             const data = await response.json();
-            setReports(data.data);
-            setPagination(data.pagination);
+            if (!response.ok) throw new Error(data.message || 'Failed to load collection reports');
+            setReports(Array.isArray(data.data) ? data.data : []);
+            setPagination({
+                page: data.pagination?.page || page,
+                limit: data.pagination?.limit || limit,
+                total: data.pagination?.total || 0,
+                totalPages: data.pagination?.totalPages || 0,
+            });
         } catch (err) {
-            console.error('Error fetching reports:', err);
+            setReports([]);
+            setPagination((prev) => ({ ...(prev || EMPTY_PAGINATION), total: 0, totalPages: 0 }));
+            setError(err.message);
         } finally {
             setLoading(false);
         }
     };
 
+    useEffect(() => {
+        if (!appliedFilters) return;
+        fetchReports(appliedFilters, pagination.page, pagination.limit);
+        // pagination.page is the only page trigger; limit stays on the filter object
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [appliedFilters, pagination.page]);
+
     const handleFilter = () => {
-        setAppliedStartDate(startDate);
-        setAppliedEndDate(endDate);
-        setAppliedAtoll(selectedAtoll);
-        setAppliedIsland(selectedIsland);
-        setPagination(prev => ({ ...prev, page: 1 }));
+        if (!startDate || !endDate) {
+            setError('Select a start date and an end date before loading collection reports.');
+            return;
+        }
+        const atollName = atolls.find((item) => item.atolls_id === selectedAtoll)?.atolls_name || '';
+        const islandName = atolls
+            .find((item) => item.atolls_id === selectedAtoll)
+            ?.islands?.find((item) => item.islands_id === selectedIsland)?.islands_name || '';
+        setPagination((prev) => ({ ...(prev || EMPTY_PAGINATION), page: 1 }));
+        setAppliedFilters({
+            startDate: format(startDate, 'yyyy-MM-dd'),
+            endDate: format(endDate, 'yyyy-MM-dd'),
+            atoll: atollName,
+            island: islandName,
+        });
     };
 
     const handleClearFilter = () => {
-        setStartDate('');
-        setEndDate('');
-        setAppliedStartDate('');
-        setAppliedEndDate('');
+        setStartDate(null);
+        setEndDate(null);
         setSelectedAtoll('');
         setSelectedIsland('');
-        setAppliedAtoll('');
-        setAppliedIsland('');
-        setSearchTerm('');
-        setPagination(prev => ({ ...prev, page: 1 }));
-    };
-
-    const handleLogout = () => {
-        localStorage.removeItem('token');
-        sessionStorage.removeItem('token');
-
-        window.location.href = '/reports/login';
-    };
-
-    useEffect(() => {
-        setPagination(prev => ({ ...prev, page: 1 }));
-    }, [searchTerm, appliedStartDate, appliedEndDate, appliedAtoll, appliedIsland]);
-
-    // Fetch reports on component mount and when pagination/search changes
-    useEffect(() => {
-        fetchReports(pagination.page, pagination.limit, searchTerm, appliedStartDate, appliedEndDate);
-    }, [pagination.page, pagination.limit, searchTerm, appliedStartDate, appliedEndDate,appliedAtoll, appliedIsland]);
-
-    // Handle page change
-    const handlePageChange = (event, value) => {
-        setPagination({ ...pagination, page: value });
-    };
-
-    // Handle search
-    const handleSearch = (event) => {
-        setSearchTerm(event.target.value);
-        setPagination({ ...pagination, page: 1 }); // Reset to first page on search
+        setAppliedFilters(null);
+        setReports([]);
+        setError('');
+        setPagination(EMPTY_PAGINATION);
     };
 
     const handleDownloadCSV = async () => {
+        if (!appliedFilters) {
+            setError('Apply a date filter before downloading.');
+            return;
+        }
         try {
             setIsDownloading(true);
-            let url = new URL(`${API_URL}/getCollectionReports`, window.location.origin);
-            url.searchParams.append('search', searchTerm);
-            if (appliedStartDate) url.searchParams.append('startDate', appliedStartDate);
-            if (appliedEndDate) url.searchParams.append('endDate', appliedEndDate);
-
-            if (appliedAtoll) {
-                const selectedAtollName = atolls.find(a => a.atolls_id === appliedAtoll)?.atolls_name;
-                if (selectedAtollName) {
-                    url += `&atoll=${encodeURIComponent(selectedAtollName)}`;
-                }
+            const response = await fetch(
+                `${API_URL}/getCollectionReports?${buildParams(appliedFilters, 1, pagination.limit, true).toString()}`,
+                { headers: getAuthHeaders() }
+            );
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.message || 'Export failed');
             }
-
-            if (appliedIsland) {
-                const selectedAtollData = atolls.find(a => a.atolls_id === appliedAtoll);
-                const selectedIslandName = selectedAtollData?.islands.find(i => i.islands_id === appliedIsland)?.islands_name;
-                if (selectedIslandName) {
-                    url += `&island=${encodeURIComponent(selectedIslandName)}`;
-                }
-            }
-
-            const response = await fetch(url, { headers: getAuthHeaders() });
-            if (!response.ok) throw new Error('Export failed');
-
             const blob = await response.blob();
             const downloadUrl = window.URL.createObjectURL(blob);
-
             const link = document.createElement('a');
             link.href = downloadUrl;
-            link.setAttribute('download', 'reports.csv');
+            link.setAttribute('download', 'collection-reports.csv');
             document.body.appendChild(link);
             link.click();
-
             link.remove();
             window.URL.revokeObjectURL(downloadUrl);
-        } catch (error) {
-            console.error('Export error:', error);
-            // Show error notification
+        } catch (err) {
+            setError(err.message);
         } finally {
             setIsDownloading(false);
         }
     };
 
-
-
     return (
-        <Box sx={{
-            padding: 3,
-            display: 'flex',
-            flexDirection: 'column',
-            height: 'calc(100vh - 37px)',
-            overflow: 'hidden'
-        }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h5">Collection Reports</Typography>
+                <Button
+                    variant="contained"
+                    startIcon={<GetApp />}
+                    onClick={handleDownloadCSV}
+                    disabled={isDownloading || !appliedFilters}
+                >
+                    {isDownloading ? 'Downloading...' : 'Download CSV'}
+                </Button>
+            </Box>
+
+            <Alert severity="info" sx={{ mb: 2 }}>
+                Select a start and end date, then click Filter. The report loads payments posted in that range only.
+            </Alert>
+            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
             <LocalizationProvider dateAdapter={AdapterDateFns}>
                 <Box
                     sx={{
@@ -202,52 +207,27 @@ const Collection = () => {
                         gap: 2,
                         flexWrap: 'wrap',
                         alignItems: 'center',
-                        mb: 3,
+                        mb: 2,
                         p: 2,
                         backgroundColor: '#ffffff',
                         borderRadius: 2,
                         boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
-                        '& > *': { minWidth: isSmallScreen ? '100%' : 'auto' },
                     }}
                 >
                     <DatePicker
-                        label="Start Date"
+                        label="Start Date *"
                         value={startDate}
-                        onChange={(newValue) => setStartDate(newValue)}
-                        slotProps={{
-                            textField: {
-                                InputLabelProps: { shrink: true },
-                                sx: {
-                                    width: isSmallScreen ? '100%' : 180,
-                                    '& .MuiOutlinedInput-root': {
-                                        borderRadius: 2,
-                                        backgroundColor: '#f1f5f9',
-                                    },
-                                },
-                            },
-                        }}
+                        onChange={setStartDate}
+                        slotProps={{ textField: { size: 'small', sx: { width: isSmallScreen ? '100%' : 180 } } }}
                     />
-
                     <DatePicker
-                        label="End Date"
+                        label="End Date *"
                         value={endDate}
-                        onChange={(newValue) => setEndDate(newValue)}
-                        slotProps={{
-                            textField: {
-                                InputLabelProps: { shrink: true },
-                                sx: {
-                                    width: isSmallScreen ? '100%' : 180,
-                                    '& .MuiOutlinedInput-root': {
-                                        borderRadius: 2,
-                                        backgroundColor: '#f1f5f9',
-                                    },
-                                },
-                            },
-                        }}
+                        onChange={setEndDate}
+                        slotProps={{ textField: { size: 'small', sx: { width: isSmallScreen ? '100%' : 180 } } }}
                     />
-
-                    <FormControl sx={{ width: isSmallScreen ? '100%' : 180 }}>
-                        <InputLabel sx={{ color: '#64748b' }}>Atoll</InputLabel>
+                    <FormControl size="small" sx={{ width: isSmallScreen ? '100%' : 180 }}>
+                        <InputLabel>Atoll</InputLabel>
                         <Select
                             value={selectedAtoll}
                             label="Atoll"
@@ -255,121 +235,98 @@ const Collection = () => {
                                 setSelectedAtoll(e.target.value);
                                 setSelectedIsland('');
                             }}
-                            sx={{
-                                borderRadius: 2,
-                                backgroundColor: '#f1f5f9',
-                                '& .MuiOutlinedInput-notchedOutline': {
-                                    borderColor: '#e2e8f0',
-                                },
-                            }}
                         >
-                            <MenuItem value="">All Atolls</MenuItem>
+                            <MenuItem value="">All</MenuItem>
                             {atolls.map((atoll) => (
-                                <MenuItem key={atoll.atolls_id} value={atoll.atolls_id}>
-                                    {atoll.atolls_name}
-                                </MenuItem>
+                                <MenuItem key={atoll.atolls_id} value={atoll.atolls_id}>{atoll.atolls_name}</MenuItem>
                             ))}
                         </Select>
                     </FormControl>
-
-                    <FormControl sx={{ width: isSmallScreen ? '100%' : 180 }}>
-                        <InputLabel sx={{ color: '#64748b' }}>Island</InputLabel>
+                    <FormControl size="small" sx={{ width: isSmallScreen ? '100%' : 180 }}>
+                        <InputLabel>Island</InputLabel>
                         <Select
                             value={selectedIsland}
                             label="Island"
                             onChange={(e) => setSelectedIsland(e.target.value)}
                             disabled={!selectedAtoll}
-                            sx={{
-                                borderRadius: 2,
-                                backgroundColor: '#f1f5f9',
-                                '& .MuiOutlinedInput-notchedOutline': {
-                                    borderColor: '#e2e8f0',
-                                },
-                            }}
                         >
-                            <MenuItem value="">All Islands</MenuItem>
-                            {atolls
-                                .find((a) => a.atolls_id === selectedAtoll)
-                                ?.islands.map((island) => (
-                                    <MenuItem key={island.islands_id} value={island.islands_id}>
-                                        {island.islands_name}
-                                    </MenuItem>
-                                ))}
+                            <MenuItem value="">All</MenuItem>
+                            {(atolls.find((item) => item.atolls_id === selectedAtoll)?.islands || []).map((island) => (
+                                <MenuItem key={island.islands_id} value={island.islands_id}>{island.islands_name}</MenuItem>
+                            ))}
                         </Select>
                     </FormControl>
-
-                    <Button
-                        variant="contained"
-                        onClick={handleFilter}
-                        startIcon={<FilterAltIcon />}
-                        sx={{
-                            width: isSmallScreen ? '100%' : 'auto',
-                            height: 48,
-                            borderRadius: 2,
-                            backgroundColor: '#3b82f6',
-                            textTransform: 'none',
-                            fontWeight: 500,
-                            transition: 'all 0.3s ease',
-                            '&:hover': {
-                                backgroundColor: '#2563eb',
-                                transform: 'translateY(-2px)',
-                            },
-                        }}
-                    >
-                        Filter
-                    </Button>
-
-                    <Button
-                        variant="outlined"
-                        onClick={handleClearFilter}
-                        startIcon={<ClearIcon />}
-                        sx={{
-                            width: isSmallScreen ? '100%' : 'auto',
-                            height: 48,
-                            borderRadius: 2,
-                            borderColor: '#e2e8f0',
-                            color: '#64748b',
-                            textTransform: 'none',
-                            fontWeight: 500,
-                            transition: 'all 0.3s ease',
-                            '&:hover': {
-                                borderColor: '#3b82f6',
-                                color: '#3b82f6',
-                                transform: 'translateY(-2px)',
-                            },
-                        }}
-                    >
-                        Clear Filters
-                    </Button>
-
-                    <Button
-                        variant="contained"
-                        startIcon={!isSmallScreen && <GetApp />}
-                        onClick={handleDownloadCSV}
-                        disabled={isDownloading}
-                        sx={{
-                            width: isSmallScreen ? '100%' : 'auto',
-                            height: 48,
-                            borderRadius: 2,
-                            backgroundColor: '#22c55e',
-                            textTransform: 'none',
-                            fontWeight: 500,
-                            transition: 'all 0.3s ease',
-                            '&:hover': {
-                                backgroundColor: '#16a34a',
-                                transform: 'translateY(-2px)',
-                            },
-                        }}
-                    >
-                        {isDownloading ? 'Exporting...' : isSmallScreen ? <GetApp /> : 'Download'}
-                    </Button>
+                    <Button variant="contained" onClick={handleFilter} startIcon={<FilterAltIcon />}>Filter</Button>
+                    <Button variant="outlined" onClick={handleClearFilter} startIcon={<ClearIcon />}>Clear</Button>
                 </Box>
             </LocalizationProvider>
 
+            <TableContainer component={Paper} sx={{ flex: 1, overflow: 'auto' }}>
+                <Table stickyHeader size="small" sx={{ minWidth: 1600 }}>
+                    <TableHead>
+                        <TableRow>
+                            {COLUMNS.map((column) => (
+                                <TableCell
+                                    key={column}
+                                    sx={{
+                                        fontWeight: 600,
+                                        background: 'linear-gradient(90deg, #1e3a8a, #1e40af)',
+                                        color: '#ffffff',
+                                        whiteSpace: 'nowrap',
+                                    }}
+                                >
+                                    {column}
+                                </TableCell>
+                            ))}
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {!appliedFilters ? (
+                            <TableRow>
+                                <TableCell colSpan={COLUMNS.length} align="center" sx={{ py: 4, color: '#64748b' }}>
+                                    Choose dates and click Filter to load data.
+                                </TableCell>
+                            </TableRow>
+                        ) : loading ? (
+                            [...Array(8)].map((_, index) => (
+                                <TableRow key={index}>
+                                    {COLUMNS.map((column) => (
+                                        <TableCell key={column}><Skeleton variant="text" /></TableCell>
+                                    ))}
+                                </TableRow>
+                            ))
+                        ) : reports.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={COLUMNS.length} align="center" sx={{ py: 4, color: '#64748b' }}>
+                                    No collections found for the selected dates.
+                                </TableCell>
+                            </TableRow>
+                        ) : (
+                            reports.map((row, index) => (
+                                <TableRow key={`${row.Account || 'row'}-${row['Reference Number'] || index}`} hover>
+                                    {COLUMNS.map((column) => (
+                                        <TableCell key={column} sx={{ whiteSpace: 'nowrap' }}>
+                                            {row[column] ?? ''}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            ))
+                        )}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 2 }}>
+                <Pagination
+                    count={Math.max(1, pagination.totalPages || 0)}
+                    page={pagination.page || 1}
+                    onChange={(_, value) => setPagination((prev) => ({ ...(prev || EMPTY_PAGINATION), page: value }))}
+                    color="primary"
+                    showFirstButton
+                    showLastButton
+                />
+            </Box>
         </Box>
     );
 };
 
 export default Collection;
-
-

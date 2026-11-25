@@ -1,189 +1,304 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+    Alert,
     Box,
-    Typography,
-    Select,
-    MenuItem,
     Button,
+    Chip,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    IconButton,
+    InputAdornment,
+    MenuItem,
+    Pagination,
+    Paper,
+    Select,
+    Skeleton,
     Table,
     TableBody,
     TableCell,
     TableContainer,
     TableHead,
     TableRow,
-    Paper,
-    IconButton,
-    CircularProgress,
-    Alert,
-    Modal,
     TextField,
+    Typography,
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Edit as EditIcon, PersonAdd, Search } from '@mui/icons-material';
 import { getApiBaseUrl, getAuthHeaders } from '../../utils/auth';
+
+const PAGE_SIZE = 8;
+const ROLES = ['Finance', 'Sales', 'Admin', 'HDC', 'Service Provider'];
+
+const roleColor = (role) => {
+    if (role === 'Admin') return 'error';
+    if (role === 'Finance') return 'primary';
+    if (role === 'Sales') return 'success';
+    if (role === 'HDC') return 'warning';
+    return 'default';
+};
+
+const buildRole = (role, provider, island) => {
+    if (role !== 'Service Provider') return role;
+    return `Service Provider: ${provider}${island ? `, Island: ${island}` : ''}`;
+};
 
 const RbacRoles = () => {
     const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+    const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
+
+    const [addOpen, setAddOpen] = useState(false);
+    const [userName, setUserName] = useState('');
+    const [userEmail, setUserEmail] = useState('');
+    const [userPassword, setUserPassword] = useState('');
+    const [userRole, setUserRole] = useState('Finance');
+    const [newServiceProvider, setNewServiceProvider] = useState('');
+    const [newIsland, setNewIsland] = useState('');
+
+    const [editUser, setEditUser] = useState(null);
     const [newRole, setNewRole] = useState('');
     const [serviceProviderName, setServiceProviderName] = useState('');
     const [islandName, setIslandName] = useState('');
-    const [roleToRemove, setRoleToRemove] = useState('');
-    const [selectedUser, setSelectedUser] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const [openModal, setOpenModal] = useState(false);
+    const [deleteUser, setDeleteUser] = useState(null);
+
     const API_URL = getApiBaseUrl().replace(/\/billing-reports$/, '');
+
+    const fetchUsers = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const response = await fetch(`${API_URL}/billing-reports/users`, { headers: getAuthHeaders() });
+            const data = await response.json().catch(() => []);
+            if (!response.ok) throw new Error(data.message || 'Failed to fetch users');
+            setUsers(Array.isArray(data) ? data : []);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
         fetchUsers();
     }, []);
 
-    const fetchUsers = async () => {
-        setLoading(true);
-        setError(null);
+    const filtered = useMemo(() => {
+        const term = search.trim().toLowerCase();
+        if (!term) return users;
+        return users.filter((user) => {
+            const roles = (user.roles || []).join(' ').toLowerCase();
+            return (
+                String(user.name || '').toLowerCase().includes(term)
+                || String(user.email || '').toLowerCase().includes(term)
+                || roles.includes(term)
+            );
+        });
+    }, [users, search]);
+
+    const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const safePage = Math.min(page, pageCount);
+    const visible = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+    const resetAddForm = () => {
+        setUserName('');
+        setUserEmail('');
+        setUserPassword('');
+        setUserRole('Finance');
+        setNewServiceProvider('');
+        setNewIsland('');
+    };
+
+    const handleCreateUser = async () => {
+        if (!userName.trim() || !userEmail.trim() || !userPassword) {
+            setError('Name, email, and password are required.');
+            return;
+        }
+        if (userRole === 'Service Provider' && !newServiceProvider.trim()) {
+            setError('Service provider name is required.');
+            return;
+        }
+        setSaving(true);
+        setError('');
+        setSuccess('');
         try {
-            const response = await fetch(`${API_URL}/billing-reports/users`, { headers: getAuthHeaders() });
-            if (!response.ok) throw new Error('Failed to fetch users');
-            const data = await response.json();
-            setUsers(data);
+            const response = await fetch(`${API_URL}/billing-reports/users`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                body: JSON.stringify({
+                    name: userName.trim(),
+                    email: userEmail.trim(),
+                    password: userPassword,
+                    roles: [buildRole(userRole, newServiceProvider.trim(), newIsland.trim())],
+                }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.message || 'Failed to add user');
+            resetAddForm();
+            setAddOpen(false);
+            setSuccess(`${data.name || 'User'} can now log in with the email you entered.`);
+            setPage(1);
+            fetchUsers();
         } catch (err) {
             setError(err.message);
         } finally {
-            setLoading(false);
+            setSaving(false);
         }
+    };
+
+    const saveRoles = async (roles) => {
+        const response = await fetch(`${API_URL}/billing-reports/users/${editUser._id}/roles`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify({ roles }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.message || 'Failed to update roles');
+        setEditUser({ ...editUser, roles });
+        fetchUsers();
     };
 
     const handleAddRole = async () => {
-        if (!newRole || !selectedUser) return;
-        setLoading(true);
+        if (!newRole || !editUser) return;
+        if (newRole === 'Service Provider' && !serviceProviderName.trim()) return;
+        setSaving(true);
+        setError('');
         try {
-            let roleToAdd = newRole;
-            if (newRole === 'Service Provider' && serviceProviderName) {
-                roleToAdd = `Service Provider: ${serviceProviderName}${islandName ? `, Island: ${islandName}` : ''}`;
-            }
-            const updatedRoles = [...new Set([...selectedUser.roles, roleToAdd])];
-            const response = await fetch(`${API_URL}/billing-reports/users/${selectedUser._id}/roles`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                body: JSON.stringify({ roles: updatedRoles }),
-            });
-            if (!response.ok) throw new Error('Failed to add role');
+            const roleToAdd = buildRole(newRole, serviceProviderName.trim(), islandName.trim());
+            await saveRoles([...new Set([...(editUser.roles || []), roleToAdd])]);
             setNewRole('');
             setServiceProviderName('');
             setIslandName('');
-            fetchUsers();
-            setOpenModal(false);
-        } catch (err) {
-            setError(err.message);
-            setLoading(false);
-        }
-    };
-
-    const handleRemoveRole = async () => {
-        if (!roleToRemove || !selectedUser) return;
-        setLoading(true);
-        try {
-            const updatedRoles = selectedUser.roles.filter(role => role !== roleToRemove);
-            const response = await fetch(`${API_URL}/billing-reports/users/${selectedUser._id}/roles`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                body: JSON.stringify({ roles: updatedRoles }),
-            });
-            if (!response.ok) throw new Error('Failed to remove role');
-            setRoleToRemove('');
-            fetchUsers();
-            setOpenModal(false);
         } catch (err) {
             setError(err.message);
         } finally {
-            setLoading(false);
+            setSaving(false);
         }
     };
 
-    const handleDeleteUser = async (id) => {
-        setLoading(true);
+    const handleRemoveRole = async (role) => {
+        setSaving(true);
+        setError('');
         try {
-            const response = await fetch(`${API_URL}/billing-reports/users/${id}`, {
+            await saveRoles((editUser.roles || []).filter((item) => item !== role));
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDeleteUser = async () => {
+        if (!deleteUser) return;
+        setSaving(true);
+        setError('');
+        try {
+            const response = await fetch(`${API_URL}/billing-reports/users/${deleteUser._id}`, {
                 method: 'DELETE',
                 headers: getAuthHeaders(),
             });
-            if (!response.ok) throw new Error('Failed to delete user');
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.message || 'Failed to delete user');
+            setDeleteUser(null);
+            setSuccess('User removed.');
             fetchUsers();
         } catch (err) {
             setError(err.message);
         } finally {
-            setLoading(false);
+            setSaving(false);
         }
     };
 
-    const handleOpenModal = (user) => {
-        setSelectedUser(user);
-        setNewRole('');
-        setServiceProviderName('');
-        setIslandName('');
-        setRoleToRemove('');
-        setOpenModal(true);
-    };
-
-    const handleCloseModal = () => {
-        setOpenModal(false);
-        setSelectedUser(null);
-        setServiceProviderName('');
-        setIslandName('');
-    };
-
     return (
-        <Box sx={{ p: 4, backgroundColor: '#f9fafb', minHeight: '100vh', overflow: 'hidden' }}>
-            <Typography
-                variant="h4"
-                gutterBottom
-                sx={{ mb: 4, fontWeight: '600', color: '#111827', textAlign: 'center' }}
-            >
-                Role-Based Access Control (RBAC)
-            </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
+                <Box>
+                    <Typography variant="h5">Users and roles</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        {filtered.length} user{filtered.length === 1 ? '' : 's'}
+                        {search.trim() ? ` matching “${search.trim()}”` : ''}
+                    </Typography>
+                </Box>
+                <Button variant="contained" startIcon={<PersonAdd />} onClick={() => { setError(''); setAddOpen(true); }}>
+                    Add user
+                </Button>
+            </Box>
 
-            {loading && <CircularProgress sx={{ display: 'block', mx: 'auto', my: 2 }} />}
-            {error && <Alert severity="error" sx={{ mb: 3, maxWidth: '600px', mx: 'auto' }}>{error}</Alert>}
+            {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
+            {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>{success}</Alert>}
 
-            <TableContainer
-                component={Paper}
-                sx={{
-                    maxWidth: '900px',
-                    mx: 'auto',
-                    borderRadius: '8px',
-                    boxShadow: 3,
-                    maxHeight: '400px',
-                    overflowY: 'auto',
-                }}
-            >
-                <Table stickyHeader>
+            <Paper sx={{ p: 2, mb: 2 }}>
+                <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Search by name, email, or role"
+                    value={search}
+                    onChange={(event) => {
+                        setSearch(event.target.value);
+                        setPage(1);
+                    }}
+                    InputProps={{
+                        startAdornment: (
+                            <InputAdornment position="start">
+                                <Search fontSize="small" />
+                            </InputAdornment>
+                        ),
+                    }}
+                />
+            </Paper>
+
+            <TableContainer component={Paper} sx={{ flex: 1, overflow: 'auto' }}>
+                <Table stickyHeader size="small">
                     <TableHead>
-                        <TableRow sx={{ backgroundColor: '#2563eb' }}>
-                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)' }}>
-                                Name
-                            </TableCell>
-                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)' }}>
-                                Email
-                            </TableCell>
-                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)' }}>
-                                Roles
-                            </TableCell>
-                            <TableCell sx={{ color: '#fff', fontWeight: '600', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)' }}>
-                                Actions
-                            </TableCell>
+                        <TableRow>
+                            {['Name', 'Email', 'Roles', ''].map((header) => (
+                                <TableCell
+                                    key={header || 'actions'}
+                                    sx={{ fontWeight: 600, color: '#fff', background: 'linear-gradient(90deg, #1e3a8a, #1e40af)' }}
+                                >
+                                    {header}
+                                </TableCell>
+                            ))}
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {users.map(user => (
-                            <TableRow key={user._id} sx={{ '&:hover': { backgroundColor: '#f1f5f9' } }}>
-                                <TableCell sx={{ color: '#374151' }}>{user.name}</TableCell>
-                                <TableCell sx={{ color: '#374151' }}>{user.email}</TableCell>
-                                <TableCell sx={{ color: '#374151' }}>{user.roles.join(', ') || 'None'}</TableCell>
+                        {loading ? (
+                            [...Array(PAGE_SIZE)].map((_, index) => (
+                                <TableRow key={index}>
+                                    {[0, 1, 2, 3].map((cell) => (
+                                        <TableCell key={cell}><Skeleton /></TableCell>
+                                    ))}
+                                </TableRow>
+                            ))
+                        ) : visible.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={4} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+                                    {search.trim() ? 'No users match that search.' : 'No users yet. Add the first one.'}
+                                </TableCell>
+                            </TableRow>
+                        ) : visible.map((user) => (
+                            <TableRow key={user._id} hover>
+                                <TableCell>{user.name || '—'}</TableCell>
+                                <TableCell>{user.email}</TableCell>
                                 <TableCell>
-                                    <IconButton onClick={() => handleOpenModal(user)} color="primary">
-                                        <EditIcon />
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                        {(user.roles || []).length === 0
+                                            ? <Typography variant="body2" color="text.secondary">No role</Typography>
+                                            : (user.roles || []).map((role) => (
+                                                <Chip key={role} size="small" label={role} color={roleColor(role)} variant="outlined" />
+                                            ))}
+                                    </Box>
+                                </TableCell>
+                                <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                                    <IconButton aria-label="Edit roles" onClick={() => { setEditUser(user); setNewRole(''); }}>
+                                        <EditIcon fontSize="small" />
                                     </IconButton>
-                                    <IconButton onClick={() => handleDeleteUser(user._id)} color="error">
-                                        <DeleteIcon />
+                                    <IconButton aria-label="Delete user" color="error" onClick={() => setDeleteUser(user)}>
+                                        <DeleteIcon fontSize="small" />
                                     </IconButton>
                                 </TableCell>
                             </TableRow>
@@ -192,101 +307,86 @@ const RbacRoles = () => {
                 </Table>
             </TableContainer>
 
-            <Modal open={openModal} onClose={handleCloseModal}>
-                <Box
-                    sx={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        width: 400,
-                        bgcolor: 'white',
-                        borderRadius: '8px',
-                        boxShadow: 24,
-                        p: 4,
-                    }}
-                >
-                    <Typography variant="h6" sx={{ mb: 3, fontWeight: '600', color: '#111827' }}>
-                        Edit Roles for {selectedUser?.name}
-                    </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 2 }}>
+                <Pagination
+                    count={pageCount}
+                    page={safePage}
+                    onChange={(_, value) => setPage(value)}
+                    color="primary"
+                    showFirstButton
+                    showLastButton
+                />
+            </Box>
 
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <Box>
-                            <Typography sx={{ mb: 1, color: '#374151' }}>Add New Role</Typography>
-                            <Select
-                                fullWidth
-                                size="small"
-                                value={newRole}
-                                onChange={(e) => setNewRole(e.target.value)}
-                                displayEmpty
-                            >
-                                <MenuItem value="" disabled>Select Role</MenuItem>
-                                <MenuItem value="Finance">Finance</MenuItem>
-                                <MenuItem value="Sales">Sales</MenuItem>
-                                <MenuItem value="Admin">Admin</MenuItem>
-                                <MenuItem value="HDC">HDC</MenuItem>
-                                <MenuItem value="Service Provider">Service Provider</MenuItem>
-                            </Select>
-                            {newRole === 'Service Provider' && (
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        label="Service Provider Name"
-                                        value={serviceProviderName}
-                                        onChange={(e) => setServiceProviderName(e.target.value)}
-                                        required
-                                    />
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        label="Island Name (Optional)"
-                                        value={islandName}
-                                        onChange={(e) => setIslandName(e.target.value)}
-                                    />
-                                </Box>
-                            )}
-                            <Button
-                                variant="contained"
-                                onClick={handleAddRole}
-                                disabled={loading || !newRole || (newRole === 'Service Provider' && !serviceProviderName)}
-                                sx={{ mt: 2, backgroundColor: '#2563eb', '&:hover': { backgroundColor: '#1d4ed8' } }}
-                            >
-                                Add Role
-                            </Button>
-                        </Box>
+            <Dialog open={addOpen} onClose={() => setAddOpen(false)} fullWidth maxWidth="sm">
+                <DialogTitle>Add user</DialogTitle>
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+                    <TextField label="Name" value={userName} onChange={(e) => setUserName(e.target.value)} fullWidth margin="dense" />
+                    <TextField label="Email" type="email" value={userEmail} onChange={(e) => setUserEmail(e.target.value)} fullWidth />
+                    <TextField label="Password" type="password" value={userPassword} onChange={(e) => setUserPassword(e.target.value)} helperText="At least 8 characters" fullWidth />
+                    <Select value={userRole} onChange={(e) => setUserRole(e.target.value)} fullWidth>
+                        {ROLES.map((role) => <MenuItem key={role} value={role}>{role}</MenuItem>)}
+                    </Select>
+                    {userRole === 'Service Provider' && (
+                        <>
+                            <TextField label="Service provider name" value={newServiceProvider} onChange={(e) => setNewServiceProvider(e.target.value)} fullWidth />
+                            <TextField label="Island (optional)" value={newIsland} onChange={(e) => setNewIsland(e.target.value)} fullWidth />
+                        </>
+                    )}
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button onClick={() => setAddOpen(false)}>Cancel</Button>
+                    <Button variant="contained" onClick={handleCreateUser} disabled={saving}>Save user</Button>
+                </DialogActions>
+            </Dialog>
 
-                        {selectedUser?.roles.length > 0 && (
-                            <Box>
-                                <Typography sx={{ mb: 1, color: '#374151' }}>Remove Role</Typography>
-                                <Select
-                                    fullWidth
-                                    size="small"
-                                    value={roleToRemove}
-                                    onChange={(e) => setRoleToRemove(e.target.value)}
-                                    displayEmpty
-                                >
-                                    <MenuItem value="" disabled>Select Role</MenuItem>
-                                    {selectedUser?.roles.map(role => (
-                                        <MenuItem key={role} value={role}>
-                                            {role}
-                                        </MenuItem>
-                                    ))}
-                                </Select>
-                                <Button
-                                    variant="contained"
-                                    color="error"
-                                    onClick={handleRemoveRole}
-                                    disabled={loading || !roleToRemove}
-                                    sx={{ mt: 2 }}
-                                >
-                                    Remove Role
-                                </Button>
-                            </Box>
+            <Dialog open={Boolean(editUser)} onClose={() => setEditUser(null)} fullWidth maxWidth="sm">
+                <DialogTitle>Roles for {editUser?.name || editUser?.email}</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{editUser?.email}</Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                        {(editUser?.roles || []).length === 0 && (
+                            <Typography variant="body2" color="text.secondary">No roles assigned.</Typography>
                         )}
+                        {(editUser?.roles || []).map((role) => (
+                            <Chip key={role} label={role} onDelete={() => handleRemoveRole(role)} color={roleColor(role)} variant="outlined" />
+                        ))}
                     </Box>
-                </Box>
-            </Modal>
+                    <Select fullWidth size="small" displayEmpty value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+                        <MenuItem value="">Select a role to add</MenuItem>
+                        {ROLES.map((role) => <MenuItem key={role} value={role}>{role}</MenuItem>)}
+                    </Select>
+                    {newRole === 'Service Provider' && (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+                            <TextField size="small" label="Service provider name" value={serviceProviderName} onChange={(e) => setServiceProviderName(e.target.value)} />
+                            <TextField size="small" label="Island (optional)" value={islandName} onChange={(e) => setIslandName(e.target.value)} />
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button onClick={() => setEditUser(null)}>Close</Button>
+                    <Button
+                        variant="contained"
+                        onClick={handleAddRole}
+                        disabled={saving || !newRole || (newRole === 'Service Provider' && !serviceProviderName.trim())}
+                    >
+                        Add role
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={Boolean(deleteUser)} onClose={() => setDeleteUser(null)}>
+                <DialogTitle>Remove user</DialogTitle>
+                <DialogContent>
+                    <Typography>
+                        Remove {deleteUser?.name || deleteUser?.email}? They will no longer be able to log in.
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setDeleteUser(null)}>Cancel</Button>
+                    <Button color="error" variant="contained" onClick={handleDeleteUser} disabled={saving}>Remove</Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 };

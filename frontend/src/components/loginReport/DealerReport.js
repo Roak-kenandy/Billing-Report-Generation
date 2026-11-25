@@ -83,6 +83,11 @@ const DealerReport = () => {
     }, []);
 
     useEffect(() => {
+        if (!appliedStartDate || !appliedEndDate) {
+            setReports([]);
+            setLoading(false);
+            return;
+        }
         fetchReports(pagination.page, pagination.limit, appliedStartDate, appliedEndDate);
     }, [pagination.page, pagination.limit, appliedDealer, appliedStartDate, appliedEndDate]);
 
@@ -91,6 +96,10 @@ const DealerReport = () => {
     };
 
     const handleFilter = () => {
+        if (!startDate || !endDate) {
+            alert('Select both a start date and an end date.');
+            return;
+        }
         setAppliedStartDate(startDate);
         setAppliedEndDate(endDate);
         setAppliedDealer(selectedDealer);

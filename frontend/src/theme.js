@@ -1,32 +1,74 @@
-// theme.js
 import { createTheme } from '@mui/material/styles';
 
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#3b82f6',
-      dark: '#2563eb',
+      main: '#1e3a8a',
+      dark: '#1e40af',
+      light: '#3b82f6',
     },
     secondary: {
-      main: '#f43f5e',
+      main: '#0f766e',
     },
     background: {
-      default: 'linear-gradient(135deg, #1e1e2f 0%, #3b82f6 100%)',
+      default: '#f4f6fb',
+      paper: '#ffffff',
+    },
+    text: {
+      primary: '#0f172a',
+      secondary: '#475569',
     },
   },
+  shape: {
+    borderRadius: 8,
+  },
   typography: {
-    fontFamily: "'Poppins', 'Roboto', sans-serif",
+    fontFamily: "'Inter', 'Segoe UI', 'Roboto', sans-serif",
     h5: {
-      fontWeight: 700,
-      letterSpacing: '0.5px',
-      fontSize: '1.5rem',
+      fontWeight: 650,
+      letterSpacing: '-0.02em',
+      color: '#0f172a',
     },
-    body2: {
-      fontWeight: 500,
-      fontSize: '0.875rem',
+    button: {
+      textTransform: 'none',
+      fontWeight: 600,
     },
-    body1: {
-      fontSize: '0.875rem',
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+          boxShadow: 'none',
+        },
+        contained: {
+          '&:hover': {
+            boxShadow: 'none',
+          },
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          backgroundImage: 'none',
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        head: {
+          fontWeight: 600,
+          whiteSpace: 'nowrap',
+        },
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          backgroundColor: '#ffffff',
+        },
+      },
     },
   },
 });

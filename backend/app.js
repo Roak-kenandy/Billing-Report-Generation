@@ -14,7 +14,7 @@ app.use(express.json());    //This is a built-in middleware function in Express.
 app.use(
   compression({
     level: 6,
-    threshold: 100 * 1000,
+    threshold: 1024,
     filter: (req, res) => {
       if (req.headers['x-no-compression']) {
         return false;

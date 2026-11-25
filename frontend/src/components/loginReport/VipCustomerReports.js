@@ -86,6 +86,10 @@ const VipCustomerReports = () => {
     };
 
     const handleFilter = () => {
+        if (!startDate || !endDate) {
+            alert('Select both a start date and an end date.');
+            return;
+        }
         setAppliedStartDate(startDate);
         setAppliedEndDate(endDate);
         setAppliedAtoll(selectedAtoll);
@@ -111,6 +115,11 @@ const VipCustomerReports = () => {
     }, [searchTerm, appliedStartDate, appliedEndDate, appliedAtoll, appliedIsland]);
 
     useEffect(() => {
+        if (!appliedStartDate || !appliedEndDate) {
+            setReports([]);
+            setLoading(false);
+            return;
+        }
         fetchReports(pagination.page, pagination.limit, searchTerm, appliedStartDate, appliedEndDate, appliedAtoll, appliedIsland);
     }, [pagination.page, pagination.limit, searchTerm, appliedStartDate, appliedEndDate, appliedAtoll, appliedIsland]);
 
